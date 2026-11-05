@@ -1,0 +1,1 @@
+ALTER TABLE "listing_photos" DROP COLUMN "original_url";

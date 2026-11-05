@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run check:brand
+      - run: npm run build
+        env:
+          # Dummy values: the build must never reach Neon, Blob or Resend. With no
+          # DATABASE_URL the app uses PGlite; with no RESEND_API_KEY off Vercel, mail prints.
+          APP_URL: https://catamountsublets.com
+          APP_SECRET: ci-only-not-a-secret-0123456789abcdef
+          BETTER_AUTH_SECRET: ci-only-not-a-secret-0123456789abcdef
+          CRON_SECRET: ci-only-not-a-secret

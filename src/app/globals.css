@@ -1,0 +1,308 @@
+@import "tailwindcss";
+
+/*
+ * The design tokens. Section 0.5 of PLAN.md is the written palette; these are
+ * the values. Email templates repeat them as literals (src/emails/layout.tsx).
+ */
+@theme {
+  /* The phone/desktop line is the legacy site's: up to 768 px is a phone. */
+  --breakpoint-md: 48.0625rem;
+  --color-lake: #1d4f73;
+  --color-lake-deep: #163e5b;
+  --color-maple: #bc4c25;
+  --color-maple-ink: #a3401c;
+  --color-cream: #f7f3ec;
+  --color-paper: #ffffff;
+  --color-ink: #1c2328;
+  --color-ink-2: #4a565e;
+  --color-ink-3: #5f6b74;
+  --color-line: #e3ded6;
+  --color-line-light: #efebe4;
+  --color-focus: #1d4f73;
+  /* Chart series (admin Activity): checked with the dataviz palette validator against paper. Lake is lightened for marks; #1d4f73 is too dark to read as a hue. */
+  --color-chart-lake: #2f6f9f;
+  --color-chart-maple: #bc4c25;
+
+  --color-included-tint: #e6f0e9;
+  --color-included-ink: #27624a;
+  --color-included-line: #c6ddcc;
+  --color-tenant-tint: #fbf1df;
+  --color-tenant-ink: #7a5a12;
+  --color-tenant-line: #f1dfb5;
+  --color-error-tint: #fbe6e0;
+  --color-error-ink: #9f3618;
+  --color-error-line: #f3c2b4;
+  --color-notice-tint: #e6eff6;
+  --color-notice-ink: #1d4f73;
+  --color-notice-line: #c4d8e8;
+
+  --font-sans: var(--font-bricolage), "Bricolage Grotesque", Helvetica, Arial, sans-serif;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+
+  /* An admin row someone was sent to (a Poster link from Activity): a tint that fades. */
+  --animate-row-flash: row-flash 2.5s ease-out;
+  @keyframes row-flash {
+    from {
+      background-color: var(--color-notice-tint);
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+}
+
+@layer base {
+  /* Tailwind v4 no longer gives buttons a pointer; everything clickable gets one here. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary,
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="range"]:not(:disabled),
+  input[type="file"]:not(:disabled),
+  label[for] {
+    cursor: pointer;
+  }
+  .map-popup img {
+    cursor: pointer;
+  }
+
+  html {
+    color-scheme: light;
+  }
+  /* Checkboxes and radios in the site's blue, not the browser's. */
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--color-lake);
+  }
+  body {
+    @apply bg-cream text-ink font-sans antialiased;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+  /* 16px minimum in fields: iOS zooms the page on anything smaller. */
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    font-size: 1rem;
+  }
+}
+
+@layer components {
+  .field {
+    @apply w-full rounded-lg border border-line bg-paper px-3 py-2.5 text-ink placeholder:text-ink-3 focus:border-lake;
+  }
+  /*
+   * Dropdowns: still the native <select>, so phones open their own picker,
+   * but drawn like the other fields with the site's chevron instead of the
+   * browser's. Compact variants (py-1, text-xs) keep the chevron's room.
+   */
+  select.field {
+    @apply appearance-none truncate pr-10 hover:border-lake disabled:cursor-not-allowed disabled:bg-line-light disabled:text-ink-3;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235f6b74' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75em center;
+    background-size: 1.125em;
+  }
+  select.field:hover:not(:disabled),
+  select.field:focus {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d4f73' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-lake px-4 py-2.5 font-bold text-paper hover:bg-lake-deep disabled:opacity-60;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg border border-line bg-paper px-4 py-2.5 font-bold text-ink hover:border-lake hover:text-lake disabled:opacity-60;
+  }
+  .link {
+    @apply font-bold text-lake underline-offset-2 hover:underline disabled:opacity-60;
+  }
+}
+
+@layer components {
+  .gallery-nav {
+    @apply absolute top-1/2 -translate-y-1/2 rounded-full bg-paper/85 p-1.5 text-ink shadow hover:bg-paper;
+  }
+}
+
+/* Two native range inputs over one track (DualRange / SingleRange). */
+@layer components {
+  .range-thumb {
+    @apply pointer-events-none absolute inset-0 h-6 w-full appearance-none bg-transparent;
+  }
+  .range-thumb::-webkit-slider-thumb {
+    @apply pointer-events-auto h-5 w-5 cursor-pointer appearance-none rounded-full border-2 border-paper bg-lake shadow;
+  }
+  .range-thumb::-moz-range-thumb {
+    @apply pointer-events-auto h-5 w-5 cursor-pointer rounded-full border-2 border-paper bg-lake shadow;
+  }
+  .range-thumb::-webkit-slider-runnable-track,
+  .range-thumb::-moz-range-track {
+    background: transparent;
+  }
+  [data-pending] ~ #listingsGrid,
+  [data-pending] ~ * #listingsGrid {
+    @apply opacity-60 transition-opacity;
+  }
+}
+
+/* Map pins and popups (MapLibre markers are plain DOM, outside React). */
+@layer components {
+  .campus-pin {
+    @apply h-4 w-4 rounded-full border-[3px] border-paper bg-ink shadow;
+  }
+  /* The dot alone meant nothing to anyone; it says what it is, above it so the map's edge never cuts it. */
+  .campus-pin::after {
+    content: "Campus";
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    margin-bottom: 4px;
+    transform: translateX(-50%);
+    padding: 1px 8px;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--color-paper) 95%, transparent);
+    color: var(--color-ink);
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.25rem;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.15);
+  }
+  .price-pin {
+    @apply cursor-pointer;
+  }
+  .price-pin-tag {
+    @apply relative inline-flex items-center gap-1.5 rounded-full border-2 border-paper bg-lake px-2.5 py-1 text-sm font-bold text-paper shadow-md;
+    /* Grows from the tail's tip, so the pin keeps pointing at the same spot. */
+    transform-origin: 50% calc(100% + 4px);
+    transition:
+      transform 150ms ease-out,
+      background-color 150ms ease-out,
+      box-shadow 150ms ease-out;
+  }
+  .price-pin-tag::after {
+    content: "";
+    @apply absolute left-1/2 top-full -ml-1.5 border-[6px] border-transparent border-t-lake;
+    transition: border-color 150ms ease-out;
+  }
+  /* Whichever pin is pointed at comes to the front of any it overlaps, darkens and grows a little, so the hover reads as more than a reshuffle. */
+  .price-pin:hover,
+  .price-pin:focus-visible {
+    z-index: 5;
+  }
+  @media (hover: hover) {
+    .price-pin:hover .price-pin-tag {
+      @apply bg-lake-deep shadow-lg;
+      transform: scale(1.08);
+    }
+    .price-pin:hover .price-pin-tag::after {
+      @apply border-t-lake-deep;
+    }
+  }
+  .price-pin:focus-visible .price-pin-tag {
+    @apply bg-lake-deep shadow-lg;
+    transform: scale(1.08);
+  }
+  .price-pin:focus-visible .price-pin-tag::after {
+    @apply border-t-lake-deep;
+  }
+  /* Smaller tags on a phone, so neighbouring listings overlap less. */
+  @media (max-width: 48rem) {
+    .price-pin-tag {
+      @apply px-2 py-0.5 text-xs;
+    }
+  }
+  .price-pin.is-active .price-pin-tag {
+    @apply bg-maple;
+  }
+  .price-pin.is-active .price-pin-tag::after {
+    @apply border-t-maple;
+  }
+  .price-pin-count {
+    @apply rounded-full bg-paper/25 px-1.5 text-xs;
+  }
+  .map-popup {
+    @apply w-[220px] p-3 text-ink;
+  }
+  .map-popup-group {
+    @apply max-h-[340px] overflow-y-auto;
+  }
+  .map-popup-heading {
+    @apply mb-2 pr-8 text-sm font-bold text-ink-2;
+  }
+  .map-popup-entry + .map-popup-entry {
+    @apply mt-3 border-t border-line pt-3;
+  }
+  .map-popup-entry img {
+    @apply mb-2 aspect-[4/3] w-full cursor-pointer rounded-lg object-cover;
+  }
+  .popup-price {
+    @apply font-bold;
+  }
+  .popup-address,
+  .popup-size,
+  .popup-semester {
+    @apply text-sm text-ink-2;
+  }
+  .popup-btn {
+    @apply mt-2 w-full rounded-lg bg-lake px-3 py-1.5 text-sm font-bold text-paper hover:bg-lake-deep;
+  }
+}
+
+/*
+ * MapLibre's own popup box and close button. Its stylesheet is unlayered, so
+ * these are too (anything in a layer loses to it), and scoped to our popup's
+ * class so they win whichever stylesheet loads first.
+ */
+.listing-popup .maplibregl-popup-content {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  background: var(--color-paper);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  font-family: inherit;
+}
+/* A round chip over the photo's corner, legible on any picture. */
+.listing-popup .maplibregl-popup-close-button {
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-paper) 92%, transparent);
+  color: var(--color-ink-2);
+  font-size: 18px;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+}
+.listing-popup .maplibregl-popup-close-button:hover {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+.listing-popup .maplibregl-popup-close-button:focus-visible {
+  outline: 2px solid var(--color-lake);
+  outline-offset: 2px;
+}
+
+/* Post form: the pin and the photo controls. */
+@layer components {
+  .post-pin {
+    @apply h-5 w-5 rounded-full border-[3px] border-paper bg-maple shadow-md;
+    transform: translateY(50%);
+  }
+  .icon-btn {
+    @apply rounded-lg border border-line bg-paper p-1.5 text-ink-2 hover:border-lake hover:text-lake disabled:cursor-not-allowed disabled:opacity-40;
+  }
+}

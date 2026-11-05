@@ -1,0 +1,55 @@
+# Secrets. Only the example is tracked.
+.env
+.env.*
+!.env.example
+
+# Real user data never enters this repo: the legacy MySQL dump, rsynced
+# listing photos, the opt-out list and the deletion log. They live in
+# ~/sublet-migration, outside every checkout, but belt and braces.
+*.sql
+*.sql.gz
+!drizzle/**/*.sql
+legacy-images/
+opt-outs.txt
+deletions.log
+*.csv
+
+# Read-only reference copy (symlink) of the legacy PHP tree.
+sublets-legacy
+
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+build/
+next-env.d.ts
+
+# Testing
+coverage/
+test-results/
+
+# Vercel / Neon CLI context
+.vercel
+.neon
+
+# The developer's local Claude Code tooling, not the project.
+.claude/
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+*.pem
+
+# Local PGlite database used when DATABASE_URL is unset.
+.pglite/
+
+# Files uploaded under next dev with no Blob store (src/server/storage).
+.uploads/
