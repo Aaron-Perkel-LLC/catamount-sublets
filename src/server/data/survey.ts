@@ -122,6 +122,12 @@ export async function surveyAudience(db: DbOrTx): Promise<SurveyAudienceRow[]> {
     }));
 }
 
+/** The audience less everyone who has already answered: who a reminder goes to. */
+export async function surveyUnanswered(db: DbOrTx): Promise<SurveyAudienceRow[]> {
+  const answered = new Set((await db.select({ userId: surveyResponses.userId }).from(surveyResponses)).map((r) => r.userId));
+  return (await surveyAudience(db)).filter((r) => !answered.has(r.id));
+}
+
 export async function surveySummary(db: DbOrTx): Promise<SurveySummary> {
   const rows = await db.select(answerColumns).from(surveyResponses);
   return summariseSurvey(rows.map(asAnswers));

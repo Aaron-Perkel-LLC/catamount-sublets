@@ -133,7 +133,7 @@ function Maintenance({ readOnly }: { readOnly: ReadOnly }) {
   );
 }
 
-/** A broadcast: to posters on the board, every account, posters in a semester, or named people. */
+/** A broadcast: to posters on the board, every account, posters in a semester, people yet to answer the survey, or named people. */
 function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people: PersonDto[] }) {
   const [kind, setKind] = useState<Audience["kind"]>("all");
   const [code, setCode] = useState(semesters.find((s) => s.active)?.code ?? "");
@@ -144,7 +144,7 @@ function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people:
   const [note, setNote] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  const audience: Audience = kind === "all" || kind === "accounts" ? { kind } : kind === "semester" ? { kind, code } : { kind, userIds: [...ids] };
+  const audience: Audience = kind === "all" || kind === "accounts" || kind === "survey" ? { kind } : kind === "semester" ? { kind, code } : { kind, userIds: [...ids] };
   const key = JSON.stringify(audience);
   useEffect(() => {
     let cancelled = false;
@@ -191,6 +191,9 @@ function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people:
           )}
         </label>
         <label className="flex items-center gap-2">
+          <input type="radio" name="kind" checked={kind === "survey"} onChange={() => setKind("survey")} /> Everyone who hasn&apos;t answered the survey
+        </label>
+        <label className="flex items-center gap-2">
           <input type="radio" name="kind" checked={kind === "individual"} onChange={() => setKind("individual")} /> Named people
         </label>
         {kind === "individual" && (
@@ -219,7 +222,7 @@ function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people:
         <input className="field" value={subject} onChange={(e) => setSubject(e.target.value)} required maxLength={150} />
       </label>
       <label className="flex flex-col gap-1 text-sm">
-        Message <span className="text-xs text-ink-3">{"{name}"} is the person&apos;s name; without it a greeting is added. Blank lines separate paragraphs. The sign-off is added for you.</span>
+        Message <span className="text-xs text-ink-3">{"{name}"} is the person&apos;s name; without it a greeting is added. {"{survey}"} is their own survey link. Blank lines separate paragraphs. The sign-off is added for you.</span>
         <textarea className="field" rows={8} value={body} onChange={(e) => setBody(e.target.value)} required maxLength={10000} />
       </label>
       <button type="submit" className="btn-primary self-start" disabled={pending || !subject.trim() || !body.trim() || !count}>

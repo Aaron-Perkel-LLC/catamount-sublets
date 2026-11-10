@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createTestDb } from "@/db/test-db";
 import * as s from "@/db/schema";
 import type { SurveyAnswers } from "@/lib/survey";
-import { getSurveyResponse, listSurveyText, surveyAudience, surveyExportRows, surveySummary, upsertSurveyResponse } from "./survey";
+import { getSurveyResponse, listSurveyText, surveyAudience, surveyExportRows, surveySummary, surveyUnanswered, upsertSurveyResponse } from "./survey";
 
 type Db = Awaited<ReturnType<typeof createTestDb>>["db"];
 let db: Db;
@@ -96,6 +96,18 @@ describe("surveyAudience", () => {
     expect(audience[0]).toMatchObject({ firstName: "Sam", migrated: true, posted: true });
     // A name that is only the login is never used as a greeting.
     expect(audience[1]).toMatchObject({ firstName: null, migrated: false, posted: false, lastLoginAt: null });
+  });
+});
+
+describe("surveyUnanswered", () => {
+  it("is the audience without the people who have answered", async () => {
+    const sam = await person("sam@uvm.edu", { lastLoginAt: new Date("2026-10-20T12:00:00Z") });
+    await person("jordan@uvm.edu");
+    const boss = await person("admin@uvm.edu", { role: "admin" });
+    await upsertSurveyResponse(db, sam, ANSWERS);
+    await upsertSurveyResponse(db, boss, ANSWERS);
+    expect((await surveyUnanswered(db)).map((r) => r.email)).toEqual(["jordan@uvm.edu"]);
+    expect(await surveyAudience(db)).toHaveLength(2);
   });
 });
 

@@ -10,7 +10,9 @@ import { deleteListing, listingFileUrls, photoFileUrls, setListingStatus } from 
 import { posterColumns, shownName } from "@/server/data/names";
 import { listingCountForSemester, setListingSemesters } from "@/server/data/semesters";
 import { listingSnapshot, noticeDeleted, noticeStatus } from "@/server/email/notices";
-import { sendBroadcast, type Recipient } from "@/server/email/broadcast";
+import { sendBroadcast, SURVEY_PLACEHOLDER, type Recipient } from "@/server/email/broadcast";
+import { surveyUnanswered } from "@/server/data/survey";
+import { surveySecret } from "@/server/survey-token";
 import { log } from "@/server/log";
 import { deleteMedia, deleteRawUpload, isMediaUrl, listMediaFiles, listRawUploads } from "@/server/storage";
 import { publicListingWhere, visibleSemesterWhere } from "@/server/data/visibility";
@@ -389,16 +391,18 @@ export async function bulkDeletePhotos(db: Db, photoIds: number[]): Promise<Resu
 
 /* ------------------------------------------------------------ broadcast */
 
-export type Audience = { kind: "all" } | { kind: "accounts" } | { kind: "semester"; code: string } | { kind: "individual"; userIds: string[] };
+export type Audience = { kind: "all" } | { kind: "accounts" } | { kind: "semester"; code: string } | { kind: "individual"; userIds: string[] } | { kind: "survey" };
 
 /**
  * Who a broadcast goes to: posters of public listings, every account (with or
- * without a listing), every poster in a semester, or named people. Banned
- * people are left out of every audience.
+ * without a listing), every poster in a semester, named people, or everyone
+ * invited to the survey who has not answered it (which also leaves out admins
+ * and test addresses). Banned people are left out of every audience.
  */
 export async function broadcastRecipients(db: Db, audience: Audience): Promise<Recipient[]> {
   if (audience.kind === "individual" && audience.userIds.length === 0) return [];
-  const columns = { email: user.email, displayName: listings.displayName, firstName: user.firstName, lastName: user.lastName, name: user.name, legacyNetid: user.legacyNetid, listingId: listings.id };
+  if (audience.kind === "survey") return (await surveyUnanswered(db)).map((r) => ({ id: r.id, email: r.email, name: r.firstName, posted: r.posted }));
+  const columns = { id: user.id, email: user.email, displayName: listings.displayName, firstName: user.firstName, lastName: user.lastName, name: user.name, legacyNetid: user.legacyNetid, listingId: listings.id };
   const notBanned = sql`coalesce(${user.banned}, false) = false`;
   const rows =
     audience.kind === "semester"
@@ -419,7 +423,7 @@ export async function broadcastRecipients(db: Db, audience: Audience): Promise<R
   const seen = new Set<string>();
   return rows
     .filter((r) => !seen.has(r.email) && seen.add(r.email))
-    .map((r) => ({ email: r.email, name: posterFirstName({ ...r, legacyNames: [r.displayName, r.name] }), posted: r.listingId !== null }));
+    .map((r) => ({ id: r.id, email: r.email, name: posterFirstName({ ...r, legacyNames: [r.displayName, r.name] }), posted: r.listingId !== null }));
 }
 
 const broadcastInput = z.object({ subject: z.string().trim().min(1).max(150).refine((s) => !/[\r\n]/.test(s)), body: z.string().trim().min(1).max(10_000) });
@@ -428,6 +432,7 @@ const audienceInput: z.ZodType<Audience> = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("accounts") }),
   z.object({ kind: z.literal("semester"), code: z.string().min(1) }),
   z.object({ kind: z.literal("individual"), userIds: z.array(z.string().uuid()) }),
+  z.object({ kind: z.literal("survey") }),
 ]);
 
 export async function sendBroadcastTo(db: Db, audience: Audience, raw: { subject: string; body: string }): Promise<Result<{ sent: number; failed: number }>> {
@@ -435,6 +440,9 @@ export async function sendBroadcastTo(db: Db, audience: Audience, raw: { subject
   if (!parsed.success) return fail("Subject and message are required.");
   const to = audienceInput.safeParse(audience);
   if (!to.success) return fail("Pick who to send to.");
+  const linked = parsed.data.body.includes(SURVEY_PLACEHOLDER);
+  if (to.data.kind === "survey" && !linked) return fail(`Add ${SURVEY_PLACEHOLDER} where the survey link should go.`);
+  if (linked && !surveySecret()) return fail("SURVEY_SECRET is not set on this deployment, so survey links cannot be made.");
   const recipients = await broadcastRecipients(db, to.data);
   if (recipients.length === 0) return fail("Nobody to send to.");
   return ok(await sendBroadcast(recipients, parsed.data.subject, parsed.data.body, { pauseMs: 600 }));
