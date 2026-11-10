@@ -82,7 +82,7 @@ describe("the CHECK constraints", () => {
 });
 
 describe("surveyAudience", () => {
-  it("is every account except banned, admin and test addresses, most recently signed in first", async () => {
+  it("is every account except banned, admin, test and no-email addresses, most recently signed in first", async () => {
     const posted = await person("sam@uvm.edu", { firstName: "Sam", lastName: "Rivera", legacyNetid: "srivera", lastLoginAt: new Date("2026-10-20T12:00:00Z") });
     await db.insert(s.listings).values({ userId: posted, price: 900, address: "x", lat: 44.47, lon: -73.2 });
     await person("never@uvm.edu", { name: "never" });
@@ -90,6 +90,7 @@ describe("surveyAudience", () => {
     await person("banned@uvm.edu", { banned: true, lastLoginAt: new Date() });
     await person("seed1@uvm.edu", { lastLoginAt: new Date() });
     await person("someone@example.com", { lastLoginAt: new Date() });
+    await person("optedout@uvm.edu", { noEmail: true, lastLoginAt: new Date() });
 
     const audience = await surveyAudience(db);
     expect(audience.map((r) => r.email)).toEqual(["sam@uvm.edu", "never@uvm.edu"]);

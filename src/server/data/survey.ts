@@ -90,8 +90,8 @@ export interface SurveyAudienceRow {
 }
 
 /**
- * Who is invited: every account except banned ones, admins and test
- * addresses. The one definition, so the send script and the admin tab's
+ * Who is invited: every account except banned ones, admins, test addresses
+ * and people who asked for no email. The one definition, so the send script and the admin tab's
  * "N of M answered" agree. Most recently signed in first.
  */
 export async function surveyAudience(db: DbOrTx): Promise<SurveyAudienceRow[]> {
@@ -107,7 +107,7 @@ export async function surveyAudience(db: DbOrTx): Promise<SurveyAudienceRow[]> {
     })
     .from(user)
     .leftJoin(listings, eq(listings.userId, user.id))
-    .where(and(sql`coalesce(${user.banned}, false) = false`, sql`${user.role} is distinct from 'admin'`))
+    .where(and(sql`coalesce(${user.banned}, false) = false`, sql`${user.role} is distinct from 'admin'`, eq(user.noEmail, false)))
     .orderBy(sql`${user.lastLoginAt} desc nulls last`, asc(user.createdAt));
   return rows
     .filter((r) => !isTestAddress(r.email))

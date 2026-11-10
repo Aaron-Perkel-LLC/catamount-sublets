@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN "no_email" boolean DEFAULT false NOT NULL;

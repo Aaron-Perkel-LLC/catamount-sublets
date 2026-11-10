@@ -55,6 +55,7 @@ export interface PersonDto {
   role: string;
   banned: boolean;
   banReason: string | null;
+  noEmail: boolean;
   lastLoginAt: string | null;
   createdAt: string;
   legacyNetid: string | null;

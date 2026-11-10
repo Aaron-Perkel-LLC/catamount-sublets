@@ -253,6 +253,8 @@ export interface Person {
   role: string;
   banned: boolean;
   banReason: string | null;
+  /** They asked to stop getting mail; no broadcast reaches them. */
+  noEmail: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
   legacyNetid: string | null;
@@ -272,6 +274,7 @@ export async function listPeople(db: Db): Promise<Person[]> {
     role: u.role ?? "user",
     banned: Boolean(u.banned),
     banReason: u.banReason ?? null,
+    noEmail: u.noEmail,
     lastLoginAt: u.lastLoginAt,
     createdAt: u.createdAt,
     legacyNetid: u.legacyNetid,
@@ -389,6 +392,14 @@ export async function bulkDeletePhotos(db: Db, photoIds: number[]): Promise<Resu
   return ok({ deleted: toDelete.length, kept });
 }
 
+/** Opt a person out of broadcasts (an unsubscribe request), or back in. Sign-in codes are not affected. */
+export async function setNoEmail(db: Db, userId: string, noEmail: boolean): Promise<Result> {
+  const updated = await db.update(user).set({ noEmail }).where(eq(user.id, userId)).returning({ id: user.id });
+  if (updated.length === 0) return fail("No such person.");
+  log.info("admin.no_email_set", { userId, noEmail });
+  return ok(undefined);
+}
+
 /* ------------------------------------------------------------ broadcast */
 
 export type Audience = { kind: "all" } | { kind: "accounts" } | { kind: "semester"; code: string } | { kind: "individual"; userIds: string[] } | { kind: "survey" };
@@ -397,13 +408,14 @@ export type Audience = { kind: "all" } | { kind: "accounts" } | { kind: "semeste
  * Who a broadcast goes to: posters of public listings, every account (with or
  * without a listing), every poster in a semester, named people, or everyone
  * invited to the survey who has not answered it (which also leaves out admins
- * and test addresses). Banned people are left out of every audience.
+ * and test addresses). Banned people and people who asked for no email are
+ * left out of every audience, named or not.
  */
 export async function broadcastRecipients(db: Db, audience: Audience): Promise<Recipient[]> {
   if (audience.kind === "individual" && audience.userIds.length === 0) return [];
   if (audience.kind === "survey") return (await surveyUnanswered(db)).map((r) => ({ id: r.id, email: r.email, name: r.firstName, posted: r.posted }));
   const columns = { id: user.id, email: user.email, displayName: listings.displayName, firstName: user.firstName, lastName: user.lastName, name: user.name, legacyNetid: user.legacyNetid, listingId: listings.id };
-  const notBanned = sql`coalesce(${user.banned}, false) = false`;
+  const notBanned = and(sql`coalesce(${user.banned}, false) = false`, eq(user.noEmail, false));
   const rows =
     audience.kind === "semester"
       ? await db

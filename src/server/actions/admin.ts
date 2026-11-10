@@ -94,6 +94,13 @@ export async function adminSetBanned(userId: string, banned: boolean, reason: st
   return r;
 }
 
+export async function adminSetNoEmail(userId: string, noEmail: boolean): Promise<admin.Result> {
+  await requireAdmin();
+  const r = await admin.setNoEmail(await getDb(), z.string().uuid().parse(userId), z.boolean().parse(noEmail));
+  if (r.ok) revalidate();
+  return r;
+}
+
 export async function adminDeletePerson(userId: string, dryRun: boolean): Promise<admin.Result<admin.DeletionReport>> {
   const me = await requireAdmin();
   const r = await admin.deletePerson(await getDb(), z.string().uuid().parse(userId), me.id, dryRun);

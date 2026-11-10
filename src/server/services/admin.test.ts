@@ -220,4 +220,19 @@ describe("orphans and broadcast", () => {
     expect(verifySurveyToken(/\/survey\?t=([0-9a-f.-]+)/.exec(sentInTests.at(-2)?.text ?? "")?.[1] ?? "")).toEqual({ userId: people.admin.id });
     await db.delete(s.surveyResponses);
   });
+
+  it("leaves out anyone marked no email, from every audience, until they are let back in", async () => {
+    expect(await admin.setNoEmail(db, people.viewer.id, true)).toEqual({ ok: true, data: undefined });
+    expect((await admin.listPeople(db)).find((p) => p.id === people.viewer.id)?.noEmail).toBe(true);
+    expect((await admin.broadcastRecipients(db, { kind: "accounts" })).map((r) => r.email)).not.toContain("v@uvm.edu");
+    expect((await admin.broadcastRecipients(db, { kind: "survey" })).map((r) => r.email)).not.toContain("v@uvm.edu");
+    expect(await admin.broadcastRecipients(db, { kind: "individual", userIds: [people.viewer.id] })).toEqual([]);
+    await admin.setNoEmail(db, people.a.id, true);
+    expect(await admin.broadcastRecipients(db, { kind: "all" })).toEqual([]);
+    expect(await admin.broadcastRecipients(db, { kind: "semester", code: "spring27" })).toEqual([]);
+    await admin.setNoEmail(db, people.a.id, false);
+    expect(await admin.setNoEmail(db, people.viewer.id, false)).toEqual({ ok: true, data: undefined });
+    expect((await admin.broadcastRecipients(db, { kind: "accounts" })).map((r) => r.email)).toContain("v@uvm.edu");
+    expect((await admin.setNoEmail(db, "00000000-0000-4000-8000-000000000000", true)).ok).toBe(false);
+  });
 });

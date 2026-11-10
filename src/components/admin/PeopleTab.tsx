@@ -6,7 +6,7 @@ import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { shortDate } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import { LISTING_STATUSES, type ListingStatus } from "@/lib/options";
-import { adminDeletePerson, adminSetBanned } from "@/server/actions/admin";
+import { adminDeletePerson, adminSetBanned, adminSetNoEmail } from "@/server/actions/admin";
 import type { PersonDto } from "./AdminTabs";
 import { SortHeader, useSort } from "./SortHeader";
 import type { SortDir } from "./sort";
@@ -44,6 +44,13 @@ export function PeopleTab({ people, meId, focus, onOpenPost }: { people: PersonD
       if (r.ok) router.refresh();
     });
   };
+
+  const mail = (p: PersonDto) =>
+    start(async () => {
+      const r = await adminSetNoEmail(p.id, !p.noEmail);
+      setNote(r.ok ? (p.noEmail ? `${p.name ?? p.email} will get announcement emails again.` : `${p.name ?? p.email} will get no more announcement emails.`) : r.error);
+      if (r.ok) router.refresh();
+    });
 
   const remove = (p: PersonDto) =>
     start(async () => {
@@ -122,6 +129,7 @@ export function PeopleTab({ people, meId, focus, onOpenPost }: { people: PersonD
                       banned
                     </Chip>
                   )}
+                  {p.noEmail && <Chip tone="plain">no email</Chip>}
                 </div>
                 {p.name && <div className="text-xs break-all text-ink-3">{p.email}</div>}
                 <div className="text-xs text-ink-3 md:hidden">
@@ -165,6 +173,17 @@ export function PeopleTab({ people, meId, focus, onOpenPost }: { people: PersonD
                         }}
                       >
                         {p.banned ? "Unban" : "Ban…"}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded px-3 py-2 text-left text-sm hover:bg-line-light"
+                        disabled={pending}
+                        onClick={(e) => {
+                          e.currentTarget.closest("details")?.removeAttribute("open");
+                          mail(p);
+                        }}
+                      >
+                        {p.noEmail ? "Allow email" : "Stop email"}
                       </button>
                       <button
                         type="button"

@@ -37,6 +37,8 @@ export const user = pgTable(
     /** Required since 8 Oct 2026; null until the person has been asked (src/app/welcome). */
     firstName: text("first_name"),
     lastName: text("last_name"),
+    /** They asked to stop getting mail: left out of every broadcast. Sign-in codes, which they ask for, still go. */
+    noEmail: boolean("no_email").default(false).notNull(),
   },
   (table) => [check("user_email_lowercase_check", sql`${table.email} = lower(${table.email})`)],
 );

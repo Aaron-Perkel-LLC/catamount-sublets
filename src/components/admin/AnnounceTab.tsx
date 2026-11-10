@@ -215,7 +215,7 @@ function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people:
             ))}
           </div>
         )}
-        <p className="text-xs text-ink-3">{count === null ? "Counting…" : `${count} recipient${count === 1 ? "" : "s"}. Banned people are never included.`}</p>
+        <p className="text-xs text-ink-3">{count === null ? "Counting…" : `${count} recipient${count === 1 ? "" : "s"}. Banned people and anyone marked "no email" are never included.`}</p>
       </fieldset>
       <label className="flex flex-col gap-1 text-sm">
         Subject
