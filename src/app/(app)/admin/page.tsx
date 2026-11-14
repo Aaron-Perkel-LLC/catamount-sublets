@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { listings, listingPhotos, semesters, user } from "@/db/schema";
 import { desc, eq, sql } from "drizzle-orm";
 import { formatAddress } from "@/lib/format";
+import { parsePeopleQuery } from "@/lib/people-search";
 import { sortSemesters } from "@/lib/semesters";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/server/auth";
@@ -14,7 +15,7 @@ import { getSetting } from "@/server/data/settings";
 import { listSurveyText, surveyAudience, surveySummary } from "@/server/data/survey";
 import { approvedEmails, listPendingAccessRequests } from "@/server/data/access-requests";
 import { visibleSemesterWhere } from "@/server/data/visibility";
-import { adminStats, archiveHistory, listPeople } from "@/server/services/admin";
+import { adminStats, archiveHistory, listPeople, searchPeopleIds } from "@/server/services/admin";
 import { listingCountForSemester } from "@/server/data/semesters";
 import { AdminTabs } from "@/components/admin/AdminTabs";
 
@@ -23,10 +24,11 @@ export const metadata: Metadata = { title: `Admin · ${SITE.name}` };
 export const maxDuration = 800;
 
 /** Everything the admin tabs need, loaded once; the tabs are client components over it. */
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
+export default async function AdminPage({ searchParams }: { searchParams: Promise<{ range?: string; q?: string }> }) {
   const me = await requireUser("/admin");
   if (me.role !== "admin") redirect("/browse");
-  const { range: rangeRaw } = await searchParams;
+  const { range: rangeRaw, q: qRaw } = await searchParams;
+  const peopleQ = parsePeopleQuery(qRaw);
   const range: ActivityRange = (ACTIVITY_RANGES as string[]).includes(rangeRaw ?? "") ? (rangeRaw as ActivityRange) : "open";
   const db = await getDb();
 
@@ -54,7 +56,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
   const postById = new Map(posts.map((p) => [p.id, p]));
 
-  const [stats, archives, announcement, readOnly, people, activity, daily, targets, sources, pendingRequests, approved, survey, surveyText, invited] = await Promise.all([
+  const [stats, archives, announcement, readOnly, people, activity, daily, targets, sources, pendingRequests, approved, survey, surveyText, invited, peopleMatches] = await Promise.all([
     adminStats(db),
     archiveHistory(db),
     getSetting(db, "announcement"),
@@ -69,6 +71,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     surveySummary(db),
     listSurveyText(db),
     surveyAudience(db),
+    peopleQ ? searchPeopleIds(db, peopleQ) : null,
   ]);
 
   return (
@@ -83,6 +86,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         announcement={announcement}
         readOnly={readOnly}
         requests={{ pending: pendingRequests.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })), approved }}
+        peopleSearch={{ q: peopleQ, ids: peopleMatches }}
         people={people.map(({ listingId, ...p }) => {
           const post = listingId ? postById.get(listingId) : undefined;
           return {

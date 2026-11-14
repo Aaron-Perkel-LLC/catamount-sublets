@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb } from "@/db";
 import type { ListingStatus } from "@/lib/options";
+import { peopleQuery } from "@/lib/people-search";
 import { requireAdmin } from "@/server/auth";
 import { approveAccessRequest, dismissAccessRequest, revokeApprovedEmail } from "@/server/data/access-requests";
 import { listingForViewer, type ListingDto } from "@/server/data/listings";
@@ -106,6 +107,14 @@ export async function adminDeletePerson(userId: string, dryRun: boolean): Promis
   const r = await admin.deletePerson(await getDb(), z.string().uuid().parse(userId), me.id, dryRun);
   if (r.ok && !dryRun) revalidate();
   return r;
+}
+
+/** The People tab's search: ids of every account matching `q` (all of them for ""). The query is never logged. */
+export async function adminSearchPeople(q: string): Promise<admin.Result<{ ids: string[] }>> {
+  await requireAdmin();
+  const parsed = peopleQuery.safeParse(q);
+  if (!parsed.success) return { ok: false, error: "That search is too long." };
+  return { ok: true, data: { ids: await admin.searchPeopleIds(await getDb(), parsed.data) } };
 }
 
 export async function adminLoadInventory(): Promise<admin.InventoryListing[]> {

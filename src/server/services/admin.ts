@@ -1,8 +1,9 @@
-import { and, asc, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db";
 import { listingEvents, listingPhotos, listings, listingSemesters, semesterArchives, semesters, session, user } from "@/db/schema";
 import { LISTING_STATUS_VALUES, type ListingStatus } from "@/lib/options";
+import { escapeLike } from "@/lib/people-search";
 import { posterFirstName } from "@/lib/person-name";
 import { orderSemesterCodes, sortSemesters } from "@/lib/semesters";
 import { listingActivity } from "@/server/data/events";
@@ -259,6 +260,36 @@ export interface Person {
   createdAt: Date;
   legacyNetid: string | null;
   listingId: number | null;
+}
+
+/**
+ * The People search: a case-insensitive substring of the first, last or full
+ * name, the stored name, the email, the migrated login or the id. The input is a
+ * bind parameter with LIKE's wildcards escaped. A sequential scan; at a few
+ * thousand accounts that is well under a millisecond (a pg_trgm index is the
+ * fix if that ever changes).
+ */
+function peopleSearchWhere(q: string) {
+  const pattern = `%${escapeLike(q)}%`;
+  const like = (col: SQL) => sql`${col} ilike ${pattern} escape '\\'`;
+  return or(
+    like(sql`${user.firstName}`),
+    like(sql`${user.lastName}`),
+    like(sql`concat_ws(' ', ${user.firstName}, ${user.lastName})`),
+    like(sql`${user.name}`),
+    like(sql`${user.email}`),
+    like(sql`${user.legacyNetid}`),
+    like(sql`${user.id}::text`),
+  );
+}
+
+/** Ids of the people matching `q`; every account when it is empty. Never logs the query. */
+export async function searchPeopleIds(db: Db, q: string): Promise<string[]> {
+  const rows = await db
+    .select({ id: user.id })
+    .from(user)
+    .where(q ? peopleSearchWhere(q) : undefined);
+  return rows.map((r) => r.id);
 }
 
 export async function listPeople(db: Db): Promise<Person[]> {

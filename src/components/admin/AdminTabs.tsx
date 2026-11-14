@@ -85,6 +85,8 @@ type Props = {
   readOnly: ReadOnly;
   requests: RequestsDto;
   people: PersonDto[];
+  /** The search in the URL (?q=) and the ids it matched on the server; null ids for no search. */
+  peopleSearch: { q: string; ids: string[] | null };
   activity: ActivityDto;
   survey: SurveyDto;
 };
@@ -204,7 +206,7 @@ function AdminSections(props: Props) {
           {tab === "semesters" && <SemestersTab semesters={props.semesters} archives={props.archives} />}
           {tab === "announce" && <AnnounceTab announcement={props.announcement} readOnly={props.readOnly} semesters={props.semesters} people={props.people} />}
           {tab === "images" && <ImagesTab focusListingId={imagesFocus} semesters={props.semesters} storage={props.stats.storage} />}
-          {tab === "people" && <PeopleTab people={props.people} meId={props.me.id} focus={personFocus} onOpenPost={openPost} />}
+          {tab === "people" && <PeopleTab people={props.people} initialSearch={props.peopleSearch} meId={props.me.id} focus={personFocus} onOpenPost={openPost} />}
           {tab === "requests" && <RequestsTab requests={props.requests} />}
           {tab === "activity" && <ActivityTab activity={props.activity} onOpenPost={openPost} />}
           {tab === "survey" && <SurveyTab survey={props.survey} />}
