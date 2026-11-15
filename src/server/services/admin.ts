@@ -6,6 +6,7 @@ import { LISTING_STATUS_VALUES, type ListingStatus } from "@/lib/options";
 import { escapeLike } from "@/lib/people-search";
 import { posterFirstName } from "@/lib/person-name";
 import { orderSemesterCodes, sortSemesters } from "@/lib/semesters";
+import { countAdminMessagesTo, deleteAdminMessagesTo } from "@/server/data/admin-messages";
 import { listingActivity } from "@/server/data/events";
 import { deleteListing, listingFileUrls, photoFileUrls, setListingStatus } from "@/server/data/my-listing";
 import { posterColumns, shownName } from "@/server/data/names";
@@ -331,6 +332,8 @@ export interface DeletionReport {
   files: number;
   events: number;
   sessions: number;
+  /** One-off emails the admin sent to this address (admin_messages); deleted with the account. */
+  messages: number;
 }
 
 /**
@@ -347,8 +350,10 @@ export async function deletePerson(db: Db, userId: string, actingAdminId: string
   const urls = l ? await listingFileUrls(db, l.id) : [];
   const [{ events }] = l ? await db.select({ events: count() }).from(listingEvents).where(eq(listingEvents.listingId, l.id)) : [{ events: 0 }];
   const [{ sessions }] = await db.select({ sessions: count() }).from(session).where(eq(session.userId, userId));
-  const report: DeletionReport = { email: u.email, listingId: l?.id ?? null, photos: urls.length / 3, files: urls.length, events: Number(events), sessions: Number(sessions) };
+  const messages = await countAdminMessagesTo(db, u.email);
+  const report: DeletionReport = { email: u.email, listingId: l?.id ?? null, photos: urls.length / 3, files: urls.length, events: Number(events), sessions: Number(sessions), messages };
   if (dryRun) return ok(report);
+  await deleteAdminMessagesTo(db, u.email);
   await db.delete(user).where(eq(user.id, userId));
   await deleteMedia(urls);
   return ok(report);

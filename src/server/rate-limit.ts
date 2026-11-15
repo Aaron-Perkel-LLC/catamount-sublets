@@ -36,6 +36,8 @@ export const RATE_LIMITS = {
   accessRequestPerEmail: { scope: "access_request_email", limit: 3, windowSeconds: 86_400 },
   /** Survey answers from one address in an hour: a person re-saving a few times, not a script. */
   surveyPerIp: { scope: "survey_ip", limit: 10, windowSeconds: 3600 },
+  /** One-off emails from the admin console, sent or failed, per admin: a stuck button or a stolen session, not a person typing. */
+  adminMailPerUser: { scope: "admin_mail_user", limit: 30, windowSeconds: 3600 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export function rateLimitKey(scope: string, subject: string): string {

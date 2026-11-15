@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { shortDate } from "@/lib/dates";
 import { adminApproveAccessRequest, adminDismissAccessRequest, adminRevokeApprovedEmail } from "@/server/actions/admin";
+import { type AdminMessageDto, MailComposer, MailHistory } from "./MailComposer";
 
 export interface AccessRequestDto {
   id: number;
@@ -13,6 +14,8 @@ export interface AccessRequestDto {
   school: string | null;
   message: string;
   createdAt: string;
+  /** Replies sent from the console, newest first. */
+  messages: AdminMessageDto[];
 }
 export interface RequestsDto {
   pending: AccessRequestDto[];
@@ -21,13 +24,14 @@ export interface RequestsDto {
 
 /**
  * The front page's "Request access" and "Request your school", waiting for an
- * answer. Approve lets that address sign in; Dismiss closes it. Either way,
- * reply to the request email to tell them.
+ * answer. Reply writes to them from here and can approve or decline in the
+ * same step; Approve and Dismiss do it without a message.
  */
 export function RequestsTab({ requests }: { requests: RequestsDto }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [note, setNote] = useState<string | null>(null);
+  const [replying, setReplying] = useState<number | null>(null);
 
   const run = (fn: () => Promise<{ ok: true } | { ok: false; error: string }>, done: string) =>
     start(async () => {
@@ -60,10 +64,24 @@ export function RequestsTab({ requests }: { requests: RequestsDto }) {
               <p className="break-all text-sm">{r.email}</p>
               {r.school && <p className="text-sm text-ink-2">{r.kind === "school" ? `School: ${r.school}` : `School or connection: ${r.school}`}</p>}
               {r.message && <p className="whitespace-pre-line text-sm text-ink-2">{r.message}</p>}
+              {r.messages.length > 0 && (
+                <div className="rounded-lg bg-cream px-3 py-1">
+                  <MailHistory messages={r.messages} showRecipient={false} />
+                </div>
+              )}
               <div className="flex flex-wrap gap-2 pt-1">
                 <button
                   type="button"
                   className="btn-primary px-3 py-1.5 text-sm"
+                  disabled={pending}
+                  aria-expanded={replying === r.id}
+                  onClick={() => setReplying(replying === r.id ? null : r.id)}
+                >
+                  Reply
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary px-3 py-1.5 text-sm"
                   disabled={pending}
                   onClick={() => confirm(`Let ${r.email} sign in?`) && run(() => adminApproveAccessRequest(r.id), `Approved. ${r.email} can sign in now; reply to their request email to tell them.`)}
                 >
@@ -74,6 +92,11 @@ export function RequestsTab({ requests }: { requests: RequestsDto }) {
                 </button>
               </div>
               {r.kind === "school" && <p className="text-xs text-ink-3">Approve lets this one address in. Opening a whole school is a code change.</p>}
+              {replying === r.id && (
+                <div className="mt-2 border-t border-line-light pt-3">
+                  <MailComposer request={r} onDone={() => setReplying(null)} />
+                </div>
+              )}
             </li>
           ))}
         </ul>

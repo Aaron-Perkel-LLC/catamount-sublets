@@ -1,6 +1,7 @@
 /**
  * Remove one person entirely: account, listing, photos (from storage),
- * activity events and sessions. Dry run by default; --apply deletes and
+ * activity events, sessions and the admin emails sent to them. Dry run by
+ * default; --apply deletes and
  * appends one line to the deletions log (timestamp, identifier, counts).
  *
  *   npm run delete-user -- jsmith@uvm.edu
@@ -33,7 +34,7 @@ async function main() {
   const preview = await deletePerson(db, found.id, null, true);
   if (!preview.ok) throw new Error(preview.error);
   const d = preview.data;
-  console.log(`${d.email}: ${d.listingId ? `listing #${d.listingId}, ${d.photos} photo(s) (${d.files} files), ${d.events} event(s)` : "no listing"}, ${d.sessions} session(s)`);
+  console.log(`${d.email}: ${d.listingId ? `listing #${d.listingId}, ${d.photos} photo(s) (${d.files} files), ${d.events} event(s)` : "no listing"}, ${d.sessions} session(s), ${d.messages} admin email(s)`);
   if (!apply) {
     console.log("dry run; add --apply to delete.");
     return;
@@ -42,7 +43,7 @@ async function main() {
   if (!r.ok) throw new Error(r.error);
   const logPath = process.env.DELETIONS_LOG ?? path.join(homedir(), "sublet-migration", "deletions.log");
   await mkdir(path.dirname(logPath), { recursive: true });
-  await appendFile(logPath, `${new Date().toISOString()} deleted ${identifier} listing=${d.listingId ?? "-"} photos=${d.photos} events=${d.events} sessions=${d.sessions}\n`);
+  await appendFile(logPath, `${new Date().toISOString()} deleted ${identifier} listing=${d.listingId ?? "-"} photos=${d.photos} events=${d.events} sessions=${d.sessions} messages=${d.messages}\n`);
   console.log(`deleted. logged to ${logPath}`);
 }
 

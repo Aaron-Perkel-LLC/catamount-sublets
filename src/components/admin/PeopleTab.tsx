@@ -74,7 +74,7 @@ export function PeopleTab({
       if (!dry.ok) return setNote(dry.error);
       const d = dry.data;
       const who = p.name ? `${p.name} (${d.email})` : d.email;
-      if (!confirm(`Delete ${who}? Their account, ${d.listingId ? `listing #${d.listingId} with ${d.photos} photo(s) and ${d.events} activity events` : "no listing"}, and ${d.sessions} session(s). This cannot be undone.`)) return;
+      if (!confirm(`Delete ${who}? Their account, ${d.listingId ? `listing #${d.listingId} with ${d.photos} photo(s) and ${d.events} activity events` : "no listing"}, ${d.sessions} session(s)${d.messages ? `, and the ${d.messages} email(s) you sent them` : ""}. This cannot be undone.`)) return;
       const r = await adminDeletePerson(p.id, false);
       setNote(r.ok ? `Deleted ${p.name ?? r.data.email}.` : r.error);
       if (r.ok) router.refresh();

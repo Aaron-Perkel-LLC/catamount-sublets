@@ -8,6 +8,8 @@ import type { Announcement, ReadOnly } from "@/server/data/settings";
 import { ActivityTab } from "./ActivityTab";
 import { AnnounceTab } from "./AnnounceTab";
 import { ImagesTab, type StorageUsage } from "./ImagesTab";
+import type { AdminMessageDto } from "./MailComposer";
+import { MailTab } from "./MailTab";
 import { PeopleTab } from "./PeopleTab";
 import { RequestsTab, type RequestsDto } from "./RequestsTab";
 import { AdminPostActions } from "./AdminPostActions";
@@ -69,10 +71,10 @@ export interface ActivityDto {
   perListing: ({ id: number; shortAddress: string; ownerId: string; ownerEmail: string; ownerName: string | null; status: string; hidden: boolean } & ListingActivity)[];
 }
 
-export const TABS = ["people", "requests", "activity", "survey", "semesters", "images", "announce"] as const;
+export const TABS = ["people", "requests", "mail", "activity", "survey", "semesters", "images", "announce"] as const;
 export type Tab = (typeof TABS)[number];
-const LABELS: Record<Tab, string> = { semesters: "Semesters", announce: "Announce", images: "Images", people: "People", requests: "Requests", activity: "Activity", survey: "Survey" };
-/** Hashes from before a section moved, so old links (and already-sent notices) still land. */
+const LABELS: Record<Tab, string> = { semesters: "Semesters", announce: "Announce", images: "Images", people: "People", requests: "Requests", mail: "Mail", activity: "Activity", survey: "Survey" };
+/** Hashes from before a section moved, so old links (and already-sent notices) still land. #email is the broadcast's old home; the one-off Mail section is #mail. */
 const ALIASES: Record<string, Tab> = { posts: "people", announcement: "announce", email: "announce" };
 
 type Props = {
@@ -84,6 +86,7 @@ type Props = {
   announcement: Announcement;
   readOnly: ReadOnly;
   requests: RequestsDto;
+  mail: { history: AdminMessageDto[] };
   people: PersonDto[];
   /** The search in the URL (?q=) and the ids it matched on the server; null ids for no search. */
   peopleSearch: { q: string; ids: string[] | null };
@@ -152,6 +155,7 @@ function AdminSections(props: Props) {
   const summary: Record<Tab, string> = {
     people: `${stats.people} ${stats.people === 1 ? "person" : "people"} · ${stats.posts} post${stats.posts === 1 ? "" : "s"} · ${stats.hidden} hidden · ${stats.taken} taken`,
     requests: `${waiting === 0 ? "Nothing" : waiting} waiting · ${props.requests.approved.length} approved address${props.requests.approved.length === 1 ? "" : "es"}`,
+    mail: "One email to one address, from you, previewed before it goes.",
     activity: "Views, contacts and shares, counted without names.",
     survey: `${props.survey.summary.answered} of ${props.survey.invited} invited answered the feedback survey.`,
     semesters: "What students can post for, and what is on the board.",
@@ -208,6 +212,7 @@ function AdminSections(props: Props) {
           {tab === "images" && <ImagesTab focusListingId={imagesFocus} semesters={props.semesters} storage={props.stats.storage} />}
           {tab === "people" && <PeopleTab people={props.people} initialSearch={props.peopleSearch} meId={props.me.id} focus={personFocus} onOpenPost={openPost} />}
           {tab === "requests" && <RequestsTab requests={props.requests} />}
+          {tab === "mail" && <MailTab history={props.mail.history} />}
           {tab === "activity" && <ActivityTab activity={props.activity} onOpenPost={openPost} />}
           {tab === "survey" && <SurveyTab survey={props.survey} />}
         </div>

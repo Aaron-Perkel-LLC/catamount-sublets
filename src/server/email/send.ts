@@ -19,7 +19,7 @@ import { log } from "@/server/log";
  * a code is never queued behind a bulk send.
  */
 
-export type MailKind = "login_code" | "admin_notice" | "access_request" | "welcome" | "broadcast" | "broadcast_copy" | "survey_invite";
+export type MailKind = "login_code" | "admin_notice" | "access_request" | "welcome" | "broadcast" | "broadcast_copy" | "survey_invite" | "admin_message";
 
 /**
  * Print instead of send only on a developer's machine. On Vercel (preview or
@@ -54,7 +54,7 @@ export const sentInTests: { to: string; subject: string; kind: MailKind; text: s
 
 /** Codes come from the transactional sender, the admin's notices from their own, and the notes signed by the author from the author. */
 export function senderFor(kind: MailKind): string {
-  if (kind === "broadcast" || kind === "broadcast_copy" || kind === "welcome" || kind === "survey_invite") return SITE.mailFromPersonal;
+  if (kind === "broadcast" || kind === "broadcast_copy" || kind === "welcome" || kind === "survey_invite" || kind === "admin_message") return SITE.mailFromPersonal;
   if (kind === "admin_notice" || kind === "access_request") return SITE.mailFromNotices;
   return SITE.mailFrom;
 }
@@ -75,20 +75,26 @@ export interface SendMailArgs {
   replyTo?: string | null;
   /** Correlation id for the log line (a listing id, a broadcast id); never an email. */
   ref?: string | number;
+  /** The plain-text part, when the template writes its own; otherwise it is rendered from `react`. */
+  text?: string;
+  /** Sent to Resend as Idempotency-Key: a repeat with the same key is not sent twice. */
+  idempotencyKey?: string;
 }
 
 export interface SendMailResult {
   ok: boolean;
   id?: string;
+  /** Why it was not sent, for the admin's screen and the record; never logged with the address. */
+  error?: string;
 }
 
 export async function sendMail(args: SendMailArgs): Promise<SendMailResult> {
   if (isTestAddress(args.to) && !consoleMode() && !process.env.VITEST) {
     log.warn("mail.refused_test_address", { kind: args.kind, ref: args.ref });
-    return { ok: false };
+    return { ok: false, error: "Refused: that is a seed or example address." };
   }
   const html = await render(args.react);
-  const text = await render(args.react, { plainText: true });
+  const text = args.text ?? (await render(args.react, { plainText: true }));
   const from = senderFor(args.kind);
   const replyTo = args.replyTo === null ? undefined : (args.replyTo ?? SITE.mailReplyTo);
 
@@ -105,24 +111,27 @@ export async function sendMail(args: SendMailArgs): Promise<SendMailResult> {
 
   if (!process.env.RESEND_API_KEY) {
     log.error("mail.not_configured", new Error("RESEND_API_KEY is not set"), { kind: args.kind, ref: args.ref });
-    return { ok: false };
+    return { ok: false, error: "Mail is not configured here (no RESEND_API_KEY)." };
   }
 
   try {
     const send = () =>
-      resend().emails.send({
-        from,
-        to: args.to,
-        subject: args.subject,
-        html,
-        text,
-        replyTo,
-        headers: {
-          "X-Entity-Ref-ID": `${args.kind}:${args.ref ?? ""}`,
-          // Relationship mail still says how to stop it; a code does not need the header.
-          ...(args.kind === "welcome" || args.kind === "broadcast" || args.kind === "survey_invite" ? { "List-Unsubscribe": `<mailto:${SITE.supportEmail}?subject=unsubscribe>` } : {}),
+      resend().emails.send(
+        {
+          from,
+          to: args.to,
+          subject: args.subject,
+          html,
+          text,
+          replyTo,
+          headers: {
+            "X-Entity-Ref-ID": `${args.kind}:${args.ref ?? ""}`,
+            // Relationship mail still says how to stop it; a code does not need the header.
+            ...(args.kind === "welcome" || args.kind === "broadcast" || args.kind === "survey_invite" ? { "List-Unsubscribe": `<mailto:${SITE.supportEmail}?subject=unsubscribe>` } : {}),
+          },
         },
-      });
+        args.idempotencyKey ? { idempotencyKey: args.idempotencyKey } : undefined,
+      );
     // Resend's per-second API limit is shared by the whole account; a refused
     // request was not sent, so waiting and asking again cannot double-send.
     let { data, error } = await send();
@@ -132,12 +141,12 @@ export async function sendMail(args: SendMailArgs): Promise<SendMailResult> {
     }
     if (error) {
       log.error("mail.send_failed", new Error(error.message), { kind: args.kind, ref: args.ref });
-      return { ok: false };
+      return { ok: false, error: error.message || error.name || "Resend refused the message." };
     }
     log.info("mail.sent", { kind: args.kind, ref: args.ref, id: data?.id });
     return { ok: true, id: data?.id };
   } catch (error) {
     log.error("mail.send_threw", error, { kind: args.kind, ref: args.ref });
-    return { ok: false };
+    return { ok: false, error: error instanceof Error ? error.message : "The send failed." };
   }
 }

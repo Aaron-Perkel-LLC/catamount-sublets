@@ -6,7 +6,7 @@ import { SITE_TIME_ZONE } from "@/lib/dates";
 export const metadata: Metadata = { title: `Privacy · ${SITE.name}`, alternates: { canonical: "/privacy" } };
 
 /** Bump whenever this page changes what it says. */
-const LAST_UPDATED = "2026-11-02";
+const LAST_UPDATED = "2026-11-14";
 
 /** What the site keeps, who sees it, and how to get rid of it. Plain words, no legalese. */
 export default function PrivacyPage() {
@@ -57,8 +57,12 @@ export default function PrivacyPage() {
           name or email, so no page can say who looked at what. Posters and the admin see totals only.
         </p>
         <p>
-          If you ask us to add your school or to let you in: the name, email address and message you send, kept until we&apos;ve
-          answered and used only to reply.
+          If you ask us to add your school or to let you in: the name, email address and message you send, and our reply. Both are kept
+          as a record of the conversation and used for nothing else. Anyone can ask for them to be deleted: email{" "}
+          <a href={`mailto:${SITE.supportEmail}`} className="link">
+            {SITE.supportEmail}
+          </a>
+          .
         </p>
         <p>If you answer the feedback survey: your answers, kept with your account and deleted with it.</p>
         <p>Page-view counts through Vercel Web Analytics, which sets no cookies and keeps no record of who you are.</p>
@@ -71,7 +75,7 @@ export default function PrivacyPage() {
       <section className="flex flex-col gap-3 text-ink-2">
         <h2 className="text-lg font-bold text-ink">Getting rid of it</h2>
         <p>
-          Delete your listing from your post page, or your whole account from the <Link href="/account" className="link">account page</Link>: listing, photos and account go at once. Or email{" "}
+          Delete your listing from your post page, or your whole account from the <Link href="/account" className="link">account page</Link>: listing, photos and account go at once, with any email the admin sent you from the site. Or email{" "}
           <a href={`mailto:${SITE.supportEmail}`} className="link">
             {SITE.supportEmail}
           </a>{" "}

@@ -10,6 +10,7 @@ import { approveAccessRequest, dismissAccessRequest, revokeApprovedEmail } from 
 import { listingForViewer, type ListingDto } from "@/server/data/listings";
 import { setSetting, type Announcement } from "@/server/data/settings";
 import * as admin from "@/server/services/admin";
+import { type MailResult, previewAdminMessage, sendAdminMessage, type SendOutcome } from "@/server/services/admin-mail";
 import { photoOpFor, type PhotoOp, type PhotosResult } from "@/server/services/listing";
 
 const revalidate = () => {
@@ -173,6 +174,20 @@ export async function adminDismissAccessRequest(id: number): Promise<admin.Resul
   if (!(await dismissAccessRequest(await getDb(), requestId.parse(id)))) return { ok: false, error: "That request was already handled." };
   revalidatePath("/admin");
   return { ok: true, data: undefined };
+}
+
+/** Render a one-off email exactly as it will arrive, and the token that lets that exact text be sent. */
+export async function adminPreviewMail(input: unknown): Promise<MailResult<{ html: string; text: string; token: string }>> {
+  const me = await requireAdmin();
+  return previewAdminMessage(me.id, input);
+}
+
+/** Send a previewed one-off email; a reply to an access request can approve or decline it in the same step. */
+export async function adminSendMail(input: unknown, token: string): Promise<MailResult<SendOutcome>> {
+  const me = await requireAdmin();
+  const r = await sendAdminMessage(await getDb(), me.id, input, z.string().max(200).parse(token));
+  revalidatePath("/admin");
+  return r;
 }
 
 /** Stop new sign-ins for an approved address. */
