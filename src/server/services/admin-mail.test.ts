@@ -12,8 +12,8 @@ vi.mock("resend", () => ({
 
 const { createTestDb } = await import("@/db/test-db");
 const s = await import("@/db/schema");
-const { eq } = await import("drizzle-orm");
-const { previewAdminMessage, sendAdminMessage, previewToken, RETRY_PENDING_AFTER_MS } = await import("./admin-mail");
+const { eq, inArray } = await import("drizzle-orm");
+const { previewAdminMessage, sendAdminMessage, previewToken, RETRY_PENDING_AFTER_MS, NO_EMAIL_WARNING } = await import("./admin-mail");
 const { claimAdminMessage, countAdminMessagesTo, failStalePending } = await import("@/server/data/admin-messages");
 const { deletePerson } = await import("./admin");
 const { createAccessRequest, approvedEmails } = await import("@/server/data/access-requests");
@@ -45,7 +45,7 @@ const content = { to: " Sam@Example.org ", subject: "Hello", body: "Hi Sam,\n\nS
 /** Preview, then send what was previewed, as the composer does. */
 async function previewAndSend(input: Record<string, unknown> = {}) {
   const c = { ...content, ...input };
-  const p = await previewAdminMessage(adminId, c);
+  const p = await previewAdminMessage(db, adminId, c);
   if (!p.ok) throw new Error(p.error);
   return sendAdminMessage(db, adminId, c, p.data.token);
 }
@@ -54,7 +54,7 @@ const rows = () => db.select().from(s.adminMessages).orderBy(s.adminMessages.id)
 
 describe("previewAdminMessage", () => {
   it("renders the message, links and sign-off included, with a plain-text part", async () => {
-    const p = await previewAdminMessage(adminId, content);
+    const p = await previewAdminMessage(db, adminId, content);
     expect(p.ok).toBe(true);
     if (!p.ok) return;
     expect(p.data.html).toContain('href="https://example.org/x"');
@@ -64,9 +64,32 @@ describe("previewAdminMessage", () => {
   });
 
   it("refuses bad input field by field", async () => {
-    const p = await previewAdminMessage(adminId, { to: "a@b.com, c@d.com", subject: "", body: "x".repeat(10_001) });
+    const p = await previewAdminMessage(db, adminId, { to: "a@b.com, c@d.com", subject: "", body: "x".repeat(10_001) });
     expect(p.ok).toBe(false);
     if (!p.ok) expect(Object.keys(p.fieldErrors ?? {}).sort()).toEqual(["body", "subject", "to"]);
+  });
+});
+
+describe("a recipient who asked for no email", () => {
+  it("gets a warning with the preview, and can still be sent to", async () => {
+    await db.insert(s.user).values([
+      { email: "optedout@example.org", name: "Opted Out", noEmail: true },
+      { email: "fine@example.org", name: "Fine" },
+    ]);
+    const warned = await previewAdminMessage(db, adminId, { ...content, to: "OptedOut@Example.org" });
+    expect(warned.ok && warned.data.warning).toBe(NO_EMAIL_WARNING);
+    const plain = await previewAdminMessage(db, adminId, { ...content, to: "fine@example.org" });
+    expect(plain.ok && plain.data.warning).toBeNull();
+    const stranger = await previewAdminMessage(db, adminId, content);
+    expect(stranger.ok && stranger.data.warning).toBeNull();
+
+    if (!warned.ok) throw new Error();
+    const sent = await sendAdminMessage(db, adminId, { ...content, to: "OptedOut@Example.org" }, warned.data.token);
+    expect(sent.ok).toBe(true);
+    expect(resendSend).toHaveBeenCalledTimes(1);
+    expect((await rows())[0]).toMatchObject({ recipient: "optedout@example.org", status: "sent" });
+    await db.delete(s.adminMessages);
+    await db.delete(s.user).where(inArray(s.user.email, ["optedout@example.org", "fine@example.org"]));
   });
 });
 
@@ -85,7 +108,7 @@ describe("sendAdminMessage", () => {
 
   it("refuses without a preview, or after any edit to what was previewed", async () => {
     expect((await sendAdminMessage(db, adminId, content, "")).ok).toBe(false);
-    const p = await previewAdminMessage(adminId, content);
+    const p = await previewAdminMessage(db, adminId, content);
     if (!p.ok) throw new Error();
     for (const changed of [{ body: content.body + "!" }, { subject: "Hello!" }, { to: "other@example.org" }]) {
       const r = await sendAdminMessage(db, adminId, { ...content, ...changed }, p.data.token);
@@ -98,7 +121,7 @@ describe("sendAdminMessage", () => {
   });
 
   it("sends one preview once, however often Send is pressed", async () => {
-    const p = await previewAdminMessage(adminId, content);
+    const p = await previewAdminMessage(db, adminId, content);
     if (!p.ok) throw new Error();
     const first = await sendAdminMessage(db, adminId, content, p.data.token);
     const again = await sendAdminMessage(db, adminId, content, p.data.token);
@@ -125,7 +148,7 @@ describe("sendAdminMessage", () => {
 
   it("refuses a retry of a failed preview: a new preview is a new attempt", async () => {
     resendSend.mockResolvedValueOnce({ data: null, error: { name: "application_error", message: "down" } });
-    const p = await previewAdminMessage(adminId, content);
+    const p = await previewAdminMessage(db, adminId, content);
     if (!p.ok) throw new Error();
     expect((await sendAdminMessage(db, adminId, content, p.data.token)).ok).toBe(false);
     const retry = await sendAdminMessage(db, adminId, content, p.data.token);
@@ -187,7 +210,7 @@ describe("sendAdminMessage", () => {
 describe("a send interrupted mid-flight", () => {
   /** What a request that died after claiming its row leaves behind: a pending row under the preview's key. */
   async function strand(minutesAgo: number) {
-    const p = await previewAdminMessage(adminId, content);
+    const p = await previewAdminMessage(db, adminId, content);
     if (!p.ok) throw new Error();
     const key = `admin-message/${p.data.token.split(".")[0]}`;
     const id = await claimAdminMessage(db, { senderId: adminId, recipient: "sam@example.org", subject: "Hello", body: content.body.trim(), idempotencyKey: key, accessRequestId: null });

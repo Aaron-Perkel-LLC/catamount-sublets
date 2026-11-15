@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const auth = vi.hoisted(() => ({ role: "user" as string | null }));
 const svc = vi.hoisted(() => ({
-  preview: vi.fn(async () => ({ ok: true, data: { html: "", text: "", token: "t" } })),
+  preview: vi.fn(async () => ({ ok: true, data: { html: "", text: "", token: "t", warning: null } })),
   send: vi.fn(async () => ({ ok: true, data: { messageId: 1, duplicate: false, resolved: null } })),
 }));
 
@@ -43,7 +43,7 @@ describe("admin mail actions", () => {
     auth.role = "admin";
     await adminPreviewMail(input);
     await adminSendMail(input, "t");
-    expect(svc.preview).toHaveBeenCalledWith("admin-id", input);
+    expect(svc.preview).toHaveBeenCalledWith({}, "admin-id", input);
     expect(svc.send).toHaveBeenCalledWith({}, "admin-id", input, "t");
   });
 });

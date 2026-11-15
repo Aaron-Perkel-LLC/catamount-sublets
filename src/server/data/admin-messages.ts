@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import type { DbOrTx } from "@/db";
-import { adminMessages } from "@/db/schema";
+import { adminMessages, user } from "@/db/schema";
 import type { AdminMailStatus } from "@/lib/admin-mail";
 
 /** The admin's record of a one-off email. Admin only: it holds the address and the text. */
@@ -115,6 +115,15 @@ export async function deleteAdminMessagesTo(db: DbOrTx, email: string): Promise<
 export async function countAdminMessagesTo(db: DbOrTx, email: string): Promise<number> {
   const rows = await db.select({ id: adminMessages.id }).from(adminMessages).where(recipientIs(email));
   return rows.length;
+}
+
+/** Whether this address is an account that asked for no email (the People tab's Stop email). */
+export async function recipientOptedOut(db: DbOrTx, email: string): Promise<boolean> {
+  const [row] = await db
+    .select({ noEmail: user.noEmail })
+    .from(user)
+    .where(sql`${user.email} = ${email.trim().toLowerCase()}`);
+  return Boolean(row?.noEmail);
 }
 
 /** Case-insensitive, on the lower(recipient) index. */

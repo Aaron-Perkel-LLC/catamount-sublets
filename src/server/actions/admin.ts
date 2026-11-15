@@ -10,7 +10,7 @@ import { approveAccessRequest, dismissAccessRequest, revokeApprovedEmail } from 
 import { listingForViewer, type ListingDto } from "@/server/data/listings";
 import { setSetting, type Announcement } from "@/server/data/settings";
 import * as admin from "@/server/services/admin";
-import { type MailResult, previewAdminMessage, sendAdminMessage, type SendOutcome } from "@/server/services/admin-mail";
+import { type AdminMailPreview, type MailResult, previewAdminMessage, sendAdminMessage, type SendOutcome } from "@/server/services/admin-mail";
 import { photoOpFor, type PhotoOp, type PhotosResult } from "@/server/services/listing";
 
 const revalidate = () => {
@@ -177,9 +177,9 @@ export async function adminDismissAccessRequest(id: number): Promise<admin.Resul
 }
 
 /** Render a one-off email exactly as it will arrive, and the token that lets that exact text be sent. */
-export async function adminPreviewMail(input: unknown): Promise<MailResult<{ html: string; text: string; token: string }>> {
+export async function adminPreviewMail(input: unknown): Promise<MailResult<AdminMailPreview>> {
   const me = await requireAdmin();
-  return previewAdminMessage(me.id, input);
+  return previewAdminMessage(await getDb(), me.id, input);
 }
 
 /** Send a previewed one-off email; a reply to an access request can approve or decline it in the same step. */

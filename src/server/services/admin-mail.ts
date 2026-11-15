@@ -7,7 +7,7 @@ import AdminMessageEmail, { adminMessageText } from "@/emails/admin-message";
 import { type AdminMailContent, adminMailContent, adminMailInput, fieldErrors } from "@/lib/admin-mail";
 import { appSecret } from "@/lib/share";
 import { approveAccessRequest, dismissAccessRequest } from "@/server/data/access-requests";
-import { claimAdminMessage, messageByKey, releaseAdminMessage, retakeStalePending, settleAdminMessage } from "@/server/data/admin-messages";
+import { claimAdminMessage, messageByKey, recipientOptedOut, releaseAdminMessage, retakeStalePending, settleAdminMessage } from "@/server/data/admin-messages";
 import { sendMail } from "@/server/email/send";
 import { log } from "@/server/log";
 import { RATE_LIMITS, takeRateLimit } from "@/server/rate-limit";
@@ -51,13 +51,25 @@ export function verifyPreviewToken(adminId: string, c: AdminMailContent, token: 
   return timingSafeEqual(given, mac(adminId, m[1], c)) ? m[1] : null;
 }
 
-/** The rendered email, as the recipient will see it, and the token Send needs. */
-export async function previewAdminMessage(adminId: string, raw: unknown): Promise<MailResult<{ html: string; text: string; token: string }>> {
+/** Shown with the preview when the recipient asked for no email. A warning, not a refusal: a direct reply is not a broadcast. */
+export const NO_EMAIL_WARNING = "This address belongs to an account that asked for no email (Stop email, on the People tab). Broadcasts skip them; send this only if they're expecting a direct reply.";
+
+export interface AdminMailPreview {
+  html: string;
+  text: string;
+  token: string;
+  /** Something to know before sending; null when there is nothing. */
+  warning: string | null;
+}
+
+/** The rendered email, as the recipient will see it, the token Send needs, and any warning about the recipient. */
+export async function previewAdminMessage(db: Db, adminId: string, raw: unknown): Promise<MailResult<AdminMailPreview>> {
   const parsed = adminMailContent.safeParse(raw);
   if (!parsed.success) return { ok: false, error: "Check the fields marked below.", fieldErrors: fieldErrors(parsed.error) };
   const c = parsed.data;
   const html = await render(AdminMessageEmail({ body: c.body }));
-  return { ok: true, data: { html, text: adminMessageText(c.body), token: previewToken(adminId, c) } };
+  const warning = (await recipientOptedOut(db, c.to)) ? NO_EMAIL_WARNING : null;
+  return { ok: true, data: { html, text: adminMessageText(c.body), token: previewToken(adminId, c), warning } };
 }
 
 export interface SendOutcome {

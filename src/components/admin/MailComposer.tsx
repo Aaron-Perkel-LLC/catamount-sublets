@@ -27,7 +27,7 @@ export interface ReplyTarget {
   school: string | null;
 }
 
-type Preview = { html: string; text: string; token: string };
+type Preview = { html: string; text: string; token: string; warning: string | null };
 type Note = { tone: "ok" | "error"; text: string };
 
 const STARTERS: { key: ReplyStarter; label: string; resolve: AdminMailResolution | "" }[] = [
@@ -199,6 +199,11 @@ export function MailComposer({ request, onDone }: { request?: ReplyTarget; onDon
       )}
       {preview && (
         <section aria-label="Email preview" className="flex flex-col gap-2">
+          {preview.warning && (
+            <p role="alert" className="rounded-lg bg-error-tint px-3 py-2 text-sm text-error-ink">
+              {preview.warning}
+            </p>
+          )}
           <p className="text-xs text-ink-3">
             This is exactly what <span className="font-bold">{to}</span> will get, subject &ldquo;{subject}&rdquo;.
           </p>
