@@ -16,15 +16,16 @@ export const staleNoticeSubject = (deadline: string, reminder = false) => `${rem
 
 const authorFirstName = SITE.author.split(" ")[0];
 
-/** `name` is the first name when we have one; empty means "Hi," alone. `email` is their own sign-in address. */
-export default function StaleNoticeEmail({ name, street, email, deadline }: { name: string; street: string; email: string; deadline: string }) {
+/** `name` is the first name when we have one; empty means "Hi," alone. `street` null means "your listing" alone. `email` is their own sign-in address. */
+export default function StaleNoticeEmail({ name, street, email, deadline }: { name: string; street: string | null; email: string; deadline: string }) {
+  const listing = street ? `your listing for ${street}` : "your listing";
   const when = `11:59 pm on ${deadlineWords(deadline).long}`;
   const link = { color: EMAIL_COLOURS.lake, fontWeight: 700 } as const;
   return (
-    <EmailLayout plain preview={`Sign in once by ${when} to keep your listing for ${street} up.`} footer={<>{SITE.disclaimer}</>}>
+    <EmailLayout plain preview={`Sign in once by ${when} to keep ${listing} up.`} footer={<>{SITE.disclaimer}</>}>
       <Text style={paragraph}>Hi{name ? ` ${name}` : ""},</Text>
       <Text style={paragraph}>
-        When {LEGACY.name} moved to {SITE.domain} in October, your listing for {street} came over with it. You haven&apos;t
+        When {LEGACY.name} moved to {SITE.domain} in October, {listing} came over with it. You haven&apos;t
         signed in on the new site yet, so I&apos;m guessing you&apos;ve found someone or don&apos;t need it anymore.
       </Text>
       <Text style={paragraph}>

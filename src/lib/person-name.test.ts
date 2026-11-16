@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkName, fullName, guessNames, posterFirstName, posterName } from "./person-name";
+import { checkName, fullName, greetingName, guessNames, posterFirstName, posterName } from "./person-name";
 
 describe("checkName", () => {
   it("accepts ordinary names and tidies spaces", () => {
@@ -53,5 +53,20 @@ describe("posterName", () => {
   });
   it("uses a saved first and last name even when the first matches the email", () => {
     expect(posterFirstName({ ...base, email: "sam@example.org", firstName: "Sam", lastName: "Rivera" })).toBe("Sam");
+  });
+});
+
+describe("greetingName", () => {
+  it("keeps a name that was typed as one", () => {
+    expect(greetingName("Julia")).toBe("Julia");
+    expect(greetingName(" McKenna ")).toBe("McKenna");
+    expect(greetingName("mary ann")).toBe("mary ann");
+    expect(greetingName("Élodie")).toBe("Élodie");
+  });
+  it("gives nothing for a squashed lower-case name, so the mail says \"Hi,\"", () => {
+    expect(greetingName("juliagordon")).toBeNull();
+    expect(greetingName(posterFirstName({ firstName: null, lastName: null, legacyNames: ["juliagordon"], email: "jgordon@uvm.edu", legacyNetid: "jgordon" }))).toBeNull();
+    expect(greetingName("")).toBeNull();
+    expect(greetingName(null)).toBeNull();
   });
 });

@@ -80,3 +80,14 @@ export function posterFirstName(p: PosterNameParts): string | null {
   if (p.firstName?.trim()) return isLoginId(p.firstName, p) ? null : p.firstName.trim();
   return posterName(p)?.split(" ")[0] ?? null;
 }
+
+/**
+ * A first name fit to greet with, or null for "Hi," alone. A name with no
+ * capital letter and no space was not typed as a name: a squashed old
+ * "name shown" like "juliagordon" would read "Hi juliagordon,".
+ */
+export function greetingName(name: string | null | undefined): string | null {
+  const n = name?.trim();
+  if (!n) return null;
+  return /\p{Lu}/u.test(n) || /\s/.test(n) ? n : null;
+}

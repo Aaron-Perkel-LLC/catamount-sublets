@@ -5,7 +5,9 @@
  * never mailed). Dry run by default. --apply sends, one message a second, and
  * appends `time, address, user id, Resend id` to STALE_NOTICE_LOG (default
  * ~/sublet-migration/stale-notice.log) so a re-run skips everyone already
- * mailed. remove-stale.ts reads that log to know who was told.
+ * mailed. remove-stale.ts reads that log to know who was told, so --apply and
+ * --reminder (its dry run too) refuse, right after the mode line, unless the
+ * mail mode is resend: a console-mode run never writes a log.
  *
  *   npm run send-stale-notice -- --deadline 2026-11-20                    # dry run
  *   npm run send-stale-notice -- --deadline 2026-11-20 --review           # TSV
@@ -37,10 +39,10 @@ import { getDb } from "../../src/db";
 import { listings, user } from "../../src/db/schema";
 import StaleNoticeEmail, { staleNoticeSubject } from "../../src/emails/stale-notice";
 import { assertIsoDate, deadlineWords, easternDayStart, easternDeadlinePassed, nextDate } from "../../src/lib/dates";
-import { posterFirstName } from "../../src/lib/person-name";
+import { greetingName, posterFirstName } from "../../src/lib/person-name";
 import { type StaleRow, staleAudience, streetOf } from "../../src/server/data/stale";
 import { mailMode, sendMail } from "../../src/server/email/send";
-import { NOTICE_LOG, REMINDER_LOG, SKIP, SUPPRESSED, argAfter, columnIn, exists } from "./stale-files";
+import { NOTICE_LOG, REMINDER_LOG, SKIP, SUPPRESSED, argAfter, columnIn, exists, liveMailRefusal } from "./stale-files";
 
 const MAX_BOUNCES = 2;
 const PACE_MS = 1000;
@@ -65,7 +67,7 @@ async function accountFor(email: string): Promise<StaleRow | null> {
     .leftJoin(listings, eq(listings.userId, user.id))
     .where(eq(user.email, email));
   if (!r) return null;
-  return { id: r.id, email: r.email, firstName: posterFirstName({ ...r, legacyNames: [r.displayName, r.name] }), listingId: r.listingId ?? 0, street: r.address ? streetOf(r.address) : "12 Sample St", semester: null, status: r.status ?? "" };
+  return { id: r.id, email: r.email, firstName: greetingName(posterFirstName({ ...r, legacyNames: [r.displayName, r.name] })), listingId: r.listingId ?? 0, street: r.address ? streetOf(r.address) : "12 Sample St", semester: null, status: r.status ?? "" };
 }
 
 async function main() {
@@ -84,6 +86,9 @@ async function main() {
   process.env.MAIL_LIVE = "1";
   const mode = mailMode();
   console.log(`mail: ${mode}${mode === "resend" ? " (key present; messages go out through Resend)" : ""}`);
+  // Before anything else: a console-mode "send" must never reach a log that remove-stale reads as "was told".
+  const refusal = liveMailRefusal(mode, { apply, reminder });
+  if (refusal) throw new Error(refusal);
   console.log(`deadline: 11:59 pm Eastern on ${deadlineWords(deadline).long} (passes at ${easternDayStart(nextDate(deadline)).toISOString()})`);
   console.log(`subject: ${subject}`);
   if (easternDeadlinePassed(deadline) && (apply || testTo)) throw new Error("the deadline has passed; a notice now would be wrong. Nothing sent.");
@@ -109,7 +114,7 @@ async function main() {
     console.log("email\tfirst\tlisting\tstatus\tsemester\tstreet\tgroup\tstate");
     for (const r of [...mail, ...noEmail]) {
       const state = noEmail.includes(r) ? "no_email: not mailed" : skip.has(r.email) ? "skip.txt" : suppressed.has(r.email) ? "suppressed" : done.has(r.id) ? "already mailed" : reminder && !noticed.has(r.id) ? "no first notice" : "to send";
-      console.log([r.email, r.firstName ?? "", r.listingId, r.status, r.semester ?? "", r.street, noEmail.includes(r) ? "no_email" : "mail", state].join("\t"));
+      console.log([r.email, r.firstName ?? "", r.listingId, r.status, r.semester ?? "", r.street ?? "(none: \"your listing\")", noEmail.includes(r) ? "no_email" : "mail", state].join("\t"));
     }
     return;
   }
@@ -124,7 +129,6 @@ async function main() {
     console.log(`dry run; nothing sent. --apply would ${mode === "resend" ? "send via Resend" : `refuse: mail mode is ${mode}`}.`);
     return;
   }
-  if (mode !== "resend") throw new Error(`mail mode is ${mode}; --apply needs RESEND_API_KEY`);
   if (!(await exists(SUPPRESSED))) throw new Error(`${SUPPRESSED} is missing; rebuild it from Resend's suppression list before sending. Nothing sent.`);
   const adminKey = process.env.RESEND_ADMIN_API_KEY;
   if (!adminKey && !args.includes("--without-bounce-check")) {
@@ -157,6 +161,8 @@ async function main() {
     }
     const result = await sendMail({ to: r.email, subject, react: mailFor(r), kind: "stale_notice", ref: r.id });
     if (result.ok) {
+      // Only a message Resend took is logged; the mode cannot have changed, and this says so where the log is written.
+      if (mailMode() !== "resend" || !result.id || result.id === "console" || result.id === "test") throw new Error(`a send came back without going through Resend; not logged. ${sent} sent before it.`);
       sent++;
       if (result.id) sentIds.push(result.id);
       await appendFile(log, `${new Date().toISOString()}\t${r.email}\t${r.id}\t${result.id ?? ""}\n`, { mode: 0o600 });

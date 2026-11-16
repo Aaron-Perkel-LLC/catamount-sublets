@@ -48,3 +48,15 @@ export function argAfter(args: string[], flag: string): string | null {
   if (!v || v.startsWith("--")) throw new Error(`${flag} needs a value`);
   return v;
 }
+
+/**
+ * Why --apply or --reminder may not run in this mail mode, or null when it
+ * may. Only "resend" sends: in console mode sendMail prints and reports
+ * success, and a logged line for a message nobody got would let remove-stale
+ * delete someone who was never told.
+ */
+export function liveMailRefusal(mode: "resend" | "console" | "unconfigured", flags: { apply: boolean; reminder: boolean }): string | null {
+  if (mode === "resend" || (!flags.apply && !flags.reminder)) return null;
+  const flag = [flags.reminder ? "--reminder" : null, flags.apply ? "--apply" : null].filter(Boolean).join(" ");
+  return `mail mode is ${mode}; ${flag} needs resend (RESEND_API_KEY). Nothing sent, nothing logged.`;
+}

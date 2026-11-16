@@ -32,6 +32,15 @@ describe("StaleNoticeEmail", () => {
     expect(text).toContain("Hi,\n");
   });
 
+  it("says \"your listing\" alone when there is no street to name", async () => {
+    const text = await render(createElement(StaleNoticeEmail, { ...props, street: null }), { plainText: true });
+    expect(text).toContain("in October, your listing came over with it.");
+    expect(text).not.toContain("listing for");
+    const html = await render(createElement(StaleNoticeEmail, { ...props, street: null }));
+    expect(html).toContain("to keep your listing up.");
+    expect(html).not.toContain("listing for");
+  });
+
   it("puts the short deadline in the subject, with a Reminder prefix for the second send", () => {
     expect(staleNoticeSubject("2026-11-20")).toBe("Your sublet listing comes down Nov 20");
     expect(staleNoticeSubject("2026-11-20", true)).toBe("Reminder: Your sublet listing comes down Nov 20");
