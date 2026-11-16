@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { daysBetweenDates, easternDate, easternDayStart, easternOffsetMinutes, postedAgo, shortDate } from "./dates";
+import { assertIsoDate, daysBetweenDates, deadlineWords, easternDate, easternDayStart, easternDeadlinePassed, easternOffsetMinutes, nextDate, postedAgo, shortDate } from "./dates";
 
 describe("easternDate", () => {
   it("uses the Eastern calendar day, not UTC", () => {
@@ -50,5 +50,23 @@ describe("shortDate", () => {
   });
   it("keeps the year for an earlier one", () => {
     expect(shortDate(new Date("2025-04-02T12:00:00Z"), now)).toBe("Apr 2, 2025");
+  });
+});
+
+describe("Eastern deadlines", () => {
+  it("runs a deadline to 23:59:59 Eastern on its day, not to UTC midnight", () => {
+    // 2026-11-20 is in EST (UTC−5): the day ends at 2026-11-21 04:59:59Z.
+    expect(easternDeadlinePassed("2026-11-20", new Date("2026-11-20T23:00:00Z"))).toBe(false);
+    expect(easternDeadlinePassed("2026-11-20", new Date("2026-11-21T00:00:00Z"))).toBe(false); // UTC midnight, 7 pm Eastern
+    expect(easternDeadlinePassed("2026-11-20", new Date("2026-11-21T04:59:59Z"))).toBe(false); // 23:59:59 Eastern
+    expect(easternDeadlinePassed("2026-11-20", new Date("2026-11-21T05:00:00Z"))).toBe(true); // 00:00 Eastern on the 21st
+  });
+
+  it("words a deadline and refuses a non-date", () => {
+    expect(deadlineWords("2026-11-20")).toEqual({ long: "Friday, November 20", short: "Nov 20" });
+    expect(nextDate("2026-12-31")).toBe("2027-01-01");
+    expect(assertIsoDate("2026-11-20")).toBe("2026-11-20");
+    expect(() => assertIsoDate("2026-11-31")).toThrow();
+    expect(() => assertIsoDate("Nov 20")).toThrow();
   });
 });

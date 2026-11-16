@@ -88,3 +88,36 @@ export function shortDate(instant: Date, now: Date = new Date()): string {
   const year = easternYear(instant) === easternYear(now) ? {} : { year: "numeric" as const };
   return instant.toLocaleDateString("en-US", { timeZone: SITE_TIME_ZONE, month: "short", day: "numeric", ...year });
 }
+
+const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The Eastern calendar date after `date` ("YYYY-MM-DD"). */
+export function nextDate(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+}
+
+/**
+ * A deadline given as an Eastern calendar date runs to the end of that day
+ * (23:59:59 America/New_York), not to UTC midnight: it has passed from the
+ * first instant of the next Eastern day.
+ */
+export function easternDeadlinePassed(date: string, now: Date = new Date()): boolean {
+  return now.getTime() >= easternDayStart(nextDate(date)).getTime();
+}
+
+/** Throws unless `date` is a real "YYYY-MM-DD" calendar date. */
+export function assertIsoDate(date: string): string {
+  if (!isoDate.test(date) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) throw new Error(`not a date (YYYY-MM-DD): ${date}`);
+  return date;
+}
+
+/** "Friday, November 20" (long) and "Nov 20" (short) for an Eastern calendar date. */
+export function deadlineWords(date: string): { long: string; short: string } {
+  // Noon Eastern on that day, so no offset can tip it into a neighbour.
+  const noon = new Date(easternDayStart(date).getTime() + 12 * 3_600_000);
+  return {
+    long: noon.toLocaleDateString("en-US", { timeZone: SITE_TIME_ZONE, weekday: "long", month: "long", day: "numeric" }),
+    short: noon.toLocaleDateString("en-US", { timeZone: SITE_TIME_ZONE, month: "short", day: "numeric" }),
+  };
+}
