@@ -5,8 +5,9 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { shortDate } from "@/lib/dates";
 import { formatBytes, formatMoney } from "@/lib/format";
 import { suggestedCode } from "@/lib/semesters";
-import { adminAddSemester, adminArchiveCommit, adminArchivePreview, adminDeleteSemester, adminToggleSemester } from "@/server/actions/admin";
+import { adminAddSemester, adminArchiveCommit, adminArchivePreview, adminDeleteSemester, adminOutcomeAskPreview, adminSendOutcomeAsks, adminSendOutcomeAskTest, adminToggleSemester } from "@/server/actions/admin";
 import type { ArchivePlan } from "@/server/services/admin";
+import type { AskPreview } from "@/server/services/listing-outcome";
 import type { ArchiveRowDto, SemesterRowDto } from "./AdminTabs";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -22,6 +23,7 @@ export function SemestersTab({ semesters, archives }: { semesters: SemesterRowDt
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [plan, setPlan] = useState<ArchivePlan | null>(null);
+  const [ask, setAsk] = useState<AskPreview | null>(null);
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
     start(async () => {
@@ -39,6 +41,11 @@ export function SemestersTab({ semesters, archives }: { semesters: SemesterRowDt
       </span>
       <span className="text-sm text-ink-3">{plural(s.postCount, "listing")}</span>
       <span className="ml-auto flex flex-wrap gap-1">
+        {s.postCount > 0 && (
+          <button type="button" className="btn-secondary px-2 py-1 text-xs" disabled={pending} title="Email its posters “Is your sublet still available?”" onClick={() => start(async () => setAsk(await adminOutcomeAskPreview(s.code)))}>
+            Ask posters…
+          </button>
+        )}
         {!s.active && (
           <button type="button" className="btn-secondary px-2 py-1 text-xs" disabled={pending} onClick={() => start(async () => setPlan(await adminArchivePreview(s.code)))}>
             Archive…
@@ -118,6 +125,16 @@ export function SemestersTab({ semesters, archives }: { semesters: SemesterRowDt
           </div>
         </details>
       )}
+
+      <AskDialog
+        preview={ask}
+        onClose={() => setAsk(null)}
+        onSent={(text) => {
+          setAsk(null);
+          setResult(text);
+          router.refresh();
+        }}
+      />
 
       <ArchiveDialog
         plan={plan}
@@ -286,5 +303,157 @@ function ArchiveDialog({ plan, onClose, onArchived }: { plan: ArchivePlan | null
         </div>
       )}
     </dialog>
+  );
+}
+
+/**
+ * "Is your sublet still available?" for one semester: who it goes to (the
+ * listings archiving would remove, less anyone already asked or answered,
+ * banned, or off email), then the code typed back to send. Nothing goes out
+ * until Send.
+ */
+function AskDialog({ preview, onClose, onSent }: { preview: AskPreview | null; onClose: () => void; onSent: (result: string) => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const [pending, start] = useTransition();
+  const [typed, setTyped] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const d = ref.current;
+    if (preview && d && !d.open) d.showModal();
+    if (!preview && d?.open) d.close();
+  }, [preview]);
+
+  const n = preview?.recipients.length ?? 0;
+  return (
+    <dialog
+      ref={ref}
+      onClose={() => {
+        setTyped("");
+        setError(null);
+        onClose();
+      }}
+      className="m-auto w-[min(36rem,calc(100vw-2rem))] rounded-xl border border-line bg-paper p-0 text-ink backdrop:bg-ink/60"
+    >
+      {preview && (
+        <div className="flex max-h-[85dvh] flex-col gap-3 overflow-y-auto p-5">
+          <h2 className="text-lg font-bold">Ask {preview.name} posters</h2>
+          <p className="text-sm text-ink-2">
+            Emails “Is your sublet still available?” with four one-tap answers (no sign-in; the links work after the listing is gone). Goes to
+            the listings archiving would remove, less anyone already asked or answered, banned, or marked Stop email.
+            {preview.alreadyAsked > 0 ? ` Already sent for this semester: ${plural(preview.alreadyAsked, "listing")}.` : ""}
+          </p>
+          {preview.blocking.length > 0 ? (
+            <ul className="text-sm text-error-ink">
+              {preview.blocking.map((b) => (
+                <li key={b}>{b}</li>
+              ))}
+            </ul>
+          ) : n === 0 ? (
+            <p className="text-sm text-ink-2">Nobody to ask right now.</p>
+          ) : (
+            <>
+              <details className="text-sm">
+                <summary className="cursor-pointer text-lake">Goes to {plural(n, "poster")}</summary>
+                <ul className="mt-1 flex flex-col gap-0.5 text-ink-2">
+                  {preview.recipients.map((r) => (
+                    <li key={r.listingId} title={r.email}>
+                      {r.name ?? r.email} · {r.place}
+                      {r.status !== "open" ? ` · ${r.status}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+              <label className="flex flex-col gap-1 text-sm">
+                Type {preview.code} to send
+                <input className="field w-40" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+              </label>
+              {error && (
+                <p role="alert" className="text-sm text-error-ink">
+                  {error}
+                </p>
+              )}
+            </>
+          )}
+          {preview.testListings.length > 0 && <AskTest preview={preview} />}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {preview.blocking.length === 0 && n > 0 && (
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={pending || typed !== preview.code}
+                onClick={() =>
+                  start(async () => {
+                    const r = await adminSendOutcomeAsks(preview.code, typed);
+                    if (!r.ok) return setError(r.error);
+                    setTyped("");
+                    const { sent, failed, skipped } = r.data;
+                    onSent(`Asked ${preview.name} posters: ${plural(sent, "email")} sent${failed ? `, ${failed} failed (send again to retry them)` : ""}${skipped ? `, ${skipped} already sent` : ""}.`);
+                  })
+                }
+              >
+                {pending ? "Sending…" : `Send to ${plural(n, "poster")}`}
+              </button>
+            )}
+            <button type="button" className="btn-secondary" onClick={() => ref.current?.close()}>
+              {preview.blocking.length > 0 || n === 0 ? "Close" : "Cancel"}
+            </button>
+          </div>
+        </div>
+      )}
+    </dialog>
+  );
+}
+
+/**
+ * "Send test to me": the email for any listing, with its real signed links,
+ * to the signed-in admin only. Records no ask. The links are live, so the
+ * warning says what tapping Filled does.
+ */
+function AskTest({ preview }: { preview: AskPreview }) {
+  const [pending, start] = useTransition();
+  const [listingId, setListingId] = useState(preview.testListings[0].listingId);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  return (
+    <details className="rounded-lg border border-line-light p-3 text-sm">
+      <summary className="cursor-pointer text-lake">Send test to me</summary>
+      <div className="mt-2 flex flex-col gap-2">
+        <p className="text-ink-3">
+          The email for one listing, with that listing&apos;s real links, sent only to your own address. No ask is recorded, so the real send
+          still goes to its poster. The links are live: Filled marks that listing taken and Still available stamps it.
+        </p>
+        <label className="flex flex-col gap-1">
+          Listing
+          <select className="field" value={listingId} onChange={(e) => setListingId(Number(e.target.value))}>
+            {preview.testListings.map((l) => (
+              <option key={l.listingId} value={l.listingId}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                setNote(null);
+                const r = await adminSendOutcomeAskTest(preview.code, listingId);
+                setNote(r.ok ? { ok: true, text: `Sent to ${r.data.to}.` } : { ok: false, text: r.error });
+              })
+            }
+          >
+            {pending ? "Sending…" : "Send test to me"}
+          </button>
+          {note && (
+            <span role={note.ok ? "status" : "alert"} className={note.ok ? "text-ink-2" : "text-error-ink"}>
+              {note.text}
+            </span>
+          )}
+        </div>
+      </div>
+    </details>
   );
 }

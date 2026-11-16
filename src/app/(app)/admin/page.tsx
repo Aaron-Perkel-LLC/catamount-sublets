@@ -15,6 +15,7 @@ import { getSetting } from "@/server/data/settings";
 import { listSurveyText, surveyAudience, surveySummary } from "@/server/data/survey";
 import { approvedEmails, listPendingAccessRequests } from "@/server/data/access-requests";
 import { adminMessagesForRequests, type AdminMessageRow, recentAdminMessages } from "@/server/data/admin-messages";
+import { outcomeSummary } from "@/server/data/listing-outcomes";
 import { visibleSemesterWhere } from "@/server/data/visibility";
 import { adminStats, archiveHistory, listPeople, searchPeopleIds } from "@/server/services/admin";
 import { listingCountForSemester } from "@/server/data/semesters";
@@ -57,7 +58,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
   const postById = new Map(posts.map((p) => [p.id, p]));
 
-  const [stats, archives, announcement, readOnly, people, activity, daily, targets, sources, pendingRequests, approved, survey, surveyText, invited, peopleMatches, mailHistory] = await Promise.all([
+  const [stats, archives, announcement, readOnly, people, activity, daily, targets, sources, pendingRequests, approved, survey, surveyText, invited, peopleMatches, mailHistory, outcomes] = await Promise.all([
     adminStats(db),
     archiveHistory(db),
     getSetting(db, "announcement"),
@@ -74,6 +75,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     surveyAudience(db),
     peopleQ ? searchPeopleIds(db, peopleQ) : null,
     recentAdminMessages(db),
+    outcomeSummary(db),
   ]);
   const replies = await adminMessagesForRequests(db, pendingRequests.map((r) => r.id));
   const messageDto = (m: AdminMessageRow) => ({ ...m, createdAt: m.createdAt.toISOString() });
@@ -107,6 +109,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           daily,
           sources,
           targets,
+          outcomes,
           perListing: posts.map((p) => ({ id: p.id, shortAddress: p.shortAddress, ownerId: p.ownerId, ownerEmail: p.ownerEmail, ownerName: p.ownerName, status: p.status, hidden: p.hidden, ...(activity.get(p.id) ?? { views: 0, contacts: 0, converted: 0, shares: 0, arrivals: 0 }) })),
         }}
       />

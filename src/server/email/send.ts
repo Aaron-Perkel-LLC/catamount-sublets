@@ -19,7 +19,7 @@ import { log } from "@/server/log";
  * a code is never queued behind a bulk send.
  */
 
-export type MailKind = "login_code" | "admin_notice" | "access_request" | "welcome" | "broadcast" | "broadcast_copy" | "survey_invite" | "admin_message";
+export type MailKind = "login_code" | "admin_notice" | "access_request" | "welcome" | "broadcast" | "broadcast_copy" | "survey_invite" | "admin_message" | "outcome_ask";
 
 /**
  * Print instead of send only on a developer's machine. On Vercel (preview or
@@ -54,7 +54,7 @@ export const sentInTests: { to: string; subject: string; kind: MailKind; text: s
 
 /** Codes come from the transactional sender, the admin's notices from their own, and the notes signed by the author from the author. */
 export function senderFor(kind: MailKind): string {
-  if (kind === "broadcast" || kind === "broadcast_copy" || kind === "welcome" || kind === "survey_invite" || kind === "admin_message") return SITE.mailFromPersonal;
+  if (kind === "broadcast" || kind === "broadcast_copy" || kind === "welcome" || kind === "survey_invite" || kind === "admin_message" || kind === "outcome_ask") return SITE.mailFromPersonal;
   if (kind === "admin_notice" || kind === "access_request") return SITE.mailFromNotices;
   return SITE.mailFrom;
 }
@@ -127,7 +127,7 @@ export async function sendMail(args: SendMailArgs): Promise<SendMailResult> {
           headers: {
             "X-Entity-Ref-ID": `${args.kind}:${args.ref ?? ""}`,
             // Relationship mail still says how to stop it; a code does not need the header.
-            ...(args.kind === "welcome" || args.kind === "broadcast" || args.kind === "survey_invite" ? { "List-Unsubscribe": `<mailto:${SITE.supportEmail}?subject=unsubscribe>` } : {}),
+            ...(args.kind === "welcome" || args.kind === "broadcast" || args.kind === "survey_invite" || args.kind === "outcome_ask" ? { "List-Unsubscribe": `<mailto:${SITE.supportEmail}?subject=unsubscribe>` } : {}),
           },
         },
         args.idempotencyKey ? { idempotencyKey: args.idempotencyKey } : undefined,

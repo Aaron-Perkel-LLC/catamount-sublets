@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { DELETE_ANSWER_VALUES, DELETE_ANSWERS, type DeleteAnswer } from "@/lib/listing-outcome";
 import type { ListingStatus } from "@/lib/options";
 import { deleteMyListing, setMyListingStatus } from "@/server/actions/post";
 
@@ -10,7 +11,8 @@ type Confirming = "taken" | "delete" | null;
 /**
  * The bottom of My post: status changes, then Delete on its own below a rule.
  * Marking as taken and deleting ask first, in place; pausing and resuming are
- * one tap because they undo each other.
+ * one tap because they undo each other. Delete's confirm also asks whether
+ * they found a subletter; every answer, Skip included, deletes in one tap.
  */
 export function ManagePanel({ status }: { status: ListingStatus }) {
   const router = useRouter();
@@ -26,9 +28,9 @@ export function ManagePanel({ status }: { status: ListingStatus }) {
       else router.refresh();
     });
 
-  const remove = () =>
+  const remove = (answer: DeleteAnswer) =>
     start(async () => {
-      const r = await deleteMyListing();
+      const r = await deleteMyListing(answer);
       if (r && !r.ok) setError(r.error ?? "Couldn’t delete that.");
     });
 
@@ -80,14 +82,7 @@ export function ManagePanel({ status }: { status: ListingStatus }) {
 
         <div className="flex flex-col gap-3 border-t border-line pt-4">
           {confirming === "delete" ? (
-            <Confirm
-              danger
-              text="Delete your listing and its photos? This can't be undone."
-              action="Delete listing"
-              pending={pending}
-              onConfirm={remove}
-              onCancel={() => setConfirming(null)}
-            />
+            <DeleteConfirm pending={pending} onAnswer={remove} onCancel={() => setConfirming(null)} />
           ) : (
             <button
               type="button"
@@ -102,6 +97,42 @@ export function ManagePanel({ status }: { status: ListingStatus }) {
         {error && <p className="text-sm text-error-ink">{error}</p>}
       </div>
     </section>
+  );
+}
+
+/**
+ * "Did you find a subletter?" on the delete confirm. The question never
+ * stands between the poster and Delete: each answer is the delete button,
+ * and Skip deletes without one.
+ */
+function DeleteConfirm({ pending, onAnswer, onCancel }: { pending: boolean; onAnswer: (a: DeleteAnswer) => void; onCancel: () => void }) {
+  const answers = DELETE_ANSWER_VALUES.filter((a) => a !== "skipped");
+  return (
+    <div role="alertdialog" aria-labelledby="delete-confirm-text" aria-describedby="delete-confirm-question" className="flex flex-col gap-3 rounded-lg border border-error-line bg-error-tint p-3">
+      <p id="delete-confirm-text" className="text-sm text-error-ink">
+        Delete your listing and its photos? This can&apos;t be undone.
+      </p>
+      <fieldset className="flex flex-col gap-2" disabled={pending}>
+        <legend id="delete-confirm-question" className="mb-2 text-sm font-bold text-ink">
+          Before it goes: did you find a subletter? <span className="font-normal text-ink-3">Any answer deletes it.</span>
+        </legend>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          {answers.map((a, i) => (
+            <button key={a} type="button" autoFocus={i === 0} className="rounded-lg border border-error-line bg-paper px-4 py-2.5 text-left font-bold text-error-ink hover:bg-error-line disabled:opacity-60" onClick={() => onAnswer(a)}>
+              {DELETE_ANSWERS[a]}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <button type="button" className="rounded-lg bg-error-ink px-4 py-2.5 font-bold text-paper hover:opacity-90 disabled:opacity-60" onClick={() => onAnswer("skipped")}>
+            {pending ? "Deleting…" : "Skip and delete"}
+          </button>
+          <button type="button" className="btn-secondary" onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      </fieldset>
+    </div>
   );
 }
 

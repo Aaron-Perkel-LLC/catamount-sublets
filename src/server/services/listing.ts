@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Db } from "@/db";
 import { formToListingInput, validateListingInput } from "@/lib/listing-input";
+import { type DeleteAnswer, deleteAnswerSchema } from "@/lib/listing-outcome";
 import { LISTING_STATUS_VALUES, type ListingStatus } from "@/lib/options";
 import {
   addPhoto,
@@ -17,6 +18,7 @@ import {
   updateListing,
   type PhotoRow,
 } from "@/server/data/my-listing";
+import { recordOutcome } from "@/server/data/listing-outcomes";
 import { activeSemesters, SemesterChoiceError, validateSemesterChoice } from "@/server/data/semesters";
 import { assertWritable, ReadOnlyError } from "@/server/data/settings";
 import { RATE_LIMITS, takeRateLimit } from "@/server/rate-limit";
@@ -109,21 +111,39 @@ export async function setStatusFor(db: Db, user: ServiceUser, status: ListingSta
   }
 }
 
-/** Delete the person's listing and its files. */
-export async function deleteListingFor(db: Db, user: ServiceUser): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Delete the person's listing and its files, recording their answer to "Did
+ * you find a subletter?" if they gave one. The answer never stands in the
+ * way: one that does not parse is dropped, and one that fails to save is
+ * logged, after the listing is already gone.
+ */
+export async function deleteListingFor(db: Db, user: ServiceUser, answer?: unknown): Promise<{ ok: boolean; error?: string }> {
   try {
     await assertWritable(db);
+    const parsedAnswer = deleteAnswerSchema.safeParse(answer);
+    const outcome = parsedAnswer.success ? parsedAnswer.data : undefined;
     const mine = await myListing(db, user.id);
     if (!mine) return { ok: false, error: "You don't have a listing." };
-    const snap = await listingSnapshot(db, mine.row.id);
-    const urls = await deleteListing(db, mine.row.id, { userId: user.id, isAdmin: false });
+    const listingId = mine.row.id;
+    const snap = await listingSnapshot(db, listingId);
+    const urls = await deleteListing(db, listingId, { userId: user.id, isAdmin: false });
     if (urls) {
+      if (outcome) await recordDeleteAnswer(db, listingId, outcome);
       await deleteMedia(urls);
       if (snap) await noticeDeleted(snap, "poster");
     }
     return { ok: true };
   } catch (error) {
     return { ok: false, error: friendlyError(error) };
+  }
+}
+
+async function recordDeleteAnswer(db: Db, listingId: number, outcome: DeleteAnswer): Promise<void> {
+  try {
+    const r = await recordOutcome(db, { listingId, outcome, source: "delete" });
+    log.info("listing.outcome", { listingId, outcome, source: "delete", stored: r.stored, replaced: r.replaced });
+  } catch (error) {
+    log.error("listing.outcome_failed", error, { listingId, source: "delete" });
   }
 }
 

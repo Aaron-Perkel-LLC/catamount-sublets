@@ -6,7 +6,7 @@ import { SITE_TIME_ZONE } from "@/lib/dates";
 export const metadata: Metadata = { title: `Privacy · ${SITE.name}`, alternates: { canonical: "/privacy" } };
 
 /** Bump whenever this page changes what it says. */
-const LAST_UPDATED = "2026-11-14";
+const LAST_UPDATED = "2026-11-15";
 
 /** What the site keeps, who sees it, and how to get rid of it. Plain words, no legalese. */
 export default function PrivacyPage() {
@@ -65,6 +65,11 @@ export default function PrivacyPage() {
           .
         </p>
         <p>If you answer the feedback survey: your answers, kept with your account and deleted with it.</p>
+        <p>
+          If you say whether you found a subletter (when you delete your listing, or from an email asking before your semester ends): that
+          answer, stored against the listing&apos;s number only, without your name or the listing&apos;s details. It is kept after the listing is
+          gone, so the totals add up.
+        </p>
         <p>Page-view counts through Vercel Web Analytics, which sets no cookies and keeps no record of who you are.</p>
       </section>
       <section className="flex flex-col gap-3 text-ink-2">

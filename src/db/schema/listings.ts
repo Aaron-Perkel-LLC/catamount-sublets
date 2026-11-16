@@ -69,6 +69,8 @@ export const listings = pgTable(
     amenityFurnished: boolean().notNull().default(false),
     status: text().notNull().default("open"),
     statusChangedAt: nullableTimestamp(),
+    /** When the poster last said "Still available" from the email before their semester was archived; shown on the card. */
+    confirmedAvailableAt: nullableTimestamp(),
     /** The share token the legacy site issued, so links already sent keep working. */
     legacyShareToken: char({ length: 10 }),
     /** Set by the migration script; lets --prune tell migrated rows from new ones. */

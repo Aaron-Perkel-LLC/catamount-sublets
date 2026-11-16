@@ -80,7 +80,7 @@ environment at boot and rejects an empty value. The variables:
 | `DATABASE_URL`, `DATABASE_URL_UNPOOLED` | Postgres connection strings, pooled for the app and direct for migrations. Unset: PGlite. |
 | `APP_SECRET` | Signs share tokens and analytics actor keys. |
 | `BETTER_AUTH_SECRET` | Better Auth's session secret. |
-| `SURVEY_SECRET` | Signs feedback-survey links. |
+| `SURVEY_SECRET` | Signs feedback-survey links and the "still available?" email's answer links. |
 | `APP_URL` | The canonical origin, e.g. `http://localhost:3000`. |
 | `RESEND_API_KEY` | Resend API key for real mail. |
 | `BLOB_UPLOADS_READ_WRITE_TOKEN`, `BLOB_MEDIA_READ_WRITE_TOKEN` | Vercel Blob tokens for the private uploads store and the public media store. Unset: files go to `.uploads/` on disk. |

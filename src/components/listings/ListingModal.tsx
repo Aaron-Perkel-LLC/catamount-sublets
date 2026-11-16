@@ -178,6 +178,7 @@ export function ListingModal({
                     <p className="text-sm text-ink-3">
                       Posted by {listing.posterName ?? "the poster"} · {listing.postedAgo}
                     </p>
+                    {listing.confirmedAvailable && <p className="text-sm font-bold text-included-ink">Confirmed available {listing.confirmedAvailable}</p>}
                   </div>
                   {/* On a phone, Share is in the top bar and Email/Call in the bar at the bottom: one of each. */}
                   <div className="flex flex-wrap gap-2">

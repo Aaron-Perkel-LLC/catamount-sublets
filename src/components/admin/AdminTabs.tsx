@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ListingViewProvider, useListingView, type Viewer } from "@/components/listings/listing-view";
+import type { OutcomeSummary } from "@/lib/listing-outcome";
 import { adminLoadListing } from "@/server/actions/admin";
 import type { ActivityRange, ListingActivity } from "@/server/data/events";
 import type { Announcement, ReadOnly } from "@/server/data/settings";
@@ -69,6 +70,7 @@ export interface ActivityDto {
   sources: { source: string; n: number }[];
   targets: { target: string; n: number }[];
   perListing: ({ id: number; shortAddress: string; ownerId: string; ownerEmail: string; ownerName: string | null; status: string; hidden: boolean } & ListingActivity)[];
+  outcomes: OutcomeSummary;
 }
 
 export const TABS = ["people", "requests", "mail", "activity", "survey", "semesters", "images", "announce"] as const;

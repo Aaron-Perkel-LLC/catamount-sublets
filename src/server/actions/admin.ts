@@ -11,6 +11,7 @@ import { listingForViewer, type ListingDto } from "@/server/data/listings";
 import { setSetting, type Announcement } from "@/server/data/settings";
 import * as admin from "@/server/services/admin";
 import { type AdminMailPreview, type MailResult, previewAdminMessage, sendAdminMessage, type SendOutcome } from "@/server/services/admin-mail";
+import { type AskPreview, askPreview, sendAsks, sendAskTest } from "@/server/services/listing-outcome";
 import { photoOpFor, type PhotoOp, type PhotosResult } from "@/server/services/listing";
 
 const revalidate = () => {
@@ -48,6 +49,25 @@ export async function adminArchiveCommit(code: string, confirm: string): Promise
   const r = await admin.archiveCommit(await getDb(), z.string().max(40).parse(code), z.string().max(40).parse(confirm));
   if (r.ok) revalidate();
   return r;
+}
+
+/** The "still available?" email for a semester's posters: who it would go to, then the send. */
+export async function adminOutcomeAskPreview(code: string): Promise<AskPreview> {
+  await requireAdmin();
+  return askPreview(await getDb(), z.string().max(40).parse(code));
+}
+
+export async function adminSendOutcomeAsks(code: string, confirm: string): Promise<admin.Result<{ sent: number; failed: number; skipped: number }>> {
+  await requireAdmin();
+  const r = await sendAsks(await getDb(), z.string().max(40).parse(code), z.string().max(40).parse(confirm), { pauseMs: 600 });
+  if (r.ok) revalidatePath("/admin");
+  return r;
+}
+
+/** The "still available?" email for one listing, with its real links, to the signed-in admin only. Records no ask. */
+export async function adminSendOutcomeAskTest(code: string, listingId: number): Promise<admin.Result<{ to: string }>> {
+  const me = await requireAdmin();
+  return sendAskTest(await getDb(), { id: me.id, email: me.email }, code, listingId);
 }
 
 const announcementInput = z.object({ active: z.boolean(), message: z.string().trim().max(2000), style: z.enum(["info", "warning", "success"]) });

@@ -4,7 +4,7 @@ import type { DbOrTx } from "@/db";
 import { listingPhotos, listings, listingSemesters, user } from "@/db/schema";
 import { amenityCounts, listingCardTags, type AmenityFlags, type CardTag } from "@/lib/card-tags";
 import { shareUrl } from "@/lib/share";
-import { postedAgo } from "@/lib/dates";
+import { postedAgo, shortDate } from "@/lib/dates";
 import { formatAddress, listingMapLinks } from "@/lib/format";
 import { filterCount, type ListingQuery } from "@/lib/listing-filters";
 import {
@@ -54,6 +54,8 @@ export interface ListingDto {
   status: ListingStatus;
   postedAt: string;
   postedAgo: string;
+  /** "Nov 15" when the poster last confirmed it is still available (from the email), for an open listing; else null. Not on the share card. */
+  confirmedAvailable: string | null;
   /** The poster's first and last name; null when there is none to show (never a login). */
   posterName: string | null;
   isMine: boolean;
@@ -216,6 +218,7 @@ async function toDtos(db: DbOrTx, rows: Row[], viewerId: string | null): Promise
         status: l.status as ListingStatus,
         postedAt: l.postedAt.toISOString(),
         postedAgo: postedAgo(l.postedAt),
+        confirmedAvailable: l.status === "open" && l.confirmedAvailableAt ? shortDate(l.confirmedAvailableAt) : null,
         posterName: shownName(l, poster, email),
         isMine: viewerId !== null && l.userId === viewerId,
         hasPhone: Boolean(l.contactPhone?.trim()),

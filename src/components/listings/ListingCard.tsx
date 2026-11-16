@@ -63,6 +63,7 @@ export function ListingCard({ listing, source }: { listing: ListingDto; source: 
       <div className="flex flex-col gap-1.5 p-3">
         <h3 className="truncate font-bold text-ink">{listing.shortAddress}</h3>
         {facts && <p className="text-sm text-ink-2">{facts}</p>}
+        {listing.confirmedAvailable && <p className="text-xs font-bold text-included-ink">Confirmed available {listing.confirmedAvailable}</p>}
         {listing.tags.length > 0 && (
           <ul className="flex flex-wrap gap-1.5 text-xs">
             {listing.tags.map((t) => (

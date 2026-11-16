@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
+import type { DeleteAnswer } from "@/lib/listing-outcome";
 import type { ListingStatus } from "@/lib/options";
 import { requireUserOrThrow } from "@/server/auth";
 import {
@@ -37,9 +38,10 @@ export async function setMyListingStatus(status: ListingStatus): Promise<{ ok: b
   return result;
 }
 
-export async function deleteMyListing(): Promise<{ ok: boolean; error?: string }> {
+/** Delete the signed-in person's listing; `answer` is their reply to "Did you find a subletter?" (validated in the service, never blocking). */
+export async function deleteMyListing(answer?: DeleteAnswer): Promise<{ ok: boolean; error?: string }> {
   const user = await requireUserOrThrow();
-  const result = await deleteListingFor(await getDb(), user);
+  const result = await deleteListingFor(await getDb(), user, answer);
   if (!result.ok) return result;
   revalidate();
   redirect("/browse");

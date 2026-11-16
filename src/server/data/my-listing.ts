@@ -136,6 +136,21 @@ export async function setListingStatus(db: DbOrTx, listingId: number, actor: Act
   return rows.length > 0;
 }
 
+/**
+ * The poster said "Still available" from the email: stamp it, owner-scoped
+ * like every other write here. Returns false when the listing is gone or not theirs.
+ */
+export async function confirmListingAvailable(db: DbOrTx, listingId: number, actor: Actor, at = new Date()): Promise<boolean> {
+  const rows = await db.update(listings).set({ confirmedAvailableAt: at }).where(owned(listingId, actor)).returning({ id: listings.id });
+  return rows.length > 0;
+}
+
+/** Who owns a listing and its status, for acting on a signed link that names only the listing; null once it is gone. */
+export async function listingOwnerAndStatus(db: DbOrTx, listingId: number): Promise<{ userId: string; status: ListingStatus } | null> {
+  const [row] = await db.select({ userId: listings.userId, status: listings.status }).from(listings).where(eq(listings.id, listingId));
+  return row ? { userId: row.userId, status: row.status as ListingStatus } : null;
+}
+
 /** Every stored file URL of a listing, for deletion from storage. */
 export async function listingFileUrls(db: DbOrTx, listingId: number): Promise<string[]> {
   const rows = await db
