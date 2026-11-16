@@ -8,6 +8,8 @@ import { EMAIL_COLOURS, EmailLayout, muted, paragraph } from "./layout";
  * "Is your sublet still available?": sent to a semester's posters before it
  * is archived, from the admin's Semesters section (never automatically).
  * Four links, each the poster's own signed answer; nothing to sign in to.
+ * A link only opens /outcome with that answer pre-selected; the poster's
+ * tap there records it, so a mail scanner opening the links records nothing.
  * Filled marks the listing taken and Still available stamps it confirmed
  * (src/server/services/listing-outcome.ts); Taking it down only records.
  */
@@ -39,7 +41,7 @@ export default function OutcomeAskEmail({ name, place, semesterName, links }: Ou
   return (
     <EmailLayout
       plain
-      preview={`One tap: did ${place} find a subletter? Nothing to sign in to.`}
+      preview={`Did ${place} find a subletter? Nothing to sign in to.`}
       footer={
         <>
           You are getting this because you have a listing for {semesterName} on {SITE.domain}. To stop hearing from me, reply with
@@ -52,7 +54,7 @@ export default function OutcomeAskEmail({ name, place, semesterName, links }: Ou
         {semesterName} is wrapping up, and your listing at {place} will come down with it. Before it does: did you find someone?
       </Text>
       <Text style={paragraph}>
-        One tap answers it, with nothing to sign in to. Filled marks your listing as taken (you can undo that from My post); Still available
+        Tap your answer, then confirm it on the page; there&apos;s nothing to sign in to. Filled marks your listing as taken (you can undo that from My post); Still available
         shows today&apos;s date on it as confirmed.
       </Text>
       <div style={{ margin: "4px 0 10px" }}>
@@ -66,7 +68,7 @@ export default function OutcomeAskEmail({ name, place, semesterName, links }: Ou
         ))}
       </div>
       <Text style={{ ...muted, marginBottom: 18 }}>
-        These links are yours alone and work for {OUTCOME_TOKEN_DAYS} days, even after the listing is gone. Tap a different one to change
+        These links are yours alone and work for {OUTCOME_TOKEN_DAYS} days, even after the listing is gone. Confirm a different one to change
         your answer. Taking it down only records your answer; to take the listing down sooner, delete it from My post on the site.
       </Text>
       <Text style={paragraph}>

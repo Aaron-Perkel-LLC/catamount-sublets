@@ -13,8 +13,9 @@ const AUTHOR = SITE.author.split(" ")[0];
 
 /**
  * Where the "still available?" email's links land. Opening it changes
- * nothing (see OutcomeAnswer): the page posts the answer once it loads,
- * and that POST records it and acts on the listing.
+ * nothing, even with JavaScript running (link scanners run it): ?a= only
+ * pre-selects that answer, and the poster's tap on it (see OutcomeAnswer)
+ * is the POST that records it and acts on the listing.
  * No session, and the listing may already be gone.
  */
 export default async function OutcomePage({ searchParams }: { searchParams: Promise<{ t?: string; a?: string }> }) {
