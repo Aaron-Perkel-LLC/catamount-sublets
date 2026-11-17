@@ -82,18 +82,16 @@ export const CAMPUS = { lat: 44.477435, lon: -73.195323 } as const;
 
 /**
  * What a signed-out visitor sees instead of the address (src/server/data/public-listings.ts).
- * The true point lies `minOffsetM`–`maxOffsetM` from the circle's center, always
- * inside its `radiusM`. With fewer than `landingMinThumbs` public listings the
- * front page shows the count and the sign-in line instead of covers.
+ * The circle is keyed by the gridM-square cell the true point falls in (so
+ * listings in one house share a circle) and centered minOffsetM–maxOffsetM
+ * from the cell's center. A point in the cell is at most half its diagonal
+ * (35.4 m) from that center, so the true point is always 60 − 35.4 = 24.6 m
+ * to 110 + 35.4 = 145.4 m from the circle's center: never near the middle,
+ * always inside radiusM (src/lib/geo-fuzz.test.ts checks both, corners
+ * included). With fewer than `landingMinThumbs` public listings the front
+ * page shows the count and the sign-in line instead of covers.
  */
-/**
- * The approximate area signed-out visitors see. The circle is keyed by the
- * gridM-square cell the true point falls in (so listings in one house share
- * a circle) and centered minOffsetM–maxOffsetM from the cell's center; it
- * still contains the point because maxOffsetM + half the cell's diagonal
- * (110 + 35.4) stays under radiusM (src/lib/geo-fuzz.test.ts checks this).
- */
-export const PUBLIC_AREA = { radiusM: 150, gridM: 50, minOffsetM: 40, maxOffsetM: 110, landingMinThumbs: 4 } as const;
+export const PUBLIC_AREA = { radiusM: 150, gridM: 50, minOffsetM: 60, maxOffsetM: 110, landingMinThumbs: 4 } as const;
 
 /** The named areas the approximate circle is labelled with (polygons in ./neighborhoods.ts, generated from docs/neighborhoods/). */
 export { NEIGHBORHOOD_FALLBACK, NEIGHBORHOODS } from "./neighborhoods";

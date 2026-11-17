@@ -15,10 +15,6 @@ function places(n: number): { lat: number; lon: number }[] {
 }
 
 describe("geo fuzz", () => {
-  it("is configured so the circle always contains the place", () => {
-    expect(PUBLIC_AREA.maxOffsetM + HALF_DIAGONAL).toBeLessThan(PUBLIC_AREA.radiusM - 2);
-  });
-
   it("is stable for a place across calls", () => {
     expect(fuzzedArea(TRUE.lat, TRUE.lon)).toEqual(fuzzedArea(TRUE.lat, TRUE.lon));
   });
@@ -39,18 +35,46 @@ describe("geo fuzz", () => {
     expect(fuzzedArea(moved.lat, moved.lon)).not.toEqual(fuzzedArea(TRUE.lat, TRUE.lon));
   });
 
-  it("keeps the true point inside the circle, for 10,000 places", () => {
+  // Rounding the center to 5 decimals moves it by at most ~0.7 m (0.56 m of latitude, 0.4 m of longitude here).
+  const ROUNDING_M = 0.7;
+  const NEAREST = PUBLIC_AREA.minOffsetM - HALF_DIAGONAL - ROUNDING_M; // 23.9 m
+  const FURTHEST = PUBLIC_AREA.maxOffsetM + HALF_DIAGONAL + ROUNDING_M; // 146.1 m
+
+  it("is configured so the true point is never near the middle and always inside", () => {
+    expect(PUBLIC_AREA.minOffsetM - HALF_DIAGONAL).toBeCloseTo(24.6, 1);
+    expect(PUBLIC_AREA.maxOffsetM + HALF_DIAGONAL).toBeCloseTo(145.4, 1);
+    expect(FURTHEST).toBeLessThan(PUBLIC_AREA.radiusM);
+  });
+
+  it("keeps every point of a cell, corners and edges included, 24.6–145.4 m from the center, for 500 cells", () => {
     let min = Infinity;
     let max = 0;
-    for (const p of places(10_000)) {
-      const a = fuzzedArea(p.lat, p.lon);
-      const d = metersBetween(a.lat, a.lon, p.lat, p.lon);
-      min = Math.min(min, d);
-      max = Math.max(max, d);
+    for (const p of places(500)) {
+      const cell = gridCell(p.lat, p.lon);
+      const lo = cellCenter({ row: cell.row - 0.5, col: cell.col - 0.5 }); // the cell's south-west corner
+      const hi = cellCenter({ row: cell.row + 0.5, col: cell.col + 0.5 }); // its north-east corner (the next cell's)
+      const inset = 1e-9; // a hair inside, so the north and east edges still belong to this cell
+      const lats = [lo.lat + inset, (lo.lat + hi.lat) / 2, hi.lat - inset];
+      const lons = [lo.lon + inset, (lo.lon + hi.lon) / 2, hi.lon - inset];
+      const points = lats.flatMap((lat) => lons.map((lon) => ({ lat, lon }))); // 4 corners, 4 edge midpoints, the center
+      for (let i = 0; i < 40; i++) {
+        const f = (i * 0.618034 + 0.05) % 1; // scattered over the cell, never on its edge
+        const g = (i * 0.381966 + 0.13) % 1;
+        points.push({ lat: lats[0] + f * (lats[2] - lats[0]), lon: lons[0] + g * (lons[2] - lons[0]) });
+      }
+      const area = fuzzedArea(p.lat, p.lon);
+      for (const q of points) {
+        expect(gridCell(q.lat, q.lon)).toEqual(cell);
+        expect(fuzzedArea(q.lat, q.lon)).toEqual(area);
+        const d = metersBetween(area.lat, area.lon, q.lat, q.lon);
+        min = Math.min(min, d);
+        max = Math.max(max, d);
+        expect(d).toBeGreaterThanOrEqual(NEAREST);
+        expect(d).toBeLessThanOrEqual(FURTHEST);
+      }
     }
-    expect(max).toBeLessThan(PUBLIC_AREA.maxOffsetM + HALF_DIAGONAL + 2); // the 5-decimal rounding moves it by at most ~1 m
+    expect(min).toBeGreaterThan(24 - ROUNDING_M);
     expect(max).toBeLessThan(PUBLIC_AREA.radiusM);
-    expect(min).toBeGreaterThan(PUBLIC_AREA.minOffsetM - HALF_DIAGONAL - 2);
   });
 
   it("offsets different cells differently, spread in every direction", () => {
