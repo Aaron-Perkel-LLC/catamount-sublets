@@ -29,7 +29,7 @@ import {
 import { type ListingDto, newBoardListings } from "@/server/data/listings";
 import { assertWritable, getSetting, ReadOnlyError, setSetting } from "@/server/data/settings";
 import { signDigestUnsubscribe, verifyDigestUnsubscribe } from "@/server/digest-token";
-import { isTestAddress, mailMode, sendMail } from "@/server/email/send";
+import { consoleMode, isTestAddress, mailMode, sendMail } from "@/server/email/send";
 import { log } from "@/server/log";
 import { RATE_LIMITS, takeRateLimit } from "@/server/rate-limit";
 import { linkSecret } from "@/server/signed-link";
@@ -125,12 +125,24 @@ export function skipReason(c: DigestCandidate): SkipReason | null {
   return null;
 }
 
+/**
+ * The full send goes only from Production. A preview (which may point at the
+ * production database, switch included) or a laptop with a live key gets
+ * "not_production" instead; only console and test mode, which send nothing,
+ * run it elsewhere. "Send a test to me" is not affected: it mails the
+ * signed-in admin and no one else.
+ */
+export function fullSendAllowedHere(): boolean {
+  return process.env.VERCEL_ENV === "production" || consoleMode();
+}
+
 /** Why the digest cannot run at all here: shown on the admin switch, and the cron refuses while any hold. */
 export function digestBlockers(): string[] {
   const out: string[] = [];
-  if (!SITE.mailingAddress.trim()) out.push("The mailing address is empty: fill in SITE.mailingAddress in src/config/site.ts (bulk mail needs a postal address in its footer).");
+  if (!SITE.mailingAddress.trim()) out.push("MAILING_ADDRESS is not set on this deployment (bulk mail needs a postal address in its footer).");
   if (!linkSecret()) out.push("SURVEY_SECRET is not set on this deployment, so unsubscribe links can't be signed.");
   if (mailMode() === "unconfigured") out.push("RESEND_API_KEY is not set on this deployment.");
+  if (mailMode() === "resend" && !process.env.RESEND_DIGEST_API_KEY) out.push("RESEND_DIGEST_API_KEY (the sending key scoped to the digest's subdomain) is not set on this deployment.");
   if (process.env.VERCEL && !process.env.CRON_SECRET) out.push("CRON_SECRET is not set on this deployment, so the cron can't call the digest.");
   return out;
 }
@@ -222,16 +234,25 @@ export interface RunOptions {
 }
 
 /**
- * One cron firing. Does nothing unless the admin switch is on, nothing
+ * One cron firing. Does nothing unless this is Production, the admin switch is on, nothing
  * blocks it, the site is writable and it is the digest's hour (or a
  * catch-up hour after it). Each person: claim, build, send or record empty,
  * settle. See the top of this file for what a failure leaves.
  */
 export async function runDigest(db: Db, now = new Date(), opts: RunOptions = {}): Promise<DigestRunSummary> {
+  if (!fullSendAllowedHere()) {
+    log.warn("digest.not_production", { vercelEnv: process.env.VERCEL_ENV ?? "none" });
+    return idle("not_production");
+  }
   if (!(await getSetting(db, "digest")).enabled) return idle("switched_off");
   const clock = digestClock(now);
   if (!clock.act) return idle(clock.reason);
-  if (digestBlockers().length) return idle("blocked");
+  const blockers = digestBlockers();
+  if (blockers.length) {
+    // Env var names only, no addresses (hard rule 3).
+    log.warn("digest.blocked", { week: clock.week, blockers: blockers.join(" | ") });
+    return idle("blocked");
+  }
   if ((await getSetting(db, "read_only")).active) return idle("read_only");
 
   const started = Date.now();

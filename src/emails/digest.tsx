@@ -44,7 +44,7 @@ export function digestSubject(total: number, severalSearches: boolean): string {
   return `${total} new sublet${total === 1 ? "" : "s"} matching your search${severalSearches ? "es" : ""}`;
 }
 
-const MAILING_ADDRESS_PLACEHOLDER = "[Mailing address: set SITE.mailingAddress]";
+const MAILING_ADDRESS_PLACEHOLDER = "[Mailing address: set MAILING_ADDRESS]";
 const mailingAddress = () => SITE.mailingAddress || MAILING_ADDRESS_PLACEHOLDER;
 
 function listingHeadline(l: DigestListingLine): string {

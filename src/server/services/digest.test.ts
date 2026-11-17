@@ -30,7 +30,7 @@ const { and, eq } = await import("drizzle-orm");
 const { SITE, DIGEST } = await import("@/config/site");
 const { parseListingQuery, parseSavedQuery, canonicalFilterQuery } = await import("@/lib/listing-filters");
 const { browseListings, newBoardListings } = await import("@/server/data/listings");
-const { sentInTests } = await import("@/server/email/send");
+const { sentInTests, sendMail } = await import("@/server/email/send");
 const { setSetting } = await import("@/server/data/settings");
 const { setDigestEnabled, digestSubscriptionFor, savedSearchesFor } = await import("@/server/data/digest");
 const { signDigestUnsubscribe } = await import("@/server/digest-token");
@@ -250,6 +250,59 @@ describe("runDigest", () => {
     await setSetting(db, "read_only", { active: true, message: "" }, null);
     expect(await run()).toMatchObject({ acted: false, reason: "read_only" });
     expect(sentInTests).toHaveLength(0);
+    expect(await db.select().from(s.digestSends)).toHaveLength(0);
+  });
+
+  /** A real-sending deployment: off console mode, so a missed guard would reach sendMail (the mock counts it). */
+  function onVercel(env: "production" | "preview", vars: Record<string, string>) {
+    vi.stubEnv("VERCEL", "1");
+    vi.stubEnv("VERCEL_ENV", env);
+    vi.stubEnv("CRON_SECRET", "x".repeat(16));
+    vi.stubEnv("RESEND_API_KEY", "re_root");
+    vi.stubEnv("RESEND_DIGEST_API_KEY", "");
+    for (const [k, v] of Object.entries(vars)) vi.stubEnv(k, v);
+  }
+
+  async function quietRun(): Promise<{ summary: Awaited<ReturnType<typeof run>>; warned: string }> {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const calls = vi.mocked(sendMail).mock.calls.length;
+    try {
+      const summary = await run();
+      expect(vi.mocked(sendMail).mock.calls.length).toBe(calls);
+      return { summary, warned: warn.mock.calls.map((c) => String(c[0])).join("\n") };
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  }
+
+  it("skips with a warning, sending nothing and never falling back to the root key, while the digest key or the address is missing", async () => {
+    await listing(poster, { price: 700, postedAt: hours(5) });
+    await setSetting(db, "digest", { enabled: true }, null);
+
+    onVercel("production", {});
+    let r = await quietRun();
+    expect(r.summary).toMatchObject({ acted: false, reason: "blocked" });
+    expect(r.warned).toContain('"event":"digest.blocked"');
+    expect(r.warned).toContain("RESEND_DIGEST_API_KEY");
+
+    onVercel("production", { RESEND_DIGEST_API_KEY: "re_updates" });
+    site.mailingAddress = "";
+    r = await quietRun();
+    expect(r.summary).toMatchObject({ acted: false, reason: "blocked" });
+    expect(r.warned).toContain("MAILING_ADDRESS");
+    expect(r.warned).not.toContain("RESEND_DIGEST_API_KEY");
+
+    expect(await db.select().from(s.digestSends)).toHaveLength(0);
+  });
+
+  it("never runs the full send from a preview, even with every key set and the switch on", async () => {
+    await listing(poster, { price: 700, postedAt: hours(5) });
+    await setSetting(db, "digest", { enabled: true }, null);
+    onVercel("preview", { RESEND_DIGEST_API_KEY: "re_updates" });
+    const r = await quietRun();
+    expect(r.summary).toMatchObject({ acted: false, reason: "not_production" });
+    expect(r.warned).toContain('"event":"digest.not_production"');
     expect(await db.select().from(s.digestSends)).toHaveLength(0);
   });
 
@@ -542,6 +595,20 @@ describe("admin preview and test", () => {
     expect(o.skipped).toMatchObject({ stop_email: 1 });
     expect(JSON.stringify(o)).not.toContain("@");
     expect(await db.select().from(s.digestSends)).toHaveLength(0);
+  });
+
+  it("is blocked on a deployment that has the root Resend key but not the digest's", () => {
+    vi.stubEnv("VERCEL", "1");
+    vi.stubEnv("CRON_SECRET", "x".repeat(16));
+    vi.stubEnv("RESEND_API_KEY", "re_root");
+    vi.stubEnv("RESEND_DIGEST_API_KEY", "");
+    try {
+      expect(digest.digestBlockers().join(" ")).toContain("RESEND_DIGEST_API_KEY");
+      vi.stubEnv("RESEND_DIGEST_API_KEY", "re_updates");
+      expect(digest.digestBlockers().join(" ")).not.toContain("RESEND");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("refuses to turn the switch on while something blocks it", async () => {

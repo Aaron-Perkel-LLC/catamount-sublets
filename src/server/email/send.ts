@@ -64,11 +64,23 @@ export function senderFor(kind: MailKind): string {
   return SITE.mailFrom;
 }
 
-let client: Resend | undefined;
-function resend(): Resend {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) throw new Error("RESEND_API_KEY is not set");
-  return (client ??= new Resend(key));
+/**
+ * The digest sends with its own key, scoped in Resend to its subdomain;
+ * everything else with the root-scoped one. No fallback: the root key can't
+ * send from the subdomain, so falling back would only turn a clear blocker
+ * into refused sends.
+ */
+export function apiKeyEnvFor(kind: MailKind): "RESEND_DIGEST_API_KEY" | "RESEND_API_KEY" {
+  return kind === "digest" ? "RESEND_DIGEST_API_KEY" : "RESEND_API_KEY";
+}
+
+const clients = new Map<string, Resend>();
+function resend(kind: MailKind): Resend {
+  const key = process.env[apiKeyEnvFor(kind)];
+  if (!key) throw new Error(`${apiKeyEnvFor(kind)} is not set`);
+  let c = clients.get(key);
+  if (!c) clients.set(key, (c = new Resend(key)));
+  return c;
 }
 
 export interface SendMailArgs {
@@ -130,14 +142,15 @@ export async function sendMail(args: SendMailArgs): Promise<SendMailResult> {
     return { ok: true, id: "console" };
   }
 
-  if (!process.env.RESEND_API_KEY) {
-    log.error("mail.not_configured", new Error("RESEND_API_KEY is not set"), { kind: args.kind, ref: args.ref });
-    return { ok: false, error: "Mail is not configured here (no RESEND_API_KEY)." };
+  const keyEnv = apiKeyEnvFor(args.kind);
+  if (!process.env[keyEnv]) {
+    log.error("mail.not_configured", new Error(`${keyEnv} is not set`), { kind: args.kind, ref: args.ref });
+    return { ok: false, error: `Mail is not configured here (no ${keyEnv}).` };
   }
 
   try {
     const send = () =>
-      resend().emails.send(
+      resend(args.kind).emails.send(
         {
           from,
           to: args.to,

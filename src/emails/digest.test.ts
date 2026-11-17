@@ -17,7 +17,7 @@ describe("digest email", () => {
     expect(html).not.toContain("<img");
     expect(html).toContain(props.unsubscribeUrl.replace(/&/g, "&amp;"));
     expect(html).toContain(">Unsubscribe<");
-    expect(html).toContain(`${SITE.name}, ${SITE.mailingAddress || "[Mailing address: set SITE.mailingAddress]"}.`);
+    expect(html).toContain(`${SITE.name}, ${SITE.mailingAddress || "[Mailing address: set MAILING_ADDRESS]"}.`);
     const withImage = await render(DigestEmail({ ...props, firstThumb: "https://media.example/t.jpg" }));
     expect(withImage.match(/<img/g)).toHaveLength(1);
   });

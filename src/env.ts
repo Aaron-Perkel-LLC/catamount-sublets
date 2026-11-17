@@ -36,6 +36,10 @@ const schema = z.object({
   APP_URL: z.url().optional(),
 
   RESEND_API_KEY: requiredInProduction(z.string().min(1)),
+  /** Sending key scoped to SITE.mailDigestDomain; the digest uses only this one. Missing blocks the digest. */
+  RESEND_DIGEST_API_KEY: z.string().min(1).optional(),
+  /** SITE.mailingAddress (the digest footer). Missing blocks the digest. */
+  MAILING_ADDRESS: z.string().optional(),
 
   /** Private store for raw uploads; public store for processed media. */
   BLOB_UPLOADS_READ_WRITE_TOKEN: requiredInProduction(z.string().min(1)),
