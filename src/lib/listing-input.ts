@@ -60,7 +60,10 @@ export const listingInput = z
     address: z.string().trim().min(1, "Enter the address.").max(LIMITS.addressMaxChars, "That address is too long."),
     lat: z.number().min(-90).max(90),
     lon: z.number().min(-180).max(180),
-    semesters: z.array(z.string().regex(/^[a-z0-9_-]{1,40}$/i)).min(1, "Pick the semester your place is available for."),
+    semesters: z
+      .array(z.string().regex(/^[a-z0-9_-]{1,40}$/i))
+      .min(1, "Pick the semester your place is available for.")
+      .max(12, "Pick at most 12 semesters."), // bounded, as every array input is (GHSA-mrhx-c7xc-m3w5)
     description: z.string().trim().max(LIMITS.descriptionMaxChars, `Keep the description under ${LIMITS.descriptionMaxChars} characters.`),
     contactEmail: z
       .string()

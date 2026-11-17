@@ -479,7 +479,7 @@ const audienceInput: z.ZodType<Audience> = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("all") }),
   z.object({ kind: z.literal("accounts") }),
   z.object({ kind: z.literal("semester"), code: z.string().min(1) }),
-  z.object({ kind: z.literal("individual"), userIds: z.array(z.string().uuid()) }),
+  z.object({ kind: z.literal("individual"), userIds: z.array(z.string().uuid()).max(5000) }),
   z.object({ kind: z.literal("survey") }),
 ]);
 

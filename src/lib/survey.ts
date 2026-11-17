@@ -83,7 +83,7 @@ export const surveySchema = z
     used: z.enum(SURVEY_USED, "Pick one."),
     outcome: z.enum(SURVEY_OUTCOME, "Pick one of the answers.").nullable(),
     overall: scale(),
-    useful: z.array(z.enum(SURVEY_USEFUL, "Pick from the list.")),
+    useful: z.array(z.enum(SURVEY_USEFUL, "Pick from the list.")).max(SURVEY_USEFUL.length, "Pick from the list."),
     signin: z.enum(SURVEY_SIGNIN, "Pick one of the answers.").nullable(),
     vsLegacy: z.enum(SURVEY_VS_LEGACY, "Pick one of the answers.").nullable(),
     problems: freeText(),
