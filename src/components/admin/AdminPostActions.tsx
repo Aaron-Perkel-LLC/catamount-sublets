@@ -3,17 +3,20 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { LISTING_STATUSES, LISTING_STATUS_VALUES, type ListingStatus } from "@/lib/options";
-import { adminDeleteListing, adminSetListingStatus } from "@/server/actions/admin";
+import { adminDeleteListing, adminSetListingStatus, adminSetListingVisibility } from "@/server/actions/admin";
 import type { ListingDto } from "@/server/data/listings";
 
 /**
- * The admin's strip at the top of a listing view: its status, its photos in
- * the Images section, and delete. What was the Posts tab's row.
+ * The admin's strip at the top of a listing view: its status, who can see
+ * it, its photos in the Images section, and delete. What was the Posts tab's
+ * row. The admin may change any listing's audience; that is not recorded as
+ * the poster's choice (src/lib/visibility-rollout.ts).
  */
 export function AdminPostActions({ listing, close }: { listing: ListingDto; close: () => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [status, setStatus] = useState<ListingStatus>(listing.status);
+  const [signedInOnly, setSignedInOnly] = useState(listing.signedInOnly);
   const [note, setNote] = useState<string | null>(null);
   const photos = listing.photos.length;
 
@@ -51,6 +54,28 @@ export function AdminPostActions({ listing, close }: { listing: ListingDto; clos
               {LISTING_STATUSES[s]}
             </option>
           ))}
+        </select>
+      </label>
+      <label className="flex items-center gap-1.5 text-ink-2">
+        Seen by
+        <select
+          className="field w-36 py-1 text-xs"
+          value={signedInOnly ? "signed-in" : "everyone"}
+          disabled={pending}
+          onChange={(e) => {
+            const next = e.target.value === "signed-in";
+            start(async () => {
+              const r = await adminSetListingVisibility(listing.id, next);
+              if (r.ok) {
+                setSignedInOnly(next);
+                router.refresh();
+              }
+              setNote(r.ok ? "Saved." : r.error);
+            });
+          }}
+        >
+          <option value="everyone">Everyone</option>
+          <option value="signed-in">Signed-in only</option>
         </select>
       </label>
       <button type="button" className="link text-sm" onClick={() => leave(() => (window.location.hash = `images:${listing.id}`))}>

@@ -26,7 +26,8 @@
     "send-survey": "node --env-file-if-exists=.env.local --import tsx scripts/admin/send-survey.ts",
     "send-stale-notice": "node --env-file-if-exists=.env.local --import tsx scripts/admin/send-stale-notice.ts",
     "remove-stale": "node --env-file-if-exists=.env.local --import tsx scripts/admin/remove-stale.ts",
-    "survey-export": "node --env-file-if-exists=.env.local --import tsx scripts/admin/survey-export.ts"
+    "survey-export": "node --env-file-if-exists=.env.local --import tsx scripts/admin/survey-export.ts",
+    "go-public": "node --env-file-if-exists=.env.local --import tsx scripts/admin/go-public.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",

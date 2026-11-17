@@ -64,6 +64,8 @@ export interface ListingDto {
   /** The poster's first and last name; null when there is none to show (never a login). */
   posterName: string | null;
   isMine: boolean;
+  /** Kept to signed-in students (off the signed-out board). For the admin strip; never on PublicListing, which only ever holds public listings. */
+  signedInOnly: boolean;
   /** Whether a phone number is on the listing; the number itself is fetched on demand. */
   hasPhone: boolean;
   distanceMi: number;
@@ -257,6 +259,7 @@ async function toDtos(db: DbOrTx, rows: Row[], viewerId: string | null): Promise
         confirmedAvailable: l.status === "open" && l.confirmedAvailableAt ? shortDate(l.confirmedAvailableAt) : null,
         posterName: shownName(l, poster, email),
         isMine: viewerId !== null && l.userId === viewerId,
+        signedInOnly: l.signedInOnly,
         hasPhone: Boolean(l.contactPhone?.trim()),
         distanceMi: Number(distanceMi),
         photos: photos.get(l.id) ?? [],

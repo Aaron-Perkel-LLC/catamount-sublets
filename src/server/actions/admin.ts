@@ -97,6 +97,14 @@ export async function adminSetListingStatus(listingId: number, status: ListingSt
   return r;
 }
 
+/** Show any listing to signed-out visitors or keep it to signed-in students, whenever it was posted. */
+export async function adminSetListingVisibility(listingId: number, signedInOnly: boolean): Promise<admin.Result> {
+  await requireAdmin();
+  const r = await admin.adminSetVisibility(await getDb(), z.number().int().positive().parse(listingId), z.boolean().parse(signedInOnly));
+  if (r.ok) revalidate();
+  return r;
+}
+
 /** Any listing, whatever its status or semesters, for the admin's listing view. */
 export async function adminLoadListing(listingId: number): Promise<ListingDto | null> {
   const me = await requireAdmin();

@@ -8,7 +8,7 @@ import { posterFirstName } from "@/lib/person-name";
 import { orderSemesterCodes, sortSemesters } from "@/lib/semesters";
 import { countAdminMessagesTo, deleteAdminMessagesTo } from "@/server/data/admin-messages";
 import { listingActivity } from "@/server/data/events";
-import { deleteListing, listingFileUrls, photoFileUrls, setListingStatus } from "@/server/data/my-listing";
+import { deleteListing, listingFileUrls, photoFileUrls, setListingStatus, setListingVisibility } from "@/server/data/my-listing";
 import { posterColumns, shownName } from "@/server/data/names";
 import { listingCountForSemester, setListingSemesters } from "@/server/data/semesters";
 import { listingSnapshot, noticeDeleted, noticeStatus } from "@/server/email/notices";
@@ -233,6 +233,18 @@ export async function adminSetStatus(db: Db, listingId: number, status: ListingS
     const snap = await listingSnapshot(db, listingId);
     if (snap) await noticeStatus(snap, status, "admin");
   }
+  return ok(undefined);
+}
+
+/**
+ * Any listing's audience, whenever it was posted. Records no choice for the
+ * poster (visibility_chosen_at is theirs), so a listing 0010 made signed-in
+ * only that an admin keeps that way is still one `npm run go-public` makes public.
+ */
+export async function adminSetVisibility(db: Db, listingId: number, signedInOnly: boolean): Promise<Result> {
+  const result = await setListingVisibility(db, listingId, { userId: "", isAdmin: true }, signedInOnly);
+  if (result !== "ok") return fail("No such listing.");
+  log.info("listing.visibility", { listingId, signedInOnly, by: "admin" });
   return ok(undefined);
 }
 

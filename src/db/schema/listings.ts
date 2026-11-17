@@ -79,6 +79,13 @@ export const listings = pgTable(
      */
     signedInOnly: boolean().notNull().default(false),
     /**
+     * When the poster last set signedInOnly themselves (My post); null if they
+     * never have, so a listing 0010 made signed-in only that is still null is
+     * one `npm run go-public` makes public (src/lib/visibility-rollout.ts). An
+     * admin's change does not set it. Migration 0011.
+     */
+    visibilityChosenAt: nullableTimestamp(),
+    /**
      * The approximate area's center, a fixed offset of the true point
      * (src/server/geo-fuzz.ts), stored because the signed-out distance
      * filter and sort run on it in SQL and a migration cannot hold the

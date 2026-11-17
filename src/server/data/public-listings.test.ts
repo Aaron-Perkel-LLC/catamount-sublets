@@ -139,7 +139,7 @@ describe("Only show to signed-in students", () => {
   });
 
   it("is checked against the owner: someone else's listing does not change", async () => {
-    expect(await setListingVisibility(db, secretId, { userId: viewerId, isAdmin: false }, true)).toBe(false);
+    expect(await setListingVisibility(db, secretId, { userId: viewerId, isAdmin: false }, true)).toBe("not-found");
     expect(await publicListingById(db, secretId)).not.toBeNull();
   });
 });

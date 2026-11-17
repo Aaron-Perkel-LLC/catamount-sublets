@@ -5,6 +5,7 @@ import { otpSends, rateLimit, rateLimitBuckets, verification } from "@/db/schema
 import { expiredBucketsBefore } from "@/server/rate-limit";
 import { failStalePending } from "@/server/data/admin-messages";
 import { failStaleDigestSends } from "@/server/data/digest";
+import { fillMissingAreas } from "@/server/data/my-listing";
 import { log } from "@/server/log";
 import { sweepRawUploads } from "@/server/services/admin";
 
@@ -16,6 +17,8 @@ export const runtime = "nodejs";
  * admin emails left pending an hour (their send was interrupted), which
  * are marked failed, and weekly-digest sends left pending a day (past the
  * catch-up runs and Resend's 24-hour idempotency window), also failed.
+ * And the approximate area for any listing without one (fillMissingAreas:
+ * it needs APP_SECRET, so it runs here, not in `npm run go-public`).
  * Nothing user-visible is touched.
  */
 export async function GET(request: Request) {
@@ -30,7 +33,8 @@ export async function GET(request: Request) {
   const buckets = await db.delete(rateLimitBuckets).where(lt(rateLimitBuckets.windowStart, expiredBucketsBefore(new Date()))).returning({ key: rateLimitBuckets.key });
   const interrupted = await failStalePending(db, new Date(Date.now() - 3_600_000));
   const digestInterrupted = await failStaleDigestSends(db, dayAgo);
-  const summary = { raw, codes: codes.length, limits: limits.length, sends: sends.length, buckets: buckets.length, interrupted, digestInterrupted };
+  const areas = await fillMissingAreas(db);
+  const summary = { raw, codes: codes.length, limits: limits.length, sends: sends.length, buckets: buckets.length, interrupted, digestInterrupted, areas };
   log.info("cron.sweep", summary);
   return NextResponse.json(summary);
 }

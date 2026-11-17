@@ -9,6 +9,7 @@ import { VisibilityNotice } from "@/components/post/VisibilityNotice";
 import { formatMoney } from "@/lib/format";
 import { semesterLabel } from "@/lib/semesters";
 import { shareUrl } from "@/lib/share";
+import { visibilityControl } from "@/lib/visibility-rollout";
 import type { ListingStatus } from "@/lib/options";
 import { requireUser } from "@/server/auth";
 import { statsText } from "@/components/post/StatsLine";
@@ -63,7 +64,7 @@ export default async function PostPage({ searchParams }: { searchParams: Promise
             }}
           />
         )}
-        {listing && <VisibilityNotice signedInOnly={listing.row.signedInOnly} />}
+        {listing && <VisibilityNotice control={visibilityControl(listing.row)} signedInOnly={listing.row.signedInOnly} />}
       </div>
       <PostEditor listing={listing} semesterOptions={options} accountEmail={user.email} uploadMode={storageMode()} />
       {listing && <ManagePanel status={listing.row.status as ListingStatus} />}
