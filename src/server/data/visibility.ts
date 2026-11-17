@@ -1,10 +1,12 @@
 import { and, eq, exists, sql, type SQL } from "drizzle-orm";
 import { CAMPUS } from "@/config/site";
-import { listingPhotos, listings, listingSemesters, semesters } from "@/db/schema";
+import { listingPhotos, listings, listingSemesters, semesters, user } from "@/db/schema";
 
 /**
- * A listing is on the board when its semester is visible AND its poster has
- * not taken it down. The rule lives here, once, as query fragments.
+ * A listing is on the board when its semester is visible, its poster has
+ * not taken it down, it has a photo, and its poster is not banned. The rule
+ * lives here, once, as query fragments: every query that shows listings to
+ * students filters through publicListingWhere().
  *
  * A listing that runs for several semesters is visible while ANY of them is
  * active: a Summer and Fall listing stays up for Fall once Summer is
@@ -27,8 +29,17 @@ export function hasPhotoWhere(): SQL {
   return exists(sql`(select 1 from ${listingPhotos} lp where lp.listing_id = ${listings.id})`);
 }
 
+/**
+ * A banned poster's listing comes off the board everywhere (it stays in the
+ * database; unbanning puts it back). Until 16 Nov 2026 a ban only stopped
+ * sign-in and the listing stayed up.
+ */
+export function posterNotBannedWhere(): SQL {
+  return sql`not exists (select 1 from ${user} pu where pu.id = ${listings.userId} and coalesce(pu.banned, false))`;
+}
+
 export function publicListingWhere(): SQL {
-  return and(visibleSemesterWhere(), eq(listings.status, "open"), hasPhotoWhere())!;
+  return and(visibleSemesterWhere(), eq(listings.status, "open"), hasPhotoWhere(), posterNotBannedWhere())!;
 }
 
 /**

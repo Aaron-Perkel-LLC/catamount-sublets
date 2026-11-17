@@ -314,7 +314,7 @@ export async function listPeople(db: Db): Promise<Person[]> {
   }));
 }
 
-/** Ban: refuses sign-in from now on and ends every session. */
+/** Ban: refuses sign-in from now on, ends every session, and takes their listing off the board (publicListingWhere) until unbanned. */
 export async function setBanned(db: Db, userId: string, banned: boolean, reason: string | null, actingAdminId: string): Promise<Result> {
   if (userId === actingAdminId) return fail("You can't ban yourself.");
   const [u] = await db.select({ role: user.role }).from(user).where(eq(user.id, userId));

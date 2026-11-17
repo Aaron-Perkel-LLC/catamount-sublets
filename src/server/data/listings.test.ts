@@ -144,3 +144,22 @@ describe("bounds, semesters, contact details", () => {
     expect(await contactDetails(db, ids.paused, viewer, true)).not.toBeNull();
   });
 });
+
+describe("a banned poster's listing", () => {
+  it("is off the board while they are banned and back when they are not", async () => {
+    const [u] = await db.insert(s.user).values({ email: "banned@uvm.edu", name: "banned", banned: true }).returning({ id: s.user.id });
+    const [l] = await db.insert(s.listings).values({ userId: u.id, price: 800, address: "1 Main St, Burlington, Vermont", lat: 44.4778, lon: -73.1965 }).returning({ id: s.listings.id });
+    await setListingSemesters(db, l.id, [{ code: "spring27", position: 0 }]);
+    await db.insert(s.listingPhotos).values({ listingId: l.id, sortOrder: 0, stem: "banned".padEnd(32, "0"), displayUrl: "d", thumbUrl: "t", cardUrl: "c", sha256: "0".repeat(64) });
+    try {
+      expect((await browseListings(db, q(), viewer)).listings.map((x) => x.id)).not.toContain(l.id);
+      expect(await listingForViewer(db, l.id, viewer)).toBeNull();
+      expect(await contactDetails(db, l.id, viewer, false)).toBeNull();
+      expect((await listingForViewer(db, l.id, viewer, { anyVisibility: true }))?.id).toBe(l.id);
+      await db.update(s.user).set({ banned: false }).where(eq(s.user.id, u.id));
+      expect((await browseListings(db, q(), viewer)).listings.map((x) => x.id)).toContain(l.id);
+    } finally {
+      await db.delete(s.user).where(eq(s.user.id, u.id));
+    }
+  });
+});

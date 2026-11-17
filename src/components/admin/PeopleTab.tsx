@@ -56,7 +56,7 @@ export function PeopleTab({
     if (!p.banned && reason === null) return;
     start(async () => {
       const r = await adminSetBanned(p.id, !p.banned, reason);
-      setNote(r.ok ? (p.banned ? "Unbanned." : "Banned and signed out everywhere.") : r.error);
+      setNote(r.ok ? (p.banned ? "Unbanned." : "Banned, signed out everywhere, and their listing is off the board.") : r.error);
       if (r.ok) router.refresh();
     });
   };
