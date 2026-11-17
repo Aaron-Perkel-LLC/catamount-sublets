@@ -10,7 +10,6 @@ describe("proxy", () => {
     for (const r of [proxy(req(path)), proxy(req(path, "abc"))]) {
       expect(r.headers.get("location")).toBeNull();
       expect(r.headers.get("cache-control")).toBe("private, no-store, max-age=0");
-      expect(r.headers.get("vary")).toBe("Cookie");
     }
   });
 

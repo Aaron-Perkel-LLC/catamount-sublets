@@ -231,11 +231,17 @@ async function main(): Promise<number> {
     check(!/"@type":\s*"(Product|Place|Residence|Accommodation|Offer)"/.test(page.body), `/listing/${publicId}: no listing JSON-LD`);
     check(/<meta name="robots" content="noindex/.test(page.body) === false, `/listing/${publicId}: indexable`);
 
-    console.log("Caching headers on the board:");
-    for (const p of ["/browse", "/map", `/listing/${publicId}`]) {
-      const r = await get(p);
-      const cc = r.headers.get("cache-control") ?? "";
-      check(/no-store/.test(cc) && /private/.test(cc), `${p}: Cache-Control ${cc}`);
+    console.log("Caching headers on the board (no shared cache may keep a render):");
+    for (const p of ["/browse", "/map", `/listing/${publicId}`, `/listing/${hiddenId}`, `/browse?id=${publicId}&via=share`]) {
+      for (const opts of [{}, { rsc: true }, { cookie }, { cookie, rsc: true }]) {
+        const r = await get(p, opts);
+        const cc = r.headers.get("cache-control") ?? "";
+        const what = `${p}${opts.rsc ? " (RSC)" : ""}${"cookie" in opts ? " signed in" : ""}`;
+        check(
+          /\bprivate\b/.test(cc) && /\bno-store\b/.test(cc) && !/\b(public|s-maxage|stale-while-revalidate)\b/.test(cc),
+          `${what}: Cache-Control ${cc || "(none)"}`,
+        );
+      }
     }
 
     console.log("Kept to signed-in students:");

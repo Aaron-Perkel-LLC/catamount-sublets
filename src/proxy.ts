@@ -18,7 +18,11 @@ import { NextResponse, type NextRequest } from "next/server";
  * 3. The board (/browse, /map, /listing/…) is open to signed-out visitors and
  *    renders differently with a session, so no cache between here and the
  *    browser may keep one render and hand it to someone else: private,
- *    no-store, and Vary: Cookie for anything that ignores no-store.
+ *    no-store. (No Vary: Cookie. A cache that honours Vary honours no-store
+ *    and private first, so it adds nothing, and on Vercel Next replaces Vary
+ *    with its own anyway. What actually keeps these renders per-request is
+ *    that the pages read the session, so they are dynamic; public-pages.test.ts
+ *    and check:public-leaks hold both.)
  */
 const PROTECTED = ["/post", "/account", "/admin", "/welcome"];
 const BOARD = ["/browse", "/map", "/listing"];
@@ -65,7 +69,6 @@ export function proxy(request: NextRequest) {
   response.headers.set("Content-Security-Policy", policy);
   if (under(pathname, BOARD)) {
     response.headers.set("Cache-Control", "private, no-store, max-age=0");
-    response.headers.set("Vary", "Cookie");
   }
   return response;
 }

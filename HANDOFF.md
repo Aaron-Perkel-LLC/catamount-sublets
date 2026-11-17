@@ -111,6 +111,7 @@ the front page therefore says "Opening soon" (launch gate closed).
 
 ## Gotchas we hit
 
+- **On Vercel, Next replaces the proxy's `Cache-Control` and `Vary` on dynamic pages** (production serves Next's own `private, no-cache, no-store, max-age=0, must-revalidate`, and its own `Vary`; `next start` keeps the proxy's). What keeps the board's renders per-request is that its pages read the session and so are dynamic: `src/app/(board)/public-pages.test.ts` fails on any static or cached export there, and `check:public-leaks` asserts `private` + `no-store` and no `public`/`s-maxage` on every board response. The proxy no longer sets `Vary: Cookie` (17 Nov).
 - **Rotating the Resend key needs a redeploy** of Preview and Production; a build made before the variable existed runs without it. Check the `boot.mail` log line (`resendKey: true, mode: resend`).
 - **Sensitive Vercel variables cannot be pulled** with `vercel env pull` (they come back as a placeholder). Take Neon URLs from `neonctl`; `vercel env add … --sensitive --force --value` overrides in place ("Overrode").
 - **Console-mode fallback**: originally any environment without a key printed codes to the log; the preview did exactly that while the form said "check your inbox". Now: on Vercel a missing key is a failed send shown to the person; off Vercel a real send needs `MAIL_LIVE=1`, which only the admin scripts set, so `next dev` prints even with a key in `.env.local`. Env validation rejects an empty `RESEND_API_KEY=`; sideline the file instead if you need a key-free local run.
