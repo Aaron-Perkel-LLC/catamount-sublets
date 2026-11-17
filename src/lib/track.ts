@@ -17,3 +17,15 @@ export function track(type: EventType, listingId: number, source?: EventSource |
   }
   void fetch("/api/events", { method: "POST", body, keepalive: true, credentials: "same-origin" }).catch(() => {});
 }
+
+/** A popup notice's view (anyone), or a signed-out visitor's dismissal or CTA click. Same beacon, same fire and forget. */
+export function trackNotice(type: "view" | "dismiss" | "cta", noticeId: number): void {
+  if (typeof window === "undefined" || !noticeId) return;
+  const body = new URLSearchParams({ notice_type: type, notice_id: String(noticeId) });
+  try {
+    if (navigator.sendBeacon && navigator.sendBeacon("/api/events", body)) return;
+  } catch {
+    /* fall through */
+  }
+  void fetch("/api/events", { method: "POST", body, keepalive: true, credentials: "same-origin" }).catch(() => {});
+}

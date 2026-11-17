@@ -29,6 +29,8 @@ import { leaks, SECRET } from "@/server/data/public-leak-fixture";
 import { fuzzedArea } from "@/server/geo-fuzz";
 
 const PORT = Number(process.env.LEAK_CHECK_PORT ?? 3123);
+/** In the live popup notice, which is for signed-in students only: no signed-out response may carry it. */
+const NOTICE_MARKER = "zqnotice-for-students-only";
 const BASE = `http://localhost:${PORT}`;
 const dataDir = mkdtempSync(path.join(tmpdir(), "public-leaks-"));
 
@@ -137,6 +139,13 @@ async function seed(): Promise<{
     description: "Kept for signed-in students.",
   });
   await db.update(s.listingSemesters).set({ semesterCode: "summer27" }).where(eq(s.listingSemesters.listingId, hiddenId));
+
+  await db.insert(s.siteNotices).values({
+    title: `Students: ${NOTICE_MARKER}`,
+    bodyMd: `Only for **signed-in** students: ${NOTICE_MARKER}-body.`,
+    audience: "signed_in",
+    active: true,
+  });
 
   const token = randomBytes(24).toString("hex");
   await db.insert(s.session).values({
@@ -276,6 +285,13 @@ async function main(): Promise<number> {
     );
     check(!sitemap.body.includes(`/listing/${hiddenId}<`), "sitemap.xml: leaves out the signed-in-only one");
     noLeaks("sitemap.xml", sitemap.body);
+    console.log("Popup notice for signed-in students only:");
+    for (const p of pages) {
+      for (const rsc of [false, true]) {
+        const r = await get(p, { rsc });
+        check(!r.body.includes(NOTICE_MARKER), `${p}${rsc ? " (RSC)" : ""}: no signed-in notice`);
+      }
+    }
     const robots = await get("/robots.txt");
     check(!/Disallow: \/browse/.test(robots.body) && /Disallow: \/post/.test(robots.body), "robots.txt: board allowed, /post disallowed");
     const beacon = await fetch(`${BASE}/api/events`, {
@@ -302,11 +318,14 @@ async function main(): Promise<number> {
         signedIn.body.includes(SECRET.descriptionMarker),
       "/browse signed in: full listings, both of them (positive control)",
     );
+    check(signedIn.body.includes(`${NOTICE_MARKER}-body`), "/browse signed in: carries the signed-in notice (positive control)");
     for (const p of ["/browse", "/map", `/listing/${publicId}`]) {
       await get(p, { cookie });
       await get(p, { cookie, rsc: true });
       noLeaks(`${p} signed out after signed in`, (await get(p)).body);
-      noLeaks(`${p} (RSC) signed out after signed in`, (await get(p, { rsc: true })).body);
+      const after = (await get(p, { rsc: true })).body;
+      noLeaks(`${p} (RSC) signed out after signed in`, after);
+      check(!after.includes(NOTICE_MARKER), `${p} (RSC) signed out after signed in: no signed-in notice`);
     }
     const redirect = await get(`/listing/${publicId}`, { cookie });
     check(

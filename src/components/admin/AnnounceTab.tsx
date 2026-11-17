@@ -6,14 +6,31 @@ import { adminBroadcastCount, adminSendBroadcast, adminSetAnnouncement, adminSet
 import type { Announcement, ReadOnly } from "@/server/data/settings";
 import type { Audience } from "@/server/services/admin";
 import { AnnouncementBanner } from "../AnnouncementBanner";
+import type { NoticeAdminRow } from "@/server/data/notices";
 import type { PersonDto, SemesterRowDto } from "./AdminTabs";
+import { NoticesSection } from "./NoticesSection";
 
-/** Telling people things: the banner on every signed-in page, an email, and (folded away) the read-only switch. */
-export function AnnounceTab({ announcement, readOnly, semesters, people }: { announcement: Announcement; readOnly: ReadOnly; semesters: SemesterRowDto[]; people: PersonDto[] }) {
+/** Telling people things: the banner on every signed-in page, a popup, an email, and (folded away) the read-only switch. */
+export function AnnounceTab({
+  announcement,
+  readOnly,
+  semesters,
+  people,
+  notices,
+}: {
+  announcement: Announcement;
+  readOnly: ReadOnly;
+  semesters: SemesterRowDto[];
+  people: PersonDto[];
+  notices: NoticeAdminRow[];
+}) {
   return (
     <div className="flex max-w-2xl flex-col gap-5">
       <Card title="Banner" hint="Shown across the top of every signed-in page until you clear it.">
         <BannerForm announcement={announcement} />
+      </Card>
+      <Card title="Popup" hint="Opens once for each person in its audience until they dismiss it; never on sign-in, the front page or admin. One live at a time.">
+        <NoticesSection notices={notices} />
       </Card>
       <Card title="Email" hint="Sent from the site's address; replies come to you.">
         <EmailForm semesters={semesters} people={people} />

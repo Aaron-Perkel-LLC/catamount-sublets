@@ -9,6 +9,8 @@ import { requireAdmin } from "@/server/auth";
 import { approveAccessRequest, dismissAccessRequest, revokeApprovedEmail } from "@/server/data/access-requests";
 import { listingForViewer, type ListingDto } from "@/server/data/listings";
 import { setSetting, type Announcement } from "@/server/data/settings";
+import { noticeInput, type NoticeInput } from "@/lib/notices";
+import { createNotice, deleteNotice, duplicateNotice, setNoticeActive, updateNotice } from "@/server/data/notices";
 import * as admin from "@/server/services/admin";
 import { type AdminMailPreview, type MailResult, previewAdminMessage, sendAdminMessage, type SendOutcome } from "@/server/services/admin-mail";
 import { type AskPreview, askPreview, sendAsks, sendAskTest } from "@/server/services/listing-outcome";
@@ -252,4 +254,40 @@ export async function adminSetDigestSwitch(enabled: boolean): Promise<admin.Resu
   const me = await requireAdmin();
   const r = await setDigestSwitch(await getDb(), z.boolean().parse(enabled), me.id);
   return r.ok ? { ok: true, data: undefined } : r;
+}
+
+// ---- Popup notices (Announce → Popup) ----------------------------------------
+
+const noticeId = z.number().int().positive();
+
+/** Creates (no id) or edits a notice. Editing a live one does not show it again to people who dismissed it. */
+export async function adminSaveNotice(id: number | null, input: NoticeInput): Promise<admin.Result<{ id: number }>> {
+  const me = await requireAdmin();
+  const parsed = noticeInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the notice." };
+  const db = await getDb();
+  if (id === null) return { ok: true, data: { id: await createNotice(db, parsed.data, me.id) } };
+  const target = noticeId.parse(id);
+  if (!(await updateNotice(db, target, parsed.data, me.id))) return { ok: false, error: "That notice is gone." };
+  return { ok: true, data: { id: target } };
+}
+
+/** Activating one deactivates whichever was active. */
+export async function adminSetNoticeActive(id: number, active: boolean): Promise<admin.Result> {
+  const me = await requireAdmin();
+  const ok = await setNoticeActive(await getDb(), noticeId.parse(id), z.boolean().parse(active), me.id);
+  return ok ? { ok: true, data: undefined } : { ok: false, error: "That notice is gone." };
+}
+
+/** "Show again": a copy with a new id, inactive. */
+export async function adminDuplicateNotice(id: number): Promise<admin.Result<{ id: number }>> {
+  const me = await requireAdmin();
+  const copy = await duplicateNotice(await getDb(), noticeId.parse(id), me.id);
+  return copy === null ? { ok: false, error: "That notice is gone." } : { ok: true, data: { id: copy } };
+}
+
+export async function adminDeleteNotice(id: number): Promise<admin.Result> {
+  await requireAdmin();
+  const ok = await deleteNotice(await getDb(), noticeId.parse(id));
+  return ok ? { ok: true, data: undefined } : { ok: false, error: "That notice is gone." };
 }

@@ -17,6 +17,7 @@ import { RequestsTab, type RequestsDto } from "./RequestsTab";
 import { AdminPostActions } from "./AdminPostActions";
 import { SemestersTab } from "./SemestersTab";
 import { type SurveyDto, SurveyTab } from "./SurveyTab";
+import type { NoticeAdminRow } from "@/server/data/notices";
 
 export interface SemesterRowDto {
   code: string;
@@ -87,6 +88,7 @@ type Props = {
   semesters: SemesterRowDto[];
   archives: ArchiveRowDto[];
   announcement: Announcement;
+  notices: NoticeAdminRow[];
   readOnly: ReadOnly;
   requests: RequestsDto;
   mail: { history: AdminMessageDto[] };
@@ -212,7 +214,7 @@ function AdminSections(props: Props) {
         )}
         <div>
           {tab === "semesters" && <SemestersTab semesters={props.semesters} archives={props.archives} />}
-          {tab === "announce" && <AnnounceTab announcement={props.announcement} readOnly={props.readOnly} semesters={props.semesters} people={props.people} />}
+          {tab === "announce" && <AnnounceTab announcement={props.announcement} readOnly={props.readOnly} semesters={props.semesters} people={props.people} notices={props.notices} />}
           {tab === "images" && <ImagesTab focusListingId={imagesFocus} semesters={props.semesters} storage={props.stats.storage} />}
           {tab === "people" && <PeopleTab people={props.people} initialSearch={props.peopleSearch} meId={props.me.id} focus={personFocus} onOpenPost={openPost} />}
           {tab === "requests" && <RequestsTab requests={props.requests} />}

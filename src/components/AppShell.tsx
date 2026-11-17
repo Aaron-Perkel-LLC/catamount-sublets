@@ -7,6 +7,8 @@ import { redirect } from "next/navigation";
 import { AnnouncementBanner } from "@/components/AnnouncementBanner";
 import { Mark } from "@/components/Mark";
 import { MobileNav } from "@/components/MobileNav";
+import { NoticePopup } from "@/components/notices/NoticeDialog";
+import { NoticeMarkdown } from "@/components/notices/NoticeMarkdown";
 import { AccountLink, NavLinks } from "@/components/NavLinks";
 import { ShareSheetProvider } from "@/components/share/share-sheet";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -16,11 +18,12 @@ import { listings } from "@/db/schema";
 import { signOutAction } from "@/server/actions/auth";
 import type { SessionUser } from "@/server/auth";
 import { getNames } from "@/server/data/names";
+import { noticeFor } from "@/server/data/notices";
 import { getSetting } from "@/server/data/settings";
 
 /**
  * The signed-in frame: the welcome-name gate, the header with the person's
- * links, the announcement, and the share sheet. Used by (app), which
+ * links, the announcement, the share sheet, and any popup notice for them. Used by (app), which
  * requires a session, and by (board) when there is one.
  */
 export async function AppShell({ user, children }: { user: SessionUser; children: ReactNode }) {
@@ -33,6 +36,8 @@ export async function AppShell({ user, children }: { user: SessionUser; children
   }
   const [mine] = await db.select({ id: listings.id }).from(listings).where(eq(listings.userId, user.id)).limit(1);
   const announcement = await getSetting(db, "announcement");
+  // Only a notice whose audience takes this person in is ever sent (rendered here, on the server).
+  const notice = await noticeFor(db, { kind: "signed-in", userId: user.id, hasListing: Boolean(mine) });
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -65,6 +70,11 @@ export async function AppShell({ user, children }: { user: SessionUser; children
         <ShareSheetProvider>{children}</ShareSheetProvider>
       </main>
       <SiteFooter />
+      {notice && (
+        <NoticePopup notice={notice} signedIn>
+          <NoticeMarkdown markdown={notice.bodyMd} />
+        </NoticePopup>
+      )}
     </div>
   );
 }

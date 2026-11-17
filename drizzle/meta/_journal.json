@@ -85,6 +85,13 @@
       "when": 1794923154382,
       "tag": "0011_regular_carmella_unuscione",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794947677417,
+      "tag": "0012_huge_sumo",
+      "breakpoints": true
     }
   ]
 }
