@@ -171,4 +171,22 @@ describe("NoticePopup", () => {
     expect(h.push).toHaveBeenCalledWith("/post");
     expect(dialog()).toBeNull();
   });
+
+  it("a CTA link that isn't a path here or https never renders or navigates", async () => {
+    await mount(notice({ ctaLabel: "Click", ctaHref: "javascript:alert(1)" }));
+    await wait();
+    expect(dialog()!.querySelector("a")).toBeNull();
+    expect(h.push).not.toHaveBeenCalled();
+  });
+
+  it("a navigation to a page it never shows on hides it and gives focus back", async () => {
+    await mount(notice());
+    await wait();
+    expect(document.activeElement).not.toBe(trigger);
+    h.pathname = "/admin";
+    await mount(notice()); // re-render with the new path (same component: a different notice id, so a fresh popup)
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
 });
+

@@ -5,6 +5,7 @@ import { PublicShell } from "@/components/PublicShell";
 import { getDb } from "@/db";
 import { getSessionUser } from "@/server/auth";
 import { noticeFor } from "@/server/data/notices";
+import { log } from "@/server/log";
 
 /**
  * Browse, Map and a single listing: open to everyone. With a session they
@@ -22,6 +23,9 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function BoardLayout({ children }: { children: ReactNode }) {
   const user = await getSessionUser();
   if (user) return <AppShell user={user}>{children}</AppShell>;
-  const notice = await noticeFor(await getDb(), { kind: "signed-out" });
+  const notice = await noticeFor(await getDb(), { kind: "signed-out" }).catch((e: unknown) => {
+    log.error("notice.lookup_failed", e); // best effort: a broken popup never takes the board down
+    return null;
+  });
   return <PublicShell notice={notice}>{children}</PublicShell>;
 }

@@ -32,6 +32,8 @@ export const siteNotices = pgTable(
     check("site_notices_body_check", sql`length(${t.bodyMd}) <= ${num(NOTICE_LIMITS.body)}`),
     check("site_notices_audience_check", inList(t.audience, NOTICE_AUDIENCES)),
     check("site_notices_cta_check", sql`(${t.ctaLabel} is null) = (${t.ctaHref} is null)`),
+    // The button goes to a path on this site or an https:// page (safeCtaHref is the full rule; this is the floor).
+    check("site_notices_cta_href_check", sql`${t.ctaHref} is null or ${t.ctaHref} ~ '^(/([^/\\\\]|$)|https://)'`),
   ],
 );
 

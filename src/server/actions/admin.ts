@@ -259,6 +259,7 @@ export async function adminSetDigestSwitch(enabled: boolean): Promise<admin.Resu
 // ---- Popup notices (Announce → Popup) ----------------------------------------
 
 const noticeId = z.number().int().positive();
+const badNotice = { ok: false as const, error: "That notice is gone." };
 
 /** Creates (no id) or edits a notice. Editing a live one does not show it again to people who dismissed it. */
 export async function adminSaveNotice(id: number | null, input: NoticeInput): Promise<admin.Result<{ id: number }>> {
@@ -267,27 +268,33 @@ export async function adminSaveNotice(id: number | null, input: NoticeInput): Pr
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the notice." };
   const db = await getDb();
   if (id === null) return { ok: true, data: { id: await createNotice(db, parsed.data, me.id) } };
-  const target = noticeId.parse(id);
-  if (!(await updateNotice(db, target, parsed.data, me.id))) return { ok: false, error: "That notice is gone." };
-  return { ok: true, data: { id: target } };
+  const target = noticeId.safeParse(id);
+  if (!target.success || !(await updateNotice(db, target.data, parsed.data, me.id))) return badNotice;
+  return { ok: true, data: { id: target.data } };
 }
 
 /** Activating one deactivates whichever was active. */
 export async function adminSetNoticeActive(id: number, active: boolean): Promise<admin.Result> {
   const me = await requireAdmin();
-  const ok = await setNoticeActive(await getDb(), noticeId.parse(id), z.boolean().parse(active), me.id);
-  return ok ? { ok: true, data: undefined } : { ok: false, error: "That notice is gone." };
+  const input = z.object({ id: noticeId, active: z.boolean() }).safeParse({ id, active });
+  if (!input.success) return badNotice;
+  const r = await setNoticeActive(await getDb(), input.data.id, input.data.active, me.id);
+  if (r === "conflict") return { ok: false, error: "Another popup was activated at the same moment. Reload and try again." };
+  if (r === "missing") return { ok: false, error: input.data.active ? "That notice is gone or past its last day; duplicate it to show it again." : "That notice is gone." };
+  return { ok: true, data: undefined };
 }
 
 /** "Show again": a copy with a new id, inactive. */
 export async function adminDuplicateNotice(id: number): Promise<admin.Result<{ id: number }>> {
   const me = await requireAdmin();
-  const copy = await duplicateNotice(await getDb(), noticeId.parse(id), me.id);
-  return copy === null ? { ok: false, error: "That notice is gone." } : { ok: true, data: { id: copy } };
+  const target = noticeId.safeParse(id);
+  const copy = target.success ? await duplicateNotice(await getDb(), target.data, me.id) : null;
+  return copy === null ? badNotice : { ok: true, data: { id: copy } };
 }
 
 export async function adminDeleteNotice(id: number): Promise<admin.Result> {
   await requireAdmin();
-  const ok = await deleteNotice(await getDb(), noticeId.parse(id));
-  return ok ? { ok: true, data: undefined } : { ok: false, error: "That notice is gone." };
+  const target = noticeId.safeParse(id);
+  const ok = target.success && (await deleteNotice(await getDb(), target.data));
+  return ok ? { ok: true, data: undefined } : badNotice;
 }

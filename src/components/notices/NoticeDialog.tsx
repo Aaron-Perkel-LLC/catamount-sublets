@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { isRelativePath, noticeDismissedKey, noticeShownOn, type NoticeDto } from "@/lib/notices";
+import { isRelativePath, noticeDismissedKey, noticeShownOn, type NoticeDto, safeCtaHref } from "@/lib/notices";
 import { trackNotice } from "@/lib/track";
 import { dismissNoticeAction } from "@/server/actions/notices";
 
@@ -58,7 +58,7 @@ export function NoticeCard({
         <button type="button" className={notice.ctaLabel ? "btn-secondary" : "btn-primary"} onClick={() => onGotIt?.()}>
           Got it
         </button>
-        {notice.ctaLabel && notice.ctaHref && (
+        {notice.ctaLabel && notice.ctaHref && safeCtaHref(notice.ctaHref) && (
           <a
             href={notice.ctaHref}
             className="btn-primary text-center"
@@ -96,8 +96,6 @@ export function NoticePopup({ notice, signedIn, children }: { notice: NoticeDto;
   function dismiss(how: "dismiss" | "cta"): Promise<unknown> {
     handled.add(notice.id);
     setOpen(false);
-    const back = returnFocus.current;
-    if (back && back.isConnected) back.focus();
     if (signedIn) return dismissNoticeAction(notice.id, how).catch(() => undefined);
     storeDismissal(notice.id);
     trackNotice(how, notice.id);
@@ -107,7 +105,8 @@ export function NoticePopup({ notice, signedIn, children }: { notice: NoticeDto;
 
   useEffect(() => {
     if (handled.has(notice.id)) return;
-    if (!signedIn && storedDismissal(notice.id) === "yes") return;
+    // Signed out, this is the dismissal; signed in it's only a one-off from before signing in on this browser.
+    if (storedDismissal(notice.id) === "yes") return;
     // After the page has painted, not over it.
     const t = window.setTimeout(() => setOpen(true), 500);
     return () => window.clearTimeout(t);
@@ -147,6 +146,9 @@ export function NoticePopup({ notice, signedIn, children }: { notice: NoticeDto;
     return () => {
       document.removeEventListener("keydown", onKey);
       document.documentElement.style.overflow = prevOverflow;
+      // However it hides (dismissed, or a navigation to a page it never shows on), focus goes back.
+      const back = returnFocus.current;
+      if (back && back.isConnected) back.focus();
     };
   }, [visible, notice.id]);
 
@@ -154,9 +156,10 @@ export function NoticePopup({ notice, signedIn, children }: { notice: NoticeDto;
     const href = notice.ctaHref;
     // Let the dismissal land before leaving (briefly; navigating matters more).
     await Promise.race([dismiss("cta"), new Promise((r) => setTimeout(r, 1500))]);
-    if (!href) return;
+    // Checked again here: only a path on this site (client navigation) or an https page, never a script URL.
+    if (!href || !safeCtaHref(href)) return;
     if (isRelativePath(href)) router.push(href);
-    else window.location.assign(href);
+    else if (new URL(href).protocol === "https:") window.location.assign(href);
   }
 
   if (!visible) return null;

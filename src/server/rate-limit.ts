@@ -38,6 +38,8 @@ export const RATE_LIMITS = {
   surveyPerIp: { scope: "survey_ip", limit: 10, windowSeconds: 3600 },
   /** Answers through the "still available?" email's links, per IP: a person changing their mind, not a script. */
   outcomePerIp: { scope: "outcome_ip", limit: 20, windowSeconds: 3600 },
+  /** Popup-notice counts from signed-out visitors, per IP alone (a fresh user agent makes a fresh actor key): a few per person, room for a shared network. */
+  noticeEventPerIp: { scope: "notice_event_ip", limit: 60, windowSeconds: 600 },
   /** One-off emails from the admin console, sent or failed, per admin: a stuck button or a stolen session, not a person typing. */
   adminMailPerUser: { scope: "admin_mail_user", limit: 30, windowSeconds: 3600 },
 } as const satisfies Record<string, RateLimitRule>;

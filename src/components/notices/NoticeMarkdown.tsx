@@ -42,6 +42,9 @@ const components: Components = {
   a: NoticeLink,
   ul: ({ children }) => <ul className="list-disc space-y-1 pl-5">{children}</ul>,
   ol: ({ children }) => <ol className="list-decimal space-y-1 pl-5">{children}</ol>,
+  // Only children: no id or other attribute from the Markdown (GFM footnotes would set one) reaches the page.
+  li: ({ children }) => <li>{children}</li>,
+  p: ({ children }) => <p>{children}</p>,
   h3: ({ children }) => <h3 className="text-base font-bold text-ink">{children}</h3>,
   h4: ({ children }) => <h4 className="text-sm font-bold text-ink">{children}</h4>,
   code: ({ children }) => <code className="rounded bg-line-light px-1 py-0.5 text-[0.9em]">{children}</code>,

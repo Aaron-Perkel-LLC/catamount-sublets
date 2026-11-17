@@ -6,7 +6,6 @@ import { getDb } from "@/db";
 import { listings } from "@/db/schema";
 import { requireUserOrThrow } from "@/server/auth";
 import { dismissNotice } from "@/server/data/notices";
-import { log } from "@/server/log";
 
 const dismissInput = z.object({ noticeId: z.number().int().positive(), how: z.enum(["dismiss", "cta"]) });
 
@@ -16,6 +15,6 @@ export async function dismissNoticeAction(noticeId: number, how: "dismiss" | "ct
   const input = dismissInput.parse({ noticeId, how });
   const db = await getDb();
   const [mine] = await db.select({ id: listings.id }).from(listings).where(eq(listings.userId, user.id)).limit(1);
-  const r = await dismissNotice(db, { kind: "signed-in", userId: user.id, role: user.role, hasListing: Boolean(mine) }, input.noticeId, input.how);
-  if (r !== "dismissed") log.warn("notice.dismiss_invalid", { noticeId: input.noticeId });
+  // A notice that's gone is nothing to dismiss; not logged, so nobody can fill the logs with made-up ids.
+  await dismissNotice(db, { kind: "signed-in", userId: user.id, role: user.role, hasListing: Boolean(mine) }, input.noticeId, input.how);
 }

@@ -31,7 +31,8 @@ CREATE TABLE "site_notices" (
 	CONSTRAINT "site_notices_title_check" CHECK (length("site_notices"."title") between 1 and 80),
 	CONSTRAINT "site_notices_body_check" CHECK (length("site_notices"."body_md") <= 4000),
 	CONSTRAINT "site_notices_audience_check" CHECK ("site_notices"."audience" in ('everyone', 'signed_in', 'posters')),
-	CONSTRAINT "site_notices_cta_check" CHECK (("site_notices"."cta_label" is null) = ("site_notices"."cta_href" is null))
+	CONSTRAINT "site_notices_cta_check" CHECK (("site_notices"."cta_label" is null) = ("site_notices"."cta_href" is null)),
+	CONSTRAINT "site_notices_cta_href_check" CHECK ("site_notices"."cta_href" is null or "site_notices"."cta_href" ~ '^(/([^/\\]|$)|https://)')
 );
 --> statement-breakpoint
 ALTER TABLE "notice_dismissals" ADD CONSTRAINT "notice_dismissals_notice_id_site_notices_id_fk" FOREIGN KEY ("notice_id") REFERENCES "public"."site_notices"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

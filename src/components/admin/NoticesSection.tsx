@@ -30,13 +30,17 @@ export function NoticesSection({ notices }: { notices: NoticeAdminRow[] }) {
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState<{ id: number | null; values: NoticeInput } | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const active = notices.find((n) => n.active);
+  const active = notices.find((n) => n.active && !n.ended);
 
   const run = (work: () => Promise<{ ok: true } | { ok: false; error: string }>, done: string) =>
     start(async () => {
-      const r = await work();
-      setNote(r.ok ? done : r.error);
-      if (r.ok) router.refresh();
+      try {
+        const r = await work();
+        setNote(r.ok ? done : r.error);
+        if (r.ok) router.refresh();
+      } catch {
+        setNote("That didn't go through. Reload and try again.");
+      }
     });
 
   return (
@@ -150,9 +154,13 @@ function NoticeForm({ id, initial, live, onDone, onCancel }: { id: number | null
     }
     setErrors({});
     start(async () => {
-      const r = await adminSaveNotice(id, v);
-      if (r.ok) onDone(id === null ? "Saved, not live yet: press Activate." : "Saved.");
-      else setError(r.error);
+      try {
+        const r = await adminSaveNotice(id, v);
+        if (r.ok) onDone(id === null ? "Saved, not live yet: press Activate." : "Saved.");
+        else setError(r.error);
+      } catch {
+        setError("That didn't save. Reload and try again.");
+      }
     });
   };
 

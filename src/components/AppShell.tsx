@@ -19,6 +19,7 @@ import { signOutAction } from "@/server/actions/auth";
 import type { SessionUser } from "@/server/auth";
 import { getNames } from "@/server/data/names";
 import { noticeFor } from "@/server/data/notices";
+import { log } from "@/server/log";
 import { getSetting } from "@/server/data/settings";
 
 /**
@@ -37,7 +38,10 @@ export async function AppShell({ user, children }: { user: SessionUser; children
   const [mine] = await db.select({ id: listings.id }).from(listings).where(eq(listings.userId, user.id)).limit(1);
   const announcement = await getSetting(db, "announcement");
   // Only a notice whose audience takes this person in is ever sent (rendered here, on the server).
-  const notice = await noticeFor(db, { kind: "signed-in", userId: user.id, hasListing: Boolean(mine) });
+  const notice = await noticeFor(db, { kind: "signed-in", userId: user.id, hasListing: Boolean(mine) }).catch((e: unknown) => {
+    log.error("notice.lookup_failed", e); // best effort: a broken popup never takes the page down
+    return null;
+  });
 
   return (
     <div className="flex min-h-dvh flex-col">

@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { listings } from "@/db/schema";
 import { anonymousActorKey, recordAnonymousView, recordEvent } from "@/server/data/events";
 import { recordNoticeEvent } from "@/server/data/notices";
+import { RATE_LIMITS, takeRateLimit } from "@/server/rate-limit";
 import { clientIp, sameOrigin } from "@/server/http";
 
 export const runtime = "nodejs";
@@ -70,8 +71,8 @@ async function noticeEvent(request: Request, user: Awaited<ReturnType<typeof get
   if (!user) {
     const userAgent = request.headers.get("user-agent") ?? "";
     if (isBot(userAgent)) return new Response(null, { status: 204 });
-    const ip = clientIp(request); // keys the count (anonymousActorKey); never stored or logged
-    if (!ip) return new Response(null, { status: 204 });
+    const ip = clientIp(request); // keys the count (anonymousActorKey) and the limit, hashed; never stored or logged
+    if (!(await takeRateLimit(db, RATE_LIMITS.noticeEventPerIp, ip)).allowed) return new Response(null, { status: 429 });
     await recordNoticeEvent(db, { kind: "signed-out", anonKey: anonymousActorKey(ip, userAgent) }, noticeId, type);
     return new Response(null, { status: 204 });
   }

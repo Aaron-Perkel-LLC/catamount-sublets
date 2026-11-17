@@ -1,5 +1,5 @@
 {
-  "id": "5920b892-efcb-4dfe-a748-00449e944f21",
+  "id": "532d2252-cd64-4ac0-815b-19fddeed3202",
   "prevId": "89fe4b73-8b90-44ac-9c30-d3d65619397f",
   "version": "7",
   "dialect": "postgresql",
@@ -2745,6 +2745,10 @@
         "site_notices_cta_check": {
           "name": "site_notices_cta_check",
           "value": "(\"site_notices\".\"cta_label\" is null) = (\"site_notices\".\"cta_href\" is null)"
+        },
+        "site_notices_cta_href_check": {
+          "name": "site_notices_cta_href_check",
+          "value": "\"site_notices\".\"cta_href\" is null or \"site_notices\".\"cta_href\" ~ '^(/([^/\\\\]|$)|https://)'"
         }
       },
       "isRLSEnabled": false

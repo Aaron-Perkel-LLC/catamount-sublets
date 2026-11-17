@@ -119,8 +119,35 @@ describe("one active notice", () => {
 
   it("activating a notice that's gone changes nothing", async () => {
     const a = await live();
-    expect(await setNoticeActive(db, a + 999, true, ids.admin)).toBe(false);
+    expect(await setNoticeActive(db, a + 999, true, ids.admin)).toBe("missing");
     expect((await noticeFor(db, out))?.id).toBe(a);
+  });
+
+  it("a notice past its last day can't be activated, and trying leaves the live one live", async () => {
+    const a = await live();
+    const old = await createNotice(db, values(), ids.admin);
+    await db.update(s.siteNotices).set({ endsAt: new Date(Date.now() - 1000) }).where(eq(s.siteNotices.id, old));
+    expect(await setNoticeActive(db, old, true, ids.admin)).toBe("missing");
+    expect((await noticeFor(db, out))?.id).toBe(a);
+    expect(await setNoticeActive(db, a, false, ids.admin)).toBe("ok");
+    expect(await noticeFor(db, out)).toBeNull();
+  });
+
+  it("the database only takes a CTA link to a path here or an https page", async () => {
+    const insert = (ctaHref: string) => db.insert(s.siteNotices).values({ title: "x", bodyMd: "", audience: "everyone", ctaLabel: "Go", ctaHref });
+    for (const ok of ["/post", "/", "/account#alerts", "https://example.com"]) await expect(insert(ok)).resolves.toBeDefined();
+    for (const bad of ["javascript:alert(1)", "//evil.example", "/\\evil.example", "http://example.com", "data:text/html,x", "mailto:a@example.com", "post"]) {
+      await expect(insert(bad)).rejects.toThrow();
+    }
+  });
+
+  it("a stored CTA that fails the full rule never goes out (the button is dropped, the notice still shows)", async () => {
+    const id = await createNotice(db, values(), ids.admin);
+    await db.update(s.siteNotices).set({ ctaLabel: "Go", ctaHref: "https://ok.example/\tx" }).where(eq(s.siteNotices.id, id));
+    await setNoticeActive(db, id, true, ids.admin);
+    const n = await noticeFor(db, out);
+    expect(n?.id).toBe(id);
+    expect([n?.ctaLabel, n?.ctaHref]).toEqual([null, null]);
   });
 
   it("the database holds the CTA both-or-neither and the lengths too", async () => {
@@ -137,10 +164,12 @@ describe("recordNoticeEvent", () => {
     expect(await recordNoticeEvent(db, actor(ids.student, false), id, "view")).toBe("duplicate");
     expect(await recordNoticeEvent(db, anon("a1"), id, "view")).toBe("stored");
     expect(await recordNoticeEvent(db, anon("a1"), id, "dismiss")).toBe("stored");
+    expect(await recordNoticeEvent(db, anon("a2"), id, "cta")).toBe("invalid"); // no view from a2 yet
+    expect(await recordNoticeEvent(db, anon("a2"), id, "view")).toBe("stored");
     expect(await recordNoticeEvent(db, anon("a2"), id, "cta")).toBe("stored");
     expect(await recordNoticeEvent(db, anon("a2"), id, "teleport")).toBe("invalid");
     const [row] = await listNoticesForAdmin(db);
-    expect([row.views, row.dismissals, row.ctaClicks]).toEqual([2, 1, 1]);
+    expect([row.views, row.dismissals, row.ctaClicks]).toEqual([3, 1, 1]);
   });
 
   it("a signed-out request can't count a notice for signed-in people, and nobody can count one outside their audience", async () => {

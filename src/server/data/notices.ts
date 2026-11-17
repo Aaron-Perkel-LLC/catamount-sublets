@@ -3,7 +3,7 @@ import { and, desc, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
 import type { DbOrTx } from "@/db";
 import { noticeDismissals, noticeEvents, siteNotices } from "@/db/schema";
 import { easternDate, easternDayStart, nextDate } from "@/lib/dates";
-import { audienceMatches, type NoticeAudience, type NoticeDto, type NoticeEventType, NOTICE_EVENT_TYPES, type NoticeValues, type NoticeViewer } from "@/lib/notices";
+import { audienceMatches, type NoticeAudience, type NoticeDto, type NoticeEventType, NOTICE_EVENT_TYPES, type NoticeValues, type NoticeViewer, safeCtaHref } from "@/lib/notices";
 import { actorKey } from "@/lib/share";
 
 /**
@@ -15,7 +15,11 @@ import { actorKey } from "@/lib/share";
 
 const live = () => and(eq(siteNotices.active, true), or(isNull(siteNotices.endsAt), gt(siteNotices.endsAt, sql`now()`)));
 
-const toDto = (n: typeof siteNotices.$inferSelect): NoticeDto => ({ id: n.id, title: n.title, bodyMd: n.bodyMd, ctaLabel: n.ctaLabel, ctaHref: n.ctaHref });
+/** The button goes out only if its link still passes the save-time rule (a row written some other way can't smuggle in a script URL). */
+function toDto(n: typeof siteNotices.$inferSelect): NoticeDto {
+  const cta = n.ctaLabel && n.ctaHref && safeCtaHref(n.ctaHref);
+  return { id: n.id, title: n.title, bodyMd: n.bodyMd, ctaLabel: cta ? n.ctaLabel : null, ctaHref: cta ? n.ctaHref : null };
+}
 
 /** The notice this viewer should see, or null. */
 export async function noticeFor(db: DbOrTx, viewer: NoticeViewer): Promise<NoticeDto | null> {
@@ -46,6 +50,15 @@ export async function recordNoticeEvent(db: DbOrTx, actor: NoticeActor, noticeId
   const viewer: NoticeViewer = actor.kind === "signed-out" ? actor : { kind: "signed-in", userId: actor.userId, hasListing: actor.hasListing };
   if (!n || !audienceMatches(n.audience as NoticeAudience, viewer)) return "invalid";
   if (actor.kind === "signed-in" && actor.role === "admin") return "excluded";
+  // A signed-out dismissal or click counts only after that visitor's view, so the beacon can't add them on their own.
+  if (actor.kind === "signed-out" && type !== "view") {
+    const [seen] = await db
+      .select({ id: noticeEvents.id })
+      .from(noticeEvents)
+      .where(and(eq(noticeEvents.noticeId, noticeId), eq(noticeEvents.type, "view"), eq(noticeEvents.actorKey, actor.anonKey)))
+      .limit(1);
+    if (!seen) return "invalid";
+  }
   const inserted = await db
     .insert(noticeEvents)
     .values({
@@ -150,22 +163,36 @@ export async function updateNotice(db: DbOrTx, id: number, v: NoticeValues, admi
   return rows.length > 0;
 }
 
-/** Activating one deactivates every other in the same transaction (the partial unique index would refuse two). */
-export async function setNoticeActive(db: DbOrTx, id: number, active: boolean, adminId: string): Promise<boolean> {
-  class NotFound extends Error {}
+/**
+ * Activating one deactivates every other in the same transaction. The
+ * partial unique index refuses two at once, so an activation racing another
+ * fails as "conflict" rather than leaving two live. A notice past its end
+ * date can't be activated (duplicate it instead).
+ */
+export async function setNoticeActive(db: DbOrTx, id: number, active: boolean, adminId: string): Promise<"ok" | "missing" | "conflict"> {
+  class Missing extends Error {}
   try {
-    return await db.transaction(async (tx) => {
+    await db.transaction(async (tx) => {
       if (active) {
         await tx.update(siteNotices).set({ active: false, updatedByUserId: adminId }).where(and(eq(siteNotices.active, true), ne(siteNotices.id, id)));
       }
-      const rows = await tx.update(siteNotices).set({ active, updatedByUserId: adminId }).where(eq(siteNotices.id, id)).returning({ id: siteNotices.id });
-      if (rows.length === 0) throw new NotFound(); // rolls back the deactivation too
-      return true;
+      const target = active ? and(eq(siteNotices.id, id), or(isNull(siteNotices.endsAt), gt(siteNotices.endsAt, sql`now()`))) : eq(siteNotices.id, id);
+      const rows = await tx.update(siteNotices).set({ active, updatedByUserId: adminId }).where(target).returning({ id: siteNotices.id });
+      if (rows.length === 0) throw new Missing(); // rolls back the deactivation too
     });
+    return "ok";
   } catch (e) {
-    if (e instanceof NotFound) return false;
+    if (e instanceof Missing) return "missing";
+    if (isUniqueViolation(e)) return "conflict";
     throw e;
   }
+}
+
+function isUniqueViolation(e: unknown): boolean {
+  for (let cur: unknown = e; cur && typeof cur === "object"; cur = (cur as { cause?: unknown }).cause) {
+    if ((cur as { code?: unknown }).code === "23505") return true;
+  }
+  return false;
 }
 
 /** "Show again": the same text as a new, inactive notice (a new id, so nobody has dismissed it). A past end date is dropped. */
