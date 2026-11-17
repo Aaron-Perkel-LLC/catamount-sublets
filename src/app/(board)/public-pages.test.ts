@@ -46,7 +46,7 @@ const sharePage = await import("@/app/s/[slug]/page");
 const shareCard = await import("@/app/share-card/[slug]/[format]/route");
 
 /** The board's server components with no "use client": RSC runs them on the server, so their output is in the payload. */
-const SERVER_COMPONENTS = new Set(["PublicListingDetails", "PublicCta", "SignedInOnlyNote", "UtilitiesAndAmenities"]);
+const SERVER_COMPONENTS = new Set(["PublicListingDetails", "PublicCta", "SignedInOnlyNote", "AllSignedInOnly", "UtilitiesAndAmenities"]);
 
 /** Runs server components (async ones, and the sync ones above); for a client component, keeps its props, as the RSC payload would. */
 async function payload(node: unknown): Promise<unknown> {
@@ -197,14 +197,43 @@ describe("a listing kept to signed-in students", () => {
     try {
       const page = await text(await browse.default({ searchParams: noParams() }));
       expect(page).not.toContain(`"id":${secretId},`);
-      expect(page).toContain('[1," more listing"," is"," visible to signed-in students."'); // the note, a count and nothing else
-      expect(await text(await map.default({ searchParams: noParams() }))).not.toContain(`"id":${secretId},`);
+      // It is the only listing, so nothing is public: one message, a count and nothing else, not "1 more" beside "No listings up right now".
+      expect(page).toContain('"The 1 listing up is"," visible to signed-in students only right now."');
+      expect(page).not.toContain("more listing");
+      expect(page).not.toContain("No listings up right now.");
+      const mapPage = await text(await map.default({ searchParams: noParams() }));
+      expect(mapPage).not.toContain(`"id":${secretId},`);
+      expect(mapPage).toContain('"The 1 listing up is"," visible to signed-in students only right now."');
+      expect(mapPage).not.toContain("more listing");
       expect(JSON.stringify(await sitemap())).not.toContain(`/listing/${secretId}`);
       await expect(listing.default(idParams(secretId))).rejects.toMatchObject({ digest: expect.stringContaining("404") });
       const meta = JSON.stringify(await sharePage.generateMetadata({ params: Promise.resolve({ slug: shareSlug(secretId) }) }));
       expect(meta).toContain("$875");
     } finally {
       await setListingVisibility(h.db, secretId, admin, false);
+    }
+  });
+
+  it("beside a public listing, it is only the \"1 more\" note", async () => {
+    const [u] = await h.db.insert(s.user).values({ email: "other@uvm.edu", name: "other" }).returning({ id: s.user.id });
+    const [l] = await h.db.insert(s.listings).values({ userId: u.id, price: 650, address: "9 Elsewhere Rd, Burlington", lat: 44.47, lon: -73.2 }).returning({ id: s.listings.id });
+    await setListingSemesters(h.db, l.id, [{ code: "spring27", position: 0 }]);
+    await h.db.insert(s.listingPhotos).values({ listingId: l.id, sortOrder: 0, stem: "r".repeat(32), displayUrl: "/p/e.webp", thumbUrl: "/p/f.webp", cardUrl: "/p/g.jpg", sha256: "0".repeat(64) });
+    await setListingVisibility(h.db, l.id, admin, false);
+    await setListingVisibility(h.db, secretId, admin, true);
+    try {
+      for (const page of [await text(await browse.default({ searchParams: noParams() })), await text(await map.default({ searchParams: noParams() }))]) {
+        expect(page).toContain('[1," more listing"," is"," visible to signed-in students."');
+        expect(page).not.toContain("visible to signed-in students only right now.");
+        expect(page).toContain('"price":650');
+      }
+      // Filtered down to nothing: the usual message, and the note still says what is behind sign-in.
+      const none = await text(await browse.default({ searchParams: Promise.resolve({ min_price: "4000", max_price: "5000" }) }));
+      expect(none).toContain('"listings":[],"openSource":"deeplink","anyExists":true,"filtered":true,"signedOut":true}'); // ListingsGrid's own "Nothing matches those filters."
+      expect(none).toContain('[1," more listing"');
+    } finally {
+      await setListingVisibility(h.db, secretId, admin, false);
+      await h.db.delete(s.listings).where(eq(s.listings.id, l.id));
     }
   });
 

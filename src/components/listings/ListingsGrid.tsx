@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import type { EventSource } from "@/lib/options";
 import { track } from "@/lib/track";
 import type { BoardListing } from "./board-listing";
@@ -20,6 +20,7 @@ export function ListingsGrid({
   anyExists,
   filtered,
   signedOut = false,
+  emptyState,
 }: {
   listings: BoardListing[];
   openId?: number;
@@ -28,6 +29,8 @@ export function ListingsGrid({
   filtered: boolean;
   /** Signed out, a followed listing may only be missing because it is for signed-in students: say so, without saying which. */
   signedOut?: boolean;
+  /** Shown instead of the usual empty board when there are no listings (signed out with every listing behind sign-in). */
+  emptyState?: ReactNode;
 }) {
   const { open } = useListingView();
   const opened = useRef<number | null>(null);
@@ -57,7 +60,9 @@ export function ListingsGrid({
             : "The listing you followed isn't up any more. Here is everything that is."}
         </p>
       )}
-      {listings.length === 0 ? (
+      {listings.length === 0 && emptyState ? (
+        emptyState
+      ) : listings.length === 0 ? (
         <div className="rounded-xl border border-dashed border-line bg-paper px-6 py-12 text-center">
           <p className="text-lg font-bold">{filtered ? "Nothing matches those filters." : "No listings up right now."}</p>
           <p className="mt-1 text-ink-2">

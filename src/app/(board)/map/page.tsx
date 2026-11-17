@@ -4,11 +4,11 @@ import { getDb } from "@/db";
 import { FilterBar } from "@/components/filters/FilterBar";
 import { ListingViewProvider } from "@/components/listings/listing-view";
 import { MapViewLoader } from "@/components/map/MapViewLoader";
-import { SignedInOnlyNote } from "@/components/listings/SignedInOnlyNote";
+import { AllSignedInOnly, SignedInOnlyNote } from "@/components/listings/SignedInOnlyNote";
 import { filterSearchParams, parseListingQuery, type SearchParams, withQuery } from "@/lib/listing-filters";
 import { getSessionUser } from "@/server/auth";
 import { browseListings, filterBounds } from "@/server/data/listings";
-import { publicBoardListings, signedInOnlyCount } from "@/server/data/public-listings";
+import { publicBoardCount, publicBoardListings, signedInOnlyCount } from "@/server/data/public-listings";
 import { boardSemesters, emptyActiveSemesters } from "@/server/data/semesters";
 
 /** Signed in: as before. Signed out: a page for search engines. */
@@ -59,13 +59,16 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
 /** The signed-out map: PublicListing only, each drawn as its approximate area (MapView), never a pin. */
 async function SignedOutMap({ query }: { query: ReturnType<typeof parseListingQuery> }) {
   const db = await getDb();
-  const [result, bounds, semesters, empty, hidden] = await Promise.all([
+  const [result, bounds, semesters, empty, hidden, publicCount] = await Promise.all([
     publicBoardListings(db, query),
     filterBounds(db, "signed-out"),
     boardSemesters(db, "signed-out"),
     emptyActiveSemesters(db, "signed-out"),
     signedInOnlyCount(db),
+    publicBoardCount(db),
   ]);
+  const next = withQuery("/map", filterSearchParams(query));
+  const allHidden = publicCount === 0 && hidden > 0;
   return (
     <ListingViewProvider viewer={null}>
       <div className="flex flex-col gap-4">
@@ -79,7 +82,7 @@ async function SignedOutMap({ query }: { query: ReturnType<typeof parseListingQu
           resultCount={result.listings.length}
           signedOut
         />
-        <SignedInOnlyNote count={hidden} next={withQuery("/map", filterSearchParams(query))} />
+        {allHidden ? <AllSignedInOnly count={hidden} next={next} /> : <SignedInOnlyNote count={hidden} next={next} />}
         <h1 className="sr-only">Map of {result.listings.length} sublets</h1>
         <MapViewLoader listings={result.listings} />
       </div>

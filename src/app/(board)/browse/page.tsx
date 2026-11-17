@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SignedInOnlyNote } from "@/components/listings/SignedInOnlyNote";
+import { AllSignedInOnly, SignedInOnlyNote } from "@/components/listings/SignedInOnlyNote";
 import { DIGEST, SITE } from "@/config/site";
 import { getDb } from "@/db";
 import { FilterBar } from "@/components/filters/FilterBar";
@@ -10,7 +10,7 @@ import { ListingViewProvider } from "@/components/listings/listing-view";
 import { canonicalFilterQuery, defaultSearchName, filterSearchParams, parseListingQuery, type SearchParams, withQuery } from "@/lib/listing-filters";
 import { getSessionUser } from "@/server/auth";
 import { anyListingExists, browseListings, filterBounds } from "@/server/data/listings";
-import { publicBoardListings, signedInOnlyCount } from "@/server/data/public-listings";
+import { publicBoardCount, publicBoardListings, signedInOnlyCount } from "@/server/data/public-listings";
 import { boardSemesters, emptyActiveSemesters } from "@/server/data/semesters";
 import { digestSubscriptionFor, savedSearchesFor } from "@/server/data/digest";
 
@@ -97,14 +97,18 @@ export default async function BrowsePage({ searchParams }: { searchParams: Promi
  */
 async function SignedOutBrowse({ query }: { query: ReturnType<typeof parseListingQuery> }) {
   const db = await getDb();
-  const [result, bounds, semesters, empty, anyExists, hidden] = await Promise.all([
+  const [result, bounds, semesters, empty, anyExists, hidden, publicCount] = await Promise.all([
     publicBoardListings(db, query),
     filterBounds(db, "signed-out"),
     boardSemesters(db, "signed-out"),
     emptyActiveSemesters(db, "signed-out"),
     anyListingExists(db),
     signedInOnlyCount(db),
+    publicBoardCount(db),
   ]);
+  const next = withQuery("/browse", filterSearchParams(query));
+  // Nothing public at all, but some behind sign-in: one message, not "N more" beside "No listings up right now".
+  const allHidden = publicCount === 0 && hidden > 0;
   const semesterName = query.semester ? semesters.find((s) => s.code === query.semester)?.name : undefined;
   return (
     <ListingViewProvider viewer={null}>
@@ -120,7 +124,7 @@ async function SignedOutBrowse({ query }: { query: ReturnType<typeof parseListin
           signedOut
         />
         <SortBar count={result.listings.length} semesterName={semesterName} filtered={result.filterCount > 0} sort={query.sort} />
-        <SignedInOnlyNote count={hidden} next={withQuery("/browse", filterSearchParams(query))} />
+        {!allHidden && <SignedInOnlyNote count={hidden} next={next} />}
         <ListingsGrid
           listings={result.listings}
           openId={query.id}
@@ -128,6 +132,7 @@ async function SignedOutBrowse({ query }: { query: ReturnType<typeof parseListin
           anyExists={anyExists}
           filtered={result.filterCount > 0}
           signedOut
+          emptyState={allHidden ? <AllSignedInOnly count={hidden} next={next} /> : undefined}
         />
       </div>
     </ListingViewProvider>

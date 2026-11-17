@@ -182,6 +182,15 @@ export async function publicListingById(db: DbOrTx, id: number): Promise<PublicL
   return l ?? null;
 }
 
+/** How many listings the signed-out board has, before any filter. */
+export async function publicBoardCount(db: DbOrTx): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(listings)
+    .where(and(publicListingWhere(), signedOutAudienceWhere()));
+  return row?.n ?? 0;
+}
+
 /** Listings on the signed-in board that signed-out visitors cannot see: a count, nothing else. */
 export async function signedInOnlyCount(db: DbOrTx): Promise<number> {
   const [row] = await db
