@@ -327,7 +327,7 @@ describe("runDigest", () => {
       expect(part).not.toMatch(/poster|p2@|Doe/);
     }
     expect(m.html).not.toContain("<img");
-    expect(m.text).toContain(`${SITE.name}, PO Box 1, Burlington, VT 05402.`);
+    expect(m.text.split("\n")).toContain(`${SITE.name}, PO Box 1, Burlington, VT 05402`);
     const row = await sendRow(me);
     expect(row).toMatchObject({ status: "sent", searches: 2, matches: 2, resendId: "test" });
   });
