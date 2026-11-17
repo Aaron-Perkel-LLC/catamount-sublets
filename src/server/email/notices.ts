@@ -127,9 +127,19 @@ export async function noticeUpdated(before: Snapshot, after: Snapshot, photosAdd
 
 export async function noticeStatus(s: Snapshot, status: ListingStatus, by: "poster" | "admin"): Promise<void> {
   const verb = { open: "put back up", paused: "paused", taken: "marked as taken" }[status];
+  const posterIntro = {
+    open: "put their listing back up",
+    paused: "paused their listing",
+    taken: "marked their listing as taken",
+  }[status];
+  const adminIntro = {
+    open: `The admin put the listing by ${who(s)} back up.`,
+    paused: `The admin paused the listing by ${who(s)}.`,
+    taken: `The admin marked the listing by ${who(s)} as taken.`,
+  }[status];
   await send(subjectFor(s, `Listing ${verb}`), {
     title: `Listing ${verb}`,
-    intro: by === "admin" ? `The admin ${verb} the listing by ${who(s)}.` : `${who(s)} ${verb} their listing.`,
+    intro: by === "admin" ? adminIntro : `${who(s)} ${posterIntro}.`,
     rows: s.fields.slice(0, 4).map((f) => ({ label: f.label, after: f.value })),
     links: links(s.id),
   }, s.id);
