@@ -4,9 +4,13 @@
  * source of what must never appear. Read-only everywhere: GET requests with
  * no session, and one read-only transaction.
  *
- *   BASE=https://<deployment> [BYPASS=<protection-bypass token>] \
+ *   BASE=https://<deployment> [BYPASS=<protection-bypass token> | TRUSTED_OIDC_TOKEN=<VERCEL_OIDC_TOKEN>] \
  *   DATABASE_URL_READONLY=$(neonctl connection-string <branch> --project-id … --org-id … --database-name catamount_sublets) \
  *   npm run check:deployment-leaks
+ *
+ * For a protected preview without the bypass secret, run it under
+ * `vercel env run -- sh -c 'TRUSTED_OIDC_TOKEN="$VERCEL_OIDC_TOKEN" … npm run check:deployment-leaks'`:
+ * the linked project's short-lived development token, never printed.
  *
  * Point the URL at the branch the deployment reads (rehearsal for previews,
  * main for production) and never print it. Every open listing's private
@@ -18,6 +22,7 @@
  * Exits 1 on any failed check.
  */
 import { neon } from "@neondatabase/serverless";
+import { SITE } from "@/config/site";
 
 type Row = Record<string, unknown>;
 
@@ -27,10 +32,10 @@ const PRIVATE_KEYS =
 const AREA = /"area":\{"lat":-?[\d.]+,"lon":-?[\d.]+,"radiusM":\d+\}/g;
 
 async function main(): Promise<number> {
-  const { BASE: base, BYPASS: bypass, DATABASE_URL_READONLY: url } = process.env;
+  const { BASE: base, BYPASS: bypass, DATABASE_URL_READONLY: url, TRUSTED_OIDC_TOKEN: oidc } = process.env;
   if (!base || !url) throw new Error("Set BASE and DATABASE_URL_READONLY (see the comment at the top).");
   const BASE = base.replace(/\/$/, "");
-  const headers: Record<string, string> = { "user-agent": "Mozilla/5.0 (leak check)", ...(bypass ? { "x-vercel-protection-bypass": bypass } : {}) };
+  const headers: Record<string, string> = { "user-agent": "Mozilla/5.0 (leak check)", ...(bypass ? { "x-vercel-protection-bypass": bypass } : {}), ...(oidc ? { "x-vercel-trusted-oidc-idp-token": oidc } : {}) };
 
   const sql = neon(url);
   const [, all, pub, hidden, counts] = (await sql.transaction(
@@ -47,11 +52,13 @@ async function main(): Promise<number> {
 
   // [field, listing id, value]: every open listing's private fields; none may appear signed out.
   const needles: [string, number, string][] = [];
+  // The site's own addresses (the footer's support mailto) are published on every page; an account that uses one (the admin's) is not a leak.
+  const published = new Set((Object.values(SITE) as unknown[]).filter((v): v is string => typeof v === "string" && v.includes("@")).map((v) => v.toLowerCase()));
   for (const r of all) {
     const id = Number(r.id);
     const add = (v: unknown, field: string) => {
       const s = v === null || v === undefined ? "" : String(v).trim();
-      if (s.length >= 4) needles.push([field, id, s]);
+      if (s.length >= 4 && !published.has(s.toLowerCase())) needles.push([field, id, s]);
     };
     const first = String(r.address ?? "").split(",")[0]; // "62 King Street"
     add(first, "address");
