@@ -69,7 +69,7 @@ The weekly saved-search digest sends from `digest@updates.catamountsublets.com` 
 3. **DMARC**: nothing new is required. The root's `_dmarc` (`v=DMARC1; p=none;`) covers `updates.` because there is no `sp=`. Once a few weekly sends have passed cleanly, tightening the root to `p=quarantine` (or adding `_dmarc.updates` with `p=quarantine`) is what Microsoft 365 rewards. That is a separate decision.
 4. Nothing at `updates` itself (no MX, no A): replies go to Reply-To, and the return-path records handle bounces.
 5. Press **Verify** in Resend. Create a second sending-only API key scoped to `updates.catamountsublets.com` and set it as `RESEND_DIGEST_API_KEY` (Production, plus Preview if you want to send a test from a preview). `sendMail` uses it for the digest only; everything else keeps the root-scoped `RESEND_API_KEY`. Admin → Digest refuses to turn on while it is missing.
-6. Then, in order: set `MAILING_ADDRESS` (the footer's postal address, read into `SITE.mailingAddress`; an env var because the repo is public) for the same environments and redeploy, Admin → **Digest** → pick an account → **Send a test to me** and check where it lands at a `uvm.edu` inbox, then **Turn on**.
+6. Then, in order: set `MAILING_ADDRESS` (the footer's postal address; an env var because the repo is public, read only in `src/server/digest-config.ts`, which is `server-only`) for the same environments and redeploy, Admin → **Digest** → pick an account → **Send a test to me** and check where it lands at a `uvm.edu` inbox, then **Turn on**.
 
 ## 6. Vercel Cron
 

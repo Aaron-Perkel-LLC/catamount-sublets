@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SendMailArgs, SendMailResult } from "@/server/email/send";
 
 /**
@@ -82,16 +82,16 @@ async function sendRow(userId: string, week = WEEK) {
 const run = (now = NOW, opts: Parameters<typeof digest.runDigest>[2] = {}) => digest.runDigest(db, now, { pauseMs: 0, ...opts });
 const mailTo = (email: string) => sentInTests.filter((m) => m.to === email && m.kind === "digest");
 
-const site = SITE as { mailingAddress: string };
 
 beforeAll(async () => {
   ({ db, close } = await createTestDb());
 });
 afterAll(() => close());
+afterEach(() => vi.unstubAllEnvs());
 beforeEach(async () => {
   sentInTests.length = 0;
   h.failNext = 0;
-  site.mailingAddress = "PO Box 1, Burlington, VT 05402";
+  vi.stubEnv("MAILING_ADDRESS", "PO Box 1, Burlington, VT 05402");
   await db.delete(s.digestSends);
   await db.delete(s.digestSubscriptions);
   await db.delete(s.savedSearches);
@@ -244,9 +244,9 @@ describe("runDigest", () => {
     expect(await run()).toMatchObject({ acted: false, reason: "switched_off" });
     await setSetting(db, "digest", { enabled: true }, null);
     expect(await run(new Date("2026-11-24T13:05:00Z"))).toMatchObject({ acted: false, reason: "not_the_day" });
-    site.mailingAddress = "";
+    vi.stubEnv("MAILING_ADDRESS", "");
     expect(await run()).toMatchObject({ acted: false, reason: "blocked" });
-    site.mailingAddress = "PO Box 1";
+    vi.stubEnv("MAILING_ADDRESS", "PO Box 1");
     await setSetting(db, "read_only", { active: true, message: "" }, null);
     expect(await run()).toMatchObject({ acted: false, reason: "read_only" });
     expect(sentInTests).toHaveLength(0);
@@ -260,6 +260,7 @@ describe("runDigest", () => {
     vi.stubEnv("CRON_SECRET", "x".repeat(16));
     vi.stubEnv("RESEND_API_KEY", "re_root");
     vi.stubEnv("RESEND_DIGEST_API_KEY", "");
+    vi.stubEnv("MAILING_ADDRESS", "PO Box 1, Burlington, VT 05402");
     for (const [k, v] of Object.entries(vars)) vi.stubEnv(k, v);
   }
 
@@ -286,8 +287,7 @@ describe("runDigest", () => {
     expect(r.warned).toContain('"event":"digest.blocked"');
     expect(r.warned).toContain("RESEND_DIGEST_API_KEY");
 
-    onVercel("production", { RESEND_DIGEST_API_KEY: "re_updates" });
-    site.mailingAddress = "";
+    onVercel("production", { RESEND_DIGEST_API_KEY: "re_updates", MAILING_ADDRESS: "" });
     r = await quietRun();
     expect(r.summary).toMatchObject({ acted: false, reason: "blocked" });
     expect(r.warned).toContain("MAILING_ADDRESS");
@@ -327,7 +327,7 @@ describe("runDigest", () => {
       expect(part).not.toMatch(/poster|p2@|Doe/);
     }
     expect(m.html).not.toContain("<img");
-    expect(m.text).toContain(SITE.mailingAddress);
+    expect(m.text).toContain(`${SITE.name}, PO Box 1, Burlington, VT 05402.`);
     const row = await sendRow(me);
     expect(row).toMatchObject({ status: "sent", searches: 2, matches: 2, resendId: "test" });
   });
@@ -612,9 +612,9 @@ describe("admin preview and test", () => {
   });
 
   it("refuses to turn the switch on while something blocks it", async () => {
-    site.mailingAddress = "";
+    vi.stubEnv("MAILING_ADDRESS", "");
     expect(await digest.setDigestSwitch(db, true, admin)).toMatchObject({ ok: false });
-    site.mailingAddress = "PO Box 1";
+    vi.stubEnv("MAILING_ADDRESS", "PO Box 1");
     expect(await digest.setDigestSwitch(db, true, admin)).toEqual({ ok: true });
   });
 

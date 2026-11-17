@@ -1,8 +1,9 @@
+import "server-only";
 import { render } from "@react-email/components";
 import { eq } from "drizzle-orm";
 import type { Db, DbOrTx } from "@/db";
 import { semesters, user } from "@/db/schema";
-import { DIGEST, SITE } from "@/config/site";
+import { DIGEST } from "@/config/site";
 import DigestEmail, { type DigestEmailProps, type DigestListingLine, digestSubject, digestText } from "@/emails/digest";
 import { appUrl } from "@/env";
 import { easternClock } from "@/lib/dates";
@@ -28,6 +29,7 @@ import {
 } from "@/server/data/digest";
 import { type ListingDto, newBoardListings } from "@/server/data/listings";
 import { assertWritable, getSetting, ReadOnlyError, setSetting } from "@/server/data/settings";
+import { digestMailingAddress, digestResendKey } from "@/server/digest-config";
 import { signDigestUnsubscribe, verifyDigestUnsubscribe } from "@/server/digest-token";
 import { consoleMode, isTestAddress, mailMode, sendMail } from "@/server/email/send";
 import { log } from "@/server/log";
@@ -139,10 +141,10 @@ export function fullSendAllowedHere(): boolean {
 /** Why the digest cannot run at all here: shown on the admin switch, and the cron refuses while any hold. */
 export function digestBlockers(): string[] {
   const out: string[] = [];
-  if (!SITE.mailingAddress.trim()) out.push("MAILING_ADDRESS is not set on this deployment (bulk mail needs a postal address in its footer).");
+  if (!digestMailingAddress()) out.push("MAILING_ADDRESS is not set on this deployment (bulk mail needs a postal address in its footer).");
   if (!linkSecret()) out.push("SURVEY_SECRET is not set on this deployment, so unsubscribe links can't be signed.");
   if (mailMode() === "unconfigured") out.push("RESEND_API_KEY is not set on this deployment.");
-  if (mailMode() === "resend" && !process.env.RESEND_DIGEST_API_KEY) out.push("RESEND_DIGEST_API_KEY (the sending key scoped to the digest's subdomain) is not set on this deployment.");
+  if (mailMode() === "resend" && !digestResendKey()) out.push("RESEND_DIGEST_API_KEY (the sending key scoped to the digest's subdomain) is not set on this deployment.");
   if (process.env.VERCEL && !process.env.CRON_SECRET) out.push("CRON_SECRET is not set on this deployment, so the cron can't call the digest.");
   return out;
 }
@@ -199,6 +201,7 @@ function emailProps(built: BuiltDigest, unsubscribeFor: string): { props: Digest
       browseUrl: `${appUrl()}/browse`,
       accountUrl: `${appUrl()}/account#alerts`,
       unsubscribeUrl: links.page,
+      mailingAddress: digestMailingAddress(),
     },
     oneClick: links.oneClick,
   };
@@ -307,6 +310,7 @@ export async function runDigest(db: Db, now = new Date(), opts: RunOptions = {})
       ref: row.id,
       idempotencyKey: `digest/${c.userId}/${week}`,
       oneClickUnsubscribeUrl: oneClick,
+      apiKey: digestResendKey(),
     });
     if (result.ok) {
       await settleDigestSend(db, row.id, { status: "sent", searches: built.searches, matches: built.total, resendId: result.id ?? null });
@@ -452,6 +456,7 @@ export async function sendDigestTest(db: Db, admin: { id: string; email: string 
     kind: "digest",
     ref: "test",
     oneClickUnsubscribeUrl: oneClick,
+    apiKey: digestResendKey(),
   });
   log.info("digest.test", { ok: result.ok, total: built.total, fallback });
   return result.ok ? { ok: true, data: { to: admin.email, total: built.total, fallback } } : { ok: false, error: result.error ?? "The test didn't send." };
