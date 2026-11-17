@@ -13,12 +13,15 @@
  * names any listing still without one (it stays off the signed-out board,
  * failing closed, until the next sweep at 04:20 Eastern).
  *
- * A production write: run --apply only on Aaron's go-ahead, with
- * production's DATABASE_URL exported.
+ * The fallback: /api/cron/go-public runs the same --apply at 00:05 Eastern
+ * on 21 Nov and logs the same counts and ids (go_public.applied). Run this
+ * if that log line is missing. A production write: --apply only on Aaron's
+ * go-ahead, with production's DATABASE_URL exported.
  */
 import { getDb } from "../../src/db";
 import { GO_PUBLIC_AT, GO_PUBLIC_DAY } from "../../src/lib/visibility-rollout";
 import { goPublic } from "../../src/server/data/go-public";
+import { goPublicSummary } from "../../src/server/services/go-public";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -32,10 +35,9 @@ async function main() {
     throw new Error(`refusing --apply before ${GO_PUBLIC_AT.toISOString()}: posters were told they have until ${GO_PUBLIC_DAY}. Nothing changed.`);
   }
 
-  const report = await goPublic(await getDb(), { apply });
-  const list = (ids: number[]) => (ids.length ? ids.join(", ") : "none");
-  console.log(`${apply ? "made public" : "would make public"}: ${report.ids.length} listing(s): ${list(report.ids)}`);
-  console.log(`of those, without an approximate area yet (off the signed-out board until the daily sweep): ${report.withoutArea.length}: ${list(report.withoutArea)}`);
+  const summary = goPublicSummary(await goPublic(await getDb(), { apply }));
+  console.log(`${apply ? "made public" : "would make public"}: ${summary.count} listing(s): ${summary.ids || "none"}`);
+  console.log(`of those, without an approximate area yet (off the signed-out board until the daily sweep): ${summary.withoutArea}: ${summary.withoutAreaIds || "none"}`);
   console.log(apply ? "done." : "dry run; nothing changed. Add --apply on the go-public day.");
 }
 

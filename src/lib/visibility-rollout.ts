@@ -1,4 +1,4 @@
-import { easternDayStart } from "./dates";
+import { easternDayStart, nextDate } from "./dates";
 
 /**
  * Who may keep a listing to signed-in students, and until when the posters
@@ -33,6 +33,13 @@ export const GO_PUBLIC_DAY = "2026-11-21";
 export const GO_PUBLIC_AT = easternDayStart(GO_PUBLIC_DAY);
 /** How My post names that day. */
 export const GO_PUBLIC_DAY_WORDS = "Nov 21";
+/**
+ * The one-off cron (/api/cron/go-public, vercel.json "5 5 21 11 *" = 00:05
+ * Eastern on 21 Nov, EST) acts only from GO_PUBLIC_AT until the end of this
+ * Eastern day; the same schedule next year, or a manual run later, does nothing.
+ */
+export const GO_PUBLIC_CRON_LAST_DAY = "2026-11-22";
+export const GO_PUBLIC_CRON_UNTIL = easternDayStart(nextDate(GO_PUBLIC_CRON_LAST_DAY));
 
 /** Whether the poster (not an admin) may switch this listing between public and signed-in only. */
 export function posterMayChooseVisibility(postedAt: Date): boolean {
@@ -44,7 +51,7 @@ export function posterMayChooseVisibility(postedAt: Date): boolean {
  * - "none": posted after the cutoff; no switch, only a line saying who sees it.
  * - "pending": signed-in only because 0010 made it so, its poster has not
  *   chosen, and the go-public day has not come: "becomes visible on Nov 21",
- *   with Keep signed-in only / Make it public now.
+ *   with "Only show to signed-in students" / "Make it public now".
  * - "switch": the normal switch.
  */
 export type VisibilityControl = "none" | "pending" | "switch";

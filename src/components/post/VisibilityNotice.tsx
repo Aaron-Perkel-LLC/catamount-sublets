@@ -10,7 +10,8 @@ import { setMyListingVisibility } from "@/server/actions/post";
  * the listing. `control` comes from visibilityControl() on the server:
  * - "pending": 0010 made it signed-in only and its poster never chose, so it
  *   goes public on the go-public day. Not shown as switched on; two buttons,
- *   either of which records the choice.
+ *   either of which records the choice. The keep button is worded as the
+ *   17 Nov email named the setting: "Only show to signed-in students".
  * - "switch": the one-click switch, either way.
  * - "none": posted after the cutoff, so there is no switch, just who sees it.
  */
@@ -36,7 +37,7 @@ export function VisibilityNotice({ control, signedInOnly }: { control: Visibilit
         </p>
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn-secondary px-3 py-2 text-sm" disabled={pending} onClick={() => set(true)}>
-            {pending ? "Working…" : "Keep signed-in only"}
+            {pending ? "Working…" : "Only show to signed-in students"}
           </button>
           <button type="button" className="btn-primary px-3 py-2 text-sm" disabled={pending} onClick={() => set(false)}>
             {pending ? "Working…" : "Make it public now"}

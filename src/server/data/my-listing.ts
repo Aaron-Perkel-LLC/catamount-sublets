@@ -140,7 +140,7 @@ export async function updateListing(
  * signed-out browsing). A poster may do this only for a listing posted
  * before PUBLIC_BY_DEFAULT_SINCE ("locked" otherwise, checked in the UPDATE
  * itself too), and their call is recorded as visibility_chosen_at, even when
- * it keeps the setting as it was ("Keep signed-in only"). An admin may do it
+ * it keeps the setting as it was ("Only show to signed-in students" on the pending notice). An admin may do it
  * for any listing, and records no choice. "not-found" when it is not the actor's.
  */
 export async function setListingVisibility(

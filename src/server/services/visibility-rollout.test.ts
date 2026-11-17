@@ -1,11 +1,13 @@
+import { readFileSync } from "node:fs";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDb } from "@/db/test-db";
 import * as s from "@/db/schema";
-import { PUBLIC_BY_DEFAULT_SINCE } from "@/lib/visibility-rollout";
+import { GO_PUBLIC_AT, GO_PUBLIC_CRON_UNTIL, PUBLIC_BY_DEFAULT_SINCE } from "@/lib/visibility-rollout";
 import { goPublic } from "@/server/data/go-public";
 import { fillMissingAreas } from "@/server/data/my-listing";
 import { adminSetVisibility } from "@/server/services/admin";
+import { goPublicSummary, runScheduledGoPublic } from "@/server/services/go-public";
 import { saveListingFor, setVisibilityFor, VISIBILITY_LOCKED_ERROR } from "@/server/services/listing";
 
 /**
@@ -102,7 +104,7 @@ describe("a listing posted since the cutoff", () => {
 });
 
 describe("a listing posted before the cutoff", () => {
-  it("records 'Keep signed-in only' as a choice without changing the setting", async () => {
+  it("records the pending notice's 'Only show to signed-in students' as a choice without changing the setting", async () => {
     const u = await poster();
     const id = await listing(u.id, { postedAt: BEFORE, signedInOnly: true });
     expect(await setVisibilityFor(db, u, true)).toEqual({ ok: true });
@@ -186,5 +188,35 @@ describe("fillMissingAreas", () => {
     expect(filled.updatedAt).toEqual(BEFORE);
     expect(await row(has)).toMatchObject({ areaLat: 44.5, areaLon: -73.2 });
     expect(await fillMissingAreas(db)).toBe(0);
+  });
+});
+
+describe("the one-off go-public cron", () => {
+  it("is scheduled at 00:05 Eastern on 21 Nov 2026, inside its window", () => {
+    const crons = (JSON.parse(readFileSync("vercel.json", "utf8")) as { crons: { path: string; schedule: string }[] }).crons;
+    const [min, hour, day, month, weekday] = crons.find((c) => c.path === "/api/cron/go-public")!.schedule.split(" ");
+    expect(weekday).toBe("*");
+    const fires = new Date(Date.UTC(2026, Number(month) - 1, Number(day), Number(hour), Number(min))); // Vercel schedules in UTC
+    expect(fires.toISOString()).toBe(new Date(GO_PUBLIC_AT.getTime() + 5 * 60_000).toISOString());
+    expect(fires.getTime()).toBeLessThan(GO_PUBLIC_CRON_UNTIL.getTime());
+  });
+
+  it("acts once inside its window and does nothing before, after, or with nothing to flip", async () => {
+    await db.delete(s.listings);
+    const id = await listing((await poster()).id, { postedAt: BEFORE, signedInOnly: true });
+    const at = new Date(GO_PUBLIC_AT.getTime() + 5 * 60_000);
+
+    expect(await runScheduledGoPublic(db, new Date(GO_PUBLIC_AT.getTime() - 1))).toEqual({ acted: false, reason: "too_early" });
+    expect(await runScheduledGoPublic(db, GO_PUBLIC_CRON_UNTIL)).toEqual({ acted: false, reason: "too_late" });
+    expect(await runScheduledGoPublic(db, new Date("2027-11-21T05:05:00Z"))).toEqual({ acted: false, reason: "too_late" });
+    expect((await row(id)).signedInOnly).toBe(true);
+
+    expect(await runScheduledGoPublic(db, at)).toEqual({ acted: true, report: { ids: [id], withoutArea: [id], applied: true } });
+    expect((await row(id)).signedInOnly).toBe(false);
+    expect(await runScheduledGoPublic(db, new Date(at.getTime() + 3_600_000))).toEqual({ acted: false, reason: "nothing_to_flip" });
+  });
+
+  it("summarises with counts and ids only", () => {
+    expect(goPublicSummary({ ids: [3, 7], withoutArea: [7], applied: true })).toEqual({ count: 2, ids: "3,7", withoutArea: 1, withoutAreaIds: "7" });
   });
 });
