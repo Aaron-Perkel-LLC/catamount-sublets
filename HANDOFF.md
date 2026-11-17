@@ -1,5 +1,9 @@
 # Handoff: Catamount Sublets cutover
 
+**Retired 17 Nov 2026.** Open items now live in Aaron's roadmap (a project
+document, not in this repo); `PLAN.md`'s Status table stays the record of what
+shipped. What follows is kept for history and is not kept current.
+
 For a fresh session taking over on Friday 9 October 2026. Everything a new
 session must know and nothing it can read from the code. Dates below are 2026.
 
@@ -97,7 +101,7 @@ the front page therefore says "Opening soon" (launch gate closed).
 - Cutover ASAP, no waiting for an opt-out deadline; opt-outs received through 15 October are honoured afterwards with `npm run delete-user`.
 - Phone/desktop breakpoint is the legacy 768 px line (Tailwind `md` = 769 px); phone header is name + hamburger, as the old site.
 - Generated og/story graphics ship as they are.
-- Weekly digest (16 Nov): opt-in only; saved searches store Browse's query string and match through Browse's own query (`newBoardListings`). A banned poster's listing is off the board everywhere (`publicListingWhere`). The email starts text-only (one first-listing thumbnail behind `DIGEST.firstListingThumbnail`, only once inbox placement at UVM looks good). The hourly cron entry is in `vercel.json`; the admin switch (off by default) is what turns the digest on, together with `SITE.mailingAddress` and `SURVEY_SECRET`. Catch-up runs 9–11 ET finish what the 8 ET run left.
+- Weekly digest (16 Nov): opt-in only; saved searches store Browse's query string and match through Browse's own query (`newBoardListings`). A banned poster's listing is off the board everywhere (`publicListingWhere`). The email starts text-only (one first-listing thumbnail behind `DIGEST.firstListingThumbnail`, only once inbox placement at UVM looks good). The hourly cron entry is in `vercel.json`; the admin switch (off by default) is what turns the digest on, together with the `MAILING_ADDRESS` env var and `SURVEY_SECRET`. Catch-up runs 9–11 ET finish what the 8 ET run left.
 
 ## Open items
 
@@ -111,7 +115,7 @@ the front page therefore says "Opening soon" (launch gate closed).
 - **Run `npm audit fix` for the dev-only moderates** (`fast-uri`, `glob`, `minimatch`, via react-email and typescript-eslint) on a small branch. Non-breaking; none is deployed (`docs/security.md`).
 - **Rotate the Vercel preview protection-bypass secret.** The current one was pasted into a working session on 17 Nov.
 - **The first real photo upload on production after 17 Nov** (`@vercel/blob` 2.9.0 shipped without a preview upload test): check the new `listing_photos` row and that its media URLs load; if uploads fail, use Vercel's instant rollback to `dec998d`.
-- Weekly digest (PLAN.md row 27): on `main` and deployed 16 Nov (9af8efd), migration 0009 applied to `rehearsal` and `main`, switch off. Left before any send: add the `updates.` domain in Resend and its DNS; fill in `SITE.mailingAddress`; then a test to Aaron's own `uvm.edu` inbox from Admin → Digest, then the switch. Nothing has been sent and the switch is off.
+- Weekly digest (PLAN.md row 27): **done.** On `main` and deployed 16 Nov (9af8efd), migration 0009 on `rehearsal` and `main`; the `updates.` subdomain is verified in Resend, the postal address is the `MAILING_ADDRESS` env var (PR #2), a test reached a `uvm.edu` inbox, and the switch was turned on 17 Nov 05:44 UTC. First real send Mon 23 Nov 08:00 ET.
 - Not built: the Resend bounce webhook (`/api/resend/webhook`), R2 driver. `www` redirect done. `.env.local` also holds the auto-added `BLOB_READ_WRITE_TOKEN` and a `VERCEL_OIDC_TOKEN` from `vercel link`; harmless.
 - After the day: T+2 d shim 302→301 and drop the no-store header; T+7 d decommission (PLAN.md §6.5); T+90 d (7 Jan 2027) delete `go.uvm.edu/sublet`, then remove the shim.
 
