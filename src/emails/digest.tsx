@@ -47,7 +47,8 @@ export function digestSubject(total: number, severalSearches: boolean): string {
 }
 
 export const MAILING_ADDRESS_PLACEHOLDER = "[Mailing address: set MAILING_ADDRESS]";
-const postalLine = (p: DigestEmailProps) => `${SITE.name}, ${p.mailingAddress || MAILING_ADDRESS_PLACEHOLDER}.`;
+/** On a line of its own in both parts, like an address block, so no closing full stop. */
+const postalLine = (p: DigestEmailProps) => `${SITE.name}, ${p.mailingAddress || MAILING_ADDRESS_PLACEHOLDER}`;
 
 function listingHeadline(l: DigestListingLine): string {
   return [l.price + (l.negotiable ? " (negotiable)" : ""), l.semester].filter(Boolean).join(" · ");
@@ -63,8 +64,10 @@ export default function DigestEmail(props: DigestEmailProps) {
       plain
       preview={`${listings.map((l) => l.price).slice(0, 3).join(", ")}${total > 3 ? " and more" : ""}, new on ${SITE.name} this week.`}
       footer={
+        // One thing per line, in the plain-text part's order: why, the two links, the postal address, the disclaimer.
         <>
-          You get this because you turned on the weekly email for your saved searches on {SITE.domain}.{" "}
+          You get this because you turned on the weekly email for your saved searches on {SITE.domain}.
+          <br />
           <Link href={unsubscribeUrl} style={footerLink}>
             Unsubscribe
           </Link>{" "}
@@ -72,7 +75,10 @@ export default function DigestEmail(props: DigestEmailProps) {
           <Link href={accountUrl} style={footerLink}>
             Change your searches
           </Link>
-          . {postalLine(props)} {SITE.disclaimer}
+          <br />
+          {postalLine(props)}
+          <br />
+          {SITE.disclaimer}
         </>
       }
     >

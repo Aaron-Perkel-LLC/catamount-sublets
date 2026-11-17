@@ -17,10 +17,10 @@ describe("digest email", () => {
     expect(html).not.toContain("<img");
     expect(html).toContain(props.unsubscribeUrl.replace(/&/g, "&amp;"));
     expect(html).toContain(">Unsubscribe<");
-    expect(html).toContain(`${SITE.name}, ${MAILING_ADDRESS_PLACEHOLDER}.`);
+    expect(html).toContain(`<br/>${SITE.name}, ${MAILING_ADDRESS_PLACEHOLDER}<br/>${SITE.disclaimer}`);
     const withAddress = DigestEmail({ ...props, mailingAddress: "PO Box 1, Burlington, VT 05402" });
-    expect(await render(withAddress)).toContain(`${SITE.name}, PO Box 1, Burlington, VT 05402.`);
-    expect(digestText({ ...props, mailingAddress: "PO Box 1, Burlington, VT 05402" })).toContain(`${SITE.name}, PO Box 1, Burlington, VT 05402.`);
+    expect(await render(withAddress)).toContain(`<br/>${SITE.name}, PO Box 1, Burlington, VT 05402<br/>`);
+    expect(digestText({ ...props, mailingAddress: "PO Box 1, Burlington, VT 05402" }).split("\n")).toContain(`${SITE.name}, PO Box 1, Burlington, VT 05402`);
     const withImage = await render(DigestEmail({ ...props, firstThumb: "https://media.example/t.jpg" }));
     expect(withImage.match(/<img/g)).toHaveLength(1);
   });
