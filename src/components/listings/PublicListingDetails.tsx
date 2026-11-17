@@ -1,9 +1,10 @@
 import { Bed, Calendar, MapPin } from "lucide-react";
+import Link from "next/link";
 import { formatMiles } from "@/lib/distance-format";
 import { formatMoney } from "@/lib/format";
 import type { PublicListing } from "@/server/data/public-listings";
 import { UtilitiesAndAmenities } from "./facts";
-import { PublicCta } from "./PublicCta";
+import { PublicCta, signInForListing } from "./PublicCta";
 
 /**
  * A listing as a signed-out visitor sees it, in the dialog and on its own
@@ -45,7 +46,12 @@ export function PublicListingDetails({ listing, headingLevel = "h2" }: { listing
         )}
       </div>
 
-      <p className="whitespace-pre-line text-ink">{listing.description || "No description provided."}</p>
+      {/* The same words whether or not there is a description: nothing about it is public. */}
+      <p className="text-ink-3">
+        <Link href={signInForListing(listing.id)} className="link">
+          Sign in to read the description.
+        </Link>
+      </p>
 
       <UtilitiesAndAmenities utilities={listing.utilities} utilityCost={listing.utilityCost} amenities={listing.amenities} />
     </div>

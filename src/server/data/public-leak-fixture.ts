@@ -19,7 +19,9 @@ export const SECRET = {
   contactEmail: "zq.sublets@example.com",
   phone: "802-555-0199",
   description:
-    "Big sunny room at 4417 Quillfeather Lane, two minutes from the bus. Text 802-555-0199 or email zq.sublets@example.com. 2 bed, 1 bath, laundry free.",
+    "Big sunny room at 4417 Quillfeather Lane, two minutes from the bus, with a periwinkle hammock on the porch. Text 802-555-0199 or email zq.sublets@example.com. 2 bed, 1 bath, laundry free.",
+  /** A phrase only the description has: the description is signed-in only, so this must never appear signed out. */
+  descriptionMarker: "periwinkle hammock",
 };
 
 /** The secret strings found in `text`; empty when nothing leaked. */
@@ -33,6 +35,7 @@ export function leaks(text: string): string[] {
     SECRET.contactEmail,
     "555-0199",
     "5550199",
+    SECRET.descriptionMarker,
     SECRET.lat.toFixed(5),
     SECRET.lon.toFixed(5),
     String(SECRET.lat),

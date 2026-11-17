@@ -61,7 +61,7 @@ export async function resolveShare(db: DbOrTx, id: number, token: string): Promi
     .limit(1);
   // From the approximate area, as the signed-out board shows it (works for a signed-in-only listing too:
   // its share link still works, and the card must not be more exact than the public board).
-  const area = fuzzedArea(id, row.lat, row.lon);
+  const area = fuzzedArea(row.lat, row.lon);
   const lines = shareCardLines({
     price: row.price,
     priceNegotiable: row.priceNegotiable,

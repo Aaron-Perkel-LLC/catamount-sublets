@@ -33,6 +33,7 @@ vi.mock("next/og", () => ({
 const { createTestDb } = await import("@/db/test-db");
 const s = await import("@/db/schema");
 const { SITE } = await import("@/config/site");
+const { eq } = await import("drizzle-orm");
 const { setListingSemesters } = await import("@/server/data/semesters");
 const { setListingVisibility } = await import("@/server/data/my-listing");
 const { leaks, SECRET } = await import("@/server/data/public-leak-fixture");
@@ -128,6 +129,8 @@ describe("signed out, nothing locates the place or reaches the poster", () => {
     const page = await text(await listing.default(idParams(secretId)));
     const meta = JSON.stringify(await listing.generateMetadata(idParams(secretId)));
     expect(page).toContain("Sign in to see the exact address and contact the poster.");
+    expect(page).toContain("Sign in to read the description.");
+    expect(page).not.toContain(SECRET.descriptionMarker);
     expect(meta).toContain("2BR");
     expect(leaks(page)).toEqual([]);
     expect(leaks(meta)).toEqual([]);
@@ -158,6 +161,7 @@ describe("a signed-in render does not carry over to the next signed-out one", ()
     const signedIn = await text(await browse.default({ searchParams: noParams() }));
     expect(signedIn).toContain(SECRET.street);
     expect(signedIn).toContain(`${SECRET.first} ${SECRET.last}`);
+    expect(signedIn).toContain(SECRET.descriptionMarker);
     h.user = null;
     expect(leaks(await text(await browse.default({ searchParams: noParams() })))).toEqual([]);
   });
@@ -167,6 +171,23 @@ describe("a signed-in render does not carry over to the next signed-out one", ()
     await expect(listing.default(idParams(secretId))).rejects.toMatchObject({ digest: expect.stringContaining(`/browse?id=${secretId}`) });
     h.user = null;
     expect(leaks(await text(await listing.default(idParams(secretId))))).toEqual([]);
+  });
+});
+
+describe("the description is signed-in only", () => {
+  it("the signed-out page is the same whether a listing has a description or not: nothing derived from it", async () => {
+    const withText = await text(await listing.default(idParams(secretId)));
+    await h.db.update(s.listings).set({ description: null }).where(eq(s.listings.id, secretId));
+    try {
+      expect(await text(await listing.default(idParams(secretId)))).toBe(withText);
+    } finally {
+      await h.db.update(s.listings).set({ description: SECRET.description }).where(eq(s.listings.id, secretId));
+    }
+  });
+
+  it("is not in the metadata (built from the generated title, price, size, semester and area)", async () => {
+    const meta = JSON.stringify(await listing.generateMetadata(idParams(secretId)));
+    for (const word of ["sunny", "bus", "laundry", SECRET.descriptionMarker]) expect(meta).not.toContain(word);
   });
 });
 

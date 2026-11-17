@@ -100,8 +100,8 @@ async function SignedOutBrowse({ query }: { query: ReturnType<typeof parseListin
   const [result, bounds, semesters, empty, anyExists, hidden] = await Promise.all([
     publicBoardListings(db, query),
     filterBounds(db, "signed-out"),
-    boardSemesters(db),
-    emptyActiveSemesters(db),
+    boardSemesters(db, "signed-out"),
+    emptyActiveSemesters(db, "signed-out"),
     anyListingExists(db),
     signedInOnlyCount(db),
   ]);

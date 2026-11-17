@@ -3,14 +3,13 @@ import { PUBLIC_AREA } from "@/config/site";
 import type { DbOrTx } from "@/db";
 import { listings } from "@/db/schema";
 import { amenityCounts, listingCardTags, type AmenityFlags, type CardTag } from "@/lib/card-tags";
-import { postedAgo } from "@/lib/dates";
+import { easternDate, postedAgo } from "@/lib/dates";
 import { milesFromCampus } from "@/lib/distance";
 import type { Area } from "@/lib/geo-fuzz";
 import { filterCount, type ListingQuery } from "@/lib/listing-filters";
 import { neighborhoodAt } from "@/lib/neighborhood";
 import { sizeSummary, UTILITY_KINDS, type UtilityKind, type UtilityPayer } from "@/lib/options";
 import { publicTitle } from "@/lib/public-title";
-import { redactForPublic } from "@/lib/redact";
 import { BROWSE_LIMIT, listingFilterWhere, orderFor, photosByListing } from "./listings";
 import { labelFor, listingSemestersByListing } from "./semesters";
 import { campusDistanceMiles, publicListingWhere, signedOutAudienceWhere } from "./visibility";
@@ -20,8 +19,9 @@ import { campusDistanceMiles, publicListingWhere, signedOutAudienceWhere } from 
  * may learn about a listing, and the only listing shape any signed-out page,
  * prop, route handler, sitemap or metadata may take. There is no address,
  * no true coordinate, no real title (the address), no poster, no contact
- * and no roommate gender or preference here, and toPublicListing() never
- * reads them into it. Adding a field publishes it.
+ * no roommate gender or preference and no description (free text can hold
+ * any of those, so it is signed-in only, and nothing derived from it is here
+ * either), and toPublicListing() never reads them. Adding a field publishes it.
  */
 export interface PublicListing {
   audience: "public";
@@ -45,8 +45,6 @@ export interface PublicListing {
   amenities: AmenityFlags;
   utilities: Record<UtilityKind, UtilityPayer>;
   utilityCost: number | null;
-  /** The description with addresses, phone numbers, emails, handles and links taken out (src/lib/redact.ts). */
-  description: string;
   postedAgo: string;
   photos: { display: string; thumb: string | null }[];
   /** Amenity tags only (no roommate preference). */
@@ -54,7 +52,7 @@ export interface PublicListing {
   moreTags: number;
 }
 
-/** The columns a public listing is built from: `address` only feeds the redactor and is never copied out. */
+/** The only columns a public listing is read from: no address, true point, description, poster or contact is selected at all. */
 const PUBLIC_COLUMNS = {
   id: listings.id,
   price: listings.price,
@@ -62,8 +60,6 @@ const PUBLIC_COLUMNS = {
   bedrooms: listings.bedrooms,
   bathrooms: listings.bathrooms,
   roommates: listings.roommates,
-  description: listings.description,
-  address: listings.address,
   areaLat: listings.areaLat,
   areaLon: listings.areaLon,
   utilityElectric: listings.utilityElectric,
@@ -130,7 +126,6 @@ export function toPublicListing(
     amenities,
     utilities: Object.fromEntries(UTILITY_KINDS.map((k) => [k, utilities[k]])) as Record<UtilityKind, UtilityPayer>,
     utilityCost: r.utilityCost,
-    description: redactForPublic(r.description ?? "", r.address),
     postedAgo: postedAgo(r.postedAt),
     photos: extra.photos,
     tags: [],
@@ -196,11 +191,12 @@ export async function signedInOnlyCount(db: DbOrTx): Promise<number> {
   return row?.n ?? 0;
 }
 
-/** Ids and last-changed times of the signed-out board, for the sitemap. */
-export async function publicSitemapEntries(db: DbOrTx): Promise<{ id: number; updatedAt: Date }[]> {
-  return db
+/** Ids of the signed-out board and the Eastern date each last changed ("2026-11-16"; never the time), for the sitemap. */
+export async function publicSitemapEntries(db: DbOrTx): Promise<{ id: number; lastModified: string }[]> {
+  const rows = await db
     .select({ id: listings.id, updatedAt: sql<Date>`greatest(${listings.updatedAt}, ${listings.postedAt})`.mapWith(listings.updatedAt) })
     .from(listings)
     .where(and(publicListingWhere(), signedOutAudienceWhere()))
     .orderBy(listings.id);
+  return rows.map((r) => ({ id: r.id, lastModified: easternDate(r.updatedAt) }));
 }

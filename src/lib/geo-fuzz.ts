@@ -1,7 +1,7 @@
-import { PUBLIC_AREA } from "@/config/site";
+import { CAMPUS, PUBLIC_AREA } from "@/config/site";
 
 /**
- * The geometry of the approximate area (no secrets here; the per-listing
+ * The geometry of the approximate area (no secrets here; the per-place
  * bytes come from src/server/geo-fuzz.ts). Flat-earth offsets are exact
  * enough at these distances: the error over 150 m is under a millimetre.
  */
@@ -12,6 +12,20 @@ export interface Area {
   lat: number;
   lon: number;
   radiusM: number;
+}
+
+/** Degrees per grid step. The longitude step is fixed at campus's latitude, so a cell never depends on where in it the point is. */
+const CELL_LAT_DEG = PUBLIC_AREA.gridM / METERS_PER_DEGREE_LAT;
+const CELL_LON_DEG = PUBLIC_AREA.gridM / (METERS_PER_DEGREE_LAT * Math.cos((CAMPUS.lat * Math.PI) / 180));
+
+/** The gridM-square cell a point falls in: two integers, the same for every point in that square. */
+export function gridCell(lat: number, lon: number): { row: number; col: number } {
+  return { row: Math.floor(lat / CELL_LAT_DEG), col: Math.floor(lon / CELL_LON_DEG) };
+}
+
+/** The center of a grid cell. */
+export function cellCenter(cell: { row: number; col: number }): { lat: number; lon: number } {
+  return { lat: (cell.row + 0.5) * CELL_LAT_DEG, lon: (cell.col + 0.5) * CELL_LON_DEG };
 }
 
 /** The point `meters` from (lat, lon) on `bearing` radians clockwise from north. */
@@ -29,9 +43,9 @@ export function metersBetween(lat1: number, lon1: number, lat2: number, lon2: nu
 }
 
 /**
- * The area's center from the true point and six key bytes: a bearing from
- * the first four, a distance in [minOffsetM, maxOffsetM] from the last two.
- * The circle is never centered on the house and always contains it.
+ * The area's center from a base point (the grid cell's center) and six key
+ * bytes: a bearing from the first four, a distance in [minOffsetM,
+ * maxOffsetM] from the last two.
  */
 export function areaFromKey(lat: number, lon: number, key: Uint8Array): Area {
   if (key.length < 6) throw new Error("geo-fuzz key too short");

@@ -207,7 +207,7 @@ async function main() {
           ...l.amenities,
         })
         .returning({ id: s.listings.id });
-      const area = fuzzedArea(row.id, l.lat, l.lon);
+      const area = fuzzedArea(l.lat, l.lon);
       // Every other listing is signed-in only, unless it says otherwise, so both boards have something.
       const signedInOnly = l.signedInOnly ?? LISTINGS.indexOf(l) % 2 === 1;
       await tx.update(s.listings).set({ areaLat: area.lat, areaLon: area.lon, signedInOnly }).where(eq(s.listings.id, row.id));

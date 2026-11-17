@@ -86,9 +86,9 @@ export default function PrivacyPage() {
         <h2 className="text-lg font-bold text-ink">Who sees it</h2>
         <p>
           Signed-in students see listings in full. Anyone can browse a listing whose poster has not kept it to signed-in students, without
-          signing in: its photos, price, semester, size, utilities and amenities, how long ago it was posted, the description with any
-          address, phone number, email or link taken out, and a circle of about 150 m that contains the place, with the neighborhood it
-          falls in. Never the address, the exact spot, the poster&apos;s name or how to reach them. The public share link and its preview
+          signing in: its photos, price, semester, size, utilities and amenities, how long ago it was posted, and a circle of about 150 m
+          that contains the place, with the neighborhood it falls in. Never the address, the exact spot, the description, the
+          poster&apos;s name or how to reach them. The public share link and its preview
           show the price, semester, size and distance from campus, nothing else.
         </p>
         <p>The site&apos;s admin can see every listing and the email addresses of people who signed in, to run the site. Nothing is sold or shared with anyone.</p>

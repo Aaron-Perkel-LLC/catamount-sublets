@@ -55,7 +55,10 @@ async function seed(): Promise<{
   const client = new PGlite(dataDir);
   const db = drizzle({ client, schema: s, casing: "snake_case" });
   await migrate(db, { migrationsFolder: "drizzle" });
-  await db.insert(s.semesters).values({ code: "spring27", name: "Spring 2027", active: true });
+  await db.insert(s.semesters).values([
+    { code: "spring27", name: "Spring 2027", active: true },
+    { code: "summer27", name: "Summer 2027", active: true }, // only the signed-in-only listing runs for it
+  ]);
   const [poster] = await db
     .insert(s.user)
     .values({
@@ -98,7 +101,7 @@ async function seed(): Promise<{
       .insert(s.listings)
       .values({ userId, ...v })
       .returning({ id: s.listings.id });
-    const area = fuzzedArea(l.id, v.lat, v.lon);
+    const area = fuzzedArea(v.lat, v.lon);
     await db.update(s.listings).set({ areaLat: area.lat, areaLon: area.lon }).where(eq(s.listings.id, l.id));
     await db.insert(s.listingSemesters).values({ listingId: l.id, semesterCode: "spring27", position: 0 });
     await db.insert(s.listingPhotos).values({
@@ -133,6 +136,7 @@ async function seed(): Promise<{
     signedInOnly: true,
     description: "Kept for signed-in students.",
   });
+  await db.update(s.listingSemesters).set({ semesterCode: "summer27" }).where(eq(s.listingSemesters.listingId, hiddenId));
 
   const token = randomBytes(24).toString("hex");
   await db.insert(s.session).values({
@@ -212,12 +216,17 @@ async function main(): Promise<number> {
       }
     }
     // Positive controls: the public listing is really there, so "nothing leaked" means something.
-  const boardRsc = await get("/browse", { rsc: true });
-  check(boardRsc.body.includes('"price":875') && /"title":"2BR · [A-Za-z ]+"/.test(boardRsc.body), "/browse (RSC): carries the public listing (price, generated title)");
-  const mapRsc = await get("/map", { rsc: true });
-  check(/"area":\{"lat":[\d.]+,"lon":-[\d.]+,"radiusM":150\}/.test(mapRsc.body), "/map (RSC): carries its approximate area");
-  const page = await get(`/listing/${publicId}`);
-  check(/2BR · /.test(page.body) && page.body.includes("$875"), `/listing/${publicId}: shows the public listing`);
+    const boardRsc = await get("/browse", { rsc: true });
+    check(
+      boardRsc.body.includes('"price":875') && /"title":"2BR · [A-Za-z ]+"/.test(boardRsc.body),
+      "/browse (RSC): carries the public listing (price, generated title)",
+    );
+    const mapRsc = await get("/map", { rsc: true });
+    check(/"area":\{"lat":[\d.]+,"lon":-[\d.]+,"radiusM":150\}/.test(mapRsc.body), "/map (RSC): carries its approximate area");
+    const page = await get(`/listing/${publicId}`);
+    check(/2BR · /.test(page.body) && page.body.includes("$875"), `/listing/${publicId}: shows the public listing`);
+    check(page.body.includes("Sign in to read the description."), `/listing/${publicId}: says to sign in for the description`);
+    check(!page.body.includes(SECRET.descriptionMarker), `/listing/${publicId}: none of the description`);
     check(page.body.includes("Sign in to see the exact address and contact the poster."), `/listing/${publicId}: shows the sign-in prompt`);
     check(!/"@type":\s*"(Product|Place|Residence|Accommodation|Offer)"/.test(page.body), `/listing/${publicId}: no listing JSON-LD`);
     check(/<meta name="robots" content="noindex/.test(page.body) === false, `/listing/${publicId}: indexable`);
@@ -240,6 +249,14 @@ async function main(): Promise<number> {
       /1 more listing.{0,40}visible to signed-in students/.test(browse.body.replace(/<!-- -->/g, "")),
       "/browse: says 1 more listing is visible to signed-in students",
     );
+    const sems = (body: string) => body.match(/"semesters":\[[^\]]*\]/)?.[0] ?? "";
+    check(
+      sems(browseRsc.body).includes("spring27") && !sems(browseRsc.body).includes("summer27"),
+      "/browse (RSC): Summer 2027 (signed-in-only listings only) is not a semester with listings",
+    );
+    check(/"emptySemesters":\[[^\]]*summer27/.test(browseRsc.body), "/browse (RSC): Summer 2027 is listed as (none yet), like any empty semester");
+    check(!sems((await get("/map", { rsc: true })).body).includes("summer27"), "/map (RSC): Summer 2027 is not a semester with listings");
+    check(!(await get("/")).body.includes("Summer 2027"), "/: does not name Summer 2027");
     const share = await get(`/s/${shareSlug(hiddenId)}`);
     check(share.status === 200 && share.body.includes("$990"), `/s/<hidden>: share link still works (${share.status})`);
     noLeaks("/s/<public>", (await get(`/s/${shareSlug(publicId)}`)).body);
@@ -247,6 +264,10 @@ async function main(): Promise<number> {
     console.log("Sitemap, robots and the beacon:");
     const sitemap = await get("/sitemap.xml");
     check(sitemap.body.includes(`/listing/${publicId}<`), "sitemap.xml: lists the public listing");
+    check(
+      /<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/.test(sitemap.body) && !/<lastmod>[^<]*T/.test(sitemap.body),
+      "sitemap.xml: last changes are dates, never times",
+    );
     check(!sitemap.body.includes(`/listing/${hiddenId}<`), "sitemap.xml: leaves out the signed-in-only one");
     noLeaks("sitemap.xml", sitemap.body);
     const robots = await get("/robots.txt");
@@ -269,7 +290,10 @@ async function main(): Promise<number> {
     console.log("Signed in, then signed out again (no cache crosses over):");
     const signedIn = await get("/browse", { cookie });
     check(
-      signedIn.status === 200 && signedIn.body.includes(SECRET.street) && signedIn.body.includes("Hiddenmoor"),
+      signedIn.status === 200 &&
+        signedIn.body.includes(SECRET.street) &&
+        signedIn.body.includes("Hiddenmoor") &&
+        signedIn.body.includes(SECRET.descriptionMarker),
       "/browse signed in: full listings, both of them (positive control)",
     );
     for (const p of ["/browse", "/map", `/listing/${publicId}`]) {

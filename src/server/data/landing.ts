@@ -39,6 +39,7 @@ export async function landingBoard(db: DbOrTx): Promise<LandingBoard> {
       .limit(1);
     if (cover?.thumb) thumbs.push(cover.thumb);
   }
-  const sems = await boardSemesters(db);
+  // The semesters of the signed-out board: everyone sees this page, and a semester only signed-in-only listings run for stays unnamed.
+  const sems = await boardSemesters(db, "signed-out");
   return { thumbs, count: all.length, semesters: semesterLabel(sems.map((s) => s.name)) };
 }

@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { DbOrTx } from "@/db";
 import { listings, listingSemesters, semesters } from "@/db/schema";
 import { orderSemesterCodes, semesterLabel, semestersBackToBack, sortSemesters } from "@/lib/semesters";
-import { publicListingWhere } from "./visibility";
+import { type Audience, publicListingWhere, signedOutAudienceWhere } from "./visibility";
 
 export interface SemesterRow {
   code: string;
@@ -116,20 +116,30 @@ export async function setListingSemesters(
 
 /**
  * The semesters students can filter by: the active semesters of listings on
- * the board, in calendar order.
+ * the board, in calendar order. Signed out, the board is the signed-out one,
+ * so a semester held only by signed-in-only listings is not named.
  */
-export async function boardSemesters(db: DbOrTx): Promise<{ code: string; name: string }[]> {
+export async function boardSemesters(db: DbOrTx, audience: Audience = "signed-in"): Promise<{ code: string; name: string }[]> {
   const rows = await db
     .selectDistinct({ code: semesters.code, name: semesters.name, sortOrder: semesters.sortOrder })
     .from(listings)
     .innerJoin(listingSemesters, eq(listingSemesters.listingId, listings.id))
     .innerJoin(semesters, eq(semesters.code, listingSemesters.semesterCode))
-    .where(and(publicListingWhere(), eq(semesters.active, true)));
+    .where(and(publicListingWhere(), eq(semesters.active, true), audience === "signed-out" ? signedOutAudienceWhere() : undefined));
   return sortSemesters(rows).map(({ code, name }) => ({ code, name }));
 }
 
-/** Active semesters with no listing on the board, for the filter's "(none yet)". */
-export async function emptyActiveSemesters(db: DbOrTx): Promise<{ code: string; name: string }[]> {
+/**
+ * Active semesters with no listing on the board, for the filter's "(none
+ * yet)". Signed out: every active semester the signed-out board does not
+ * name, so the list says nothing about signed-in-only listings.
+ */
+export async function emptyActiveSemesters(db: DbOrTx, audience: Audience = "signed-in"): Promise<{ code: string; name: string }[]> {
+  if (audience === "signed-out") {
+    const onBoard = new Set((await boardSemesters(db, "signed-out")).map((s) => s.code));
+    const active = await db.select({ code: semesters.code, name: semesters.name, sortOrder: semesters.sortOrder }).from(semesters).where(eq(semesters.active, true));
+    return sortSemesters(active.filter((s) => !onBoard.has(s.code))).map(({ code, name }) => ({ code, name }));
+  }
   const rows = await db
     .select({ code: semesters.code, name: semesters.name, sortOrder: semesters.sortOrder })
     .from(semesters)

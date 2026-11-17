@@ -24,7 +24,7 @@ describe("robots and sitemap", () => {
   });
 
   it("lists only pages robots allows", () => {
-    for (const { url } of sitemapEntries([{ id: 12, updatedAt: new Date() }])) {
+    for (const { url } of sitemapEntries([{ id: 12, lastModified: "2026-11-16" }])) {
       const path = new URL(url).pathname;
       expect(url.startsWith(SITE.url)).toBe(true);
       expect(disallow.some((d) => d && path.startsWith(d))).toBe(false);

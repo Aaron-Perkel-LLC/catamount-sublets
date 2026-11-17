@@ -286,14 +286,14 @@ export function PostForm({
           <span>
             <span className="font-bold">Only show to signed-in students</span>
             <span className="block text-ink-2">
-              Unticked, anyone can find it without signing in, with the address and your name and contact details left out: they see
-              the photos, the price, semester, size, utilities and amenities, the description with any address, phone number or email
-              taken out, and a circle of about 150 m around your place with its neighborhood.
+              Unticked, anyone can find it without signing in, with the address, description and your name and contact details left
+              out: they see the photos, the price, semester, size, utilities and amenities, and a circle of about 150 m around your place
+              with its neighborhood.
             </span>
           </span>
         </label>
         <p className="text-xs text-ink-3">
-          Your exact address, name and contact details are shown to signed-in students only, either way. Shared links and previews show
+          Your exact address, description, name and contact details are shown to signed-in students only, either way. Shared links and previews show
           the price, semester, size and distance from campus, nothing else.
         </p>
       </fieldset>

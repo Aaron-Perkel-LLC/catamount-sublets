@@ -94,9 +94,9 @@ function columns(input: ListingInput) {
   return { ...(rest as Omit<ListingInput, "semesters">), contactEmail: input.contactEmail || null, contactPhone: input.contactPhone || null, description: input.description || null };
 }
 
-/** The approximate area's center for a listing at (lat, lon); written whenever lat/lon is (src/server/geo-fuzz.ts). */
-function areaColumns(listingId: number, lat: number, lon: number) {
-  const area = fuzzedArea(listingId, lat, lon);
+/** The approximate area's center for a place at (lat, lon); written whenever lat/lon is (src/server/geo-fuzz.ts). */
+function areaColumns(lat: number, lon: number) {
+  const area = fuzzedArea(lat, lon);
   return { areaLat: area.lat, areaLon: area.lon };
 }
 
@@ -109,10 +109,8 @@ export async function createListing(
 ): Promise<number> {
   const [row] = await tx
     .insert(listings)
-    .values({ userId, ...columns(input) })
+    .values({ userId, ...columns(input), ...areaColumns(input.lat, input.lon) })
     .returning({ id: listings.id });
-  // The area is keyed by the id, which only exists now.
-  await tx.update(listings).set(areaColumns(row.id, input.lat, input.lon)).where(eq(listings.id, row.id));
   await setListingSemesters(tx, row.id, orderedSemesters);
   return row.id;
 }
@@ -127,7 +125,7 @@ export async function updateListing(
 ): Promise<boolean> {
   const updated = await tx
     .update(listings)
-    .set({ ...columns(input), ...areaColumns(listingId, input.lat, input.lon), updatedAt: new Date() })
+    .set({ ...columns(input), ...areaColumns(input.lat, input.lon), updatedAt: new Date() })
     .where(owned(listingId, actor))
     .returning({ id: listings.id });
   if (updated.length === 0) return false;
@@ -145,7 +143,7 @@ export async function setListingVisibility(db: DbOrTx, listingId: number, actor:
   if (!row) return false;
   const rows = await db
     .update(listings)
-    .set({ signedInOnly, ...areaColumns(listingId, row.lat, row.lon), updatedAt: new Date() })
+    .set({ signedInOnly, ...areaColumns(row.lat, row.lon), updatedAt: new Date() })
     .where(owned(listingId, actor))
     .returning({ id: listings.id });
   return rows.length > 0;

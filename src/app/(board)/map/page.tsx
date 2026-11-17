@@ -62,8 +62,8 @@ async function SignedOutMap({ query }: { query: ReturnType<typeof parseListingQu
   const [result, bounds, semesters, empty, hidden] = await Promise.all([
     publicBoardListings(db, query),
     filterBounds(db, "signed-out"),
-    boardSemesters(db),
-    emptyActiveSemesters(db),
+    boardSemesters(db, "signed-out"),
+    emptyActiveSemesters(db, "signed-out"),
     signedInOnlyCount(db),
   ]);
   return (

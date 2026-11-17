@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 /** See src/lib/sitemap.ts. Listings come only from the signed-out board; a database outage leaves just the fixed pages. */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  let listings: { id: number; updatedAt: Date }[] = [];
+  let listings: { id: number; lastModified: string }[] = [];
   try {
     listings = await publicSitemapEntries(await getDb());
   } catch (error) {
