@@ -1,7 +1,7 @@
 import { render } from "@react-email/components";
 import { describe, expect, it } from "vitest";
 import { SITE } from "@/config/site";
-import DigestEmail, { digestSubject, digestText } from "./digest";
+import DigestEmail, { digestSubject, digestText, MAILING_ADDRESS_PLACEHOLDER } from "./digest";
 
 const props = DigestEmail.PreviewProps;
 
@@ -17,7 +17,10 @@ describe("digest email", () => {
     expect(html).not.toContain("<img");
     expect(html).toContain(props.unsubscribeUrl.replace(/&/g, "&amp;"));
     expect(html).toContain(">Unsubscribe<");
-    expect(html).toContain(`${SITE.name}, ${SITE.mailingAddress || "[Mailing address: set SITE.mailingAddress]"}.`);
+    expect(html).toContain(`${SITE.name}, ${MAILING_ADDRESS_PLACEHOLDER}.`);
+    const withAddress = DigestEmail({ ...props, mailingAddress: "PO Box 1, Burlington, VT 05402" });
+    expect(await render(withAddress)).toContain(`${SITE.name}, PO Box 1, Burlington, VT 05402.`);
+    expect(digestText({ ...props, mailingAddress: "PO Box 1, Burlington, VT 05402" })).toContain(`${SITE.name}, PO Box 1, Burlington, VT 05402.`);
     const withImage = await render(DigestEmail({ ...props, firstThumb: "https://media.example/t.jpg" }));
     expect(withImage.match(/<img/g)).toHaveLength(1);
   });

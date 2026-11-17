@@ -83,6 +83,8 @@ environment at boot and rejects an empty value. The variables:
 | `SURVEY_SECRET` | Signs feedback-survey links and the "still available?" email's answer links. |
 | `APP_URL` | The canonical origin, e.g. `http://localhost:3000`. |
 | `RESEND_API_KEY` | Resend API key for real mail. |
+| `RESEND_DIGEST_API_KEY` | Resend sending key scoped to the digest's subdomain; the weekly digest uses only this one. |
+| `MAILING_ADDRESS` | Postal address in the digest footer (CAN-SPAM). Kept out of the repo. |
 | `BLOB_UPLOADS_READ_WRITE_TOKEN`, `BLOB_MEDIA_READ_WRITE_TOKEN` | Vercel Blob tokens for the private uploads store and the public media store. Unset: files go to `.uploads/` on disk. |
 | `CRON_SECRET` | Bearer token the cron route requires. |
 

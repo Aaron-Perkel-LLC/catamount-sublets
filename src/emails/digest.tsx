@@ -38,14 +38,16 @@ export interface DigestEmailProps {
   browseUrl: string;
   accountUrl: string;
   unsubscribeUrl: string;
+  /** The footer's postal address, from digestMailingAddress() (server-only); the template never reads the environment. */
+  mailingAddress: string;
 }
 
 export function digestSubject(total: number, severalSearches: boolean): string {
   return `${total} new sublet${total === 1 ? "" : "s"} matching your search${severalSearches ? "es" : ""}`;
 }
 
-const MAILING_ADDRESS_PLACEHOLDER = "[Mailing address: set SITE.mailingAddress]";
-const mailingAddress = () => SITE.mailingAddress || MAILING_ADDRESS_PLACEHOLDER;
+export const MAILING_ADDRESS_PLACEHOLDER = "[Mailing address: set MAILING_ADDRESS]";
+const postalLine = (p: DigestEmailProps) => `${SITE.name}, ${p.mailingAddress || MAILING_ADDRESS_PLACEHOLDER}.`;
 
 function listingHeadline(l: DigestListingLine): string {
   return [l.price + (l.negotiable ? " (negotiable)" : ""), l.semester].filter(Boolean).join(" · ");
@@ -70,7 +72,7 @@ export default function DigestEmail(props: DigestEmailProps) {
           <Link href={accountUrl} style={footerLink}>
             Change your searches
           </Link>
-          . {`${SITE.name}, ${mailingAddress()}.`} {SITE.disclaimer}
+          . {postalLine(props)} {SITE.disclaimer}
         </>
       }
     >
@@ -118,7 +120,7 @@ export function digestText(props: DigestEmailProps): string {
   lines.push(`You get this because you turned on the weekly email for your saved searches on ${SITE.domain}.`);
   lines.push(`Unsubscribe: ${unsubscribeUrl}`);
   lines.push(`Change your searches: ${accountUrl}`);
-  lines.push(`${SITE.name}, ${mailingAddress()}.`);
+  lines.push(postalLine(props));
   lines.push(SITE.disclaimer);
   return lines.join("\n");
 }
@@ -144,4 +146,5 @@ DigestEmail.PreviewProps = {
   browseUrl: `${SITE.url}/browse`,
   accountUrl: `${SITE.url}/account`,
   unsubscribeUrl: `${SITE.url}/unsubscribe?t=00000000-0000-0000-0000-000000000000.1800000000.${"0".repeat(32)}`,
+  mailingAddress: "",
 } satisfies DigestEmailProps;

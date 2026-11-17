@@ -36,6 +36,7 @@ const schema = z.object({
   APP_URL: z.url().optional(),
 
   RESEND_API_KEY: requiredInProduction(z.string().min(1)),
+  // RESEND_DIGEST_API_KEY and MAILING_ADDRESS: read only in src/server/digest-config.ts.
 
   /** Private store for raw uploads; public store for processed media. */
   BLOB_UPLOADS_READ_WRITE_TOKEN: requiredInProduction(z.string().min(1)),

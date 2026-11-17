@@ -29,12 +29,11 @@ export const SITE = {
    */
   mailDigestDomain: "updates.catamountsublets.com",
   mailFromDigest: "Catamount Sublets <digest@updates.catamountsublets.com>",
-  /**
-   * The postal address in the digest's footer (CAN-SPAM wants one in bulk
-   * mail). Empty until Aaron fills it in; while empty, the digest switch
-   * cannot be turned on and the cron sends nothing.
+  /*
+   * The digest footer's postal address is not here: it is the MAILING_ADDRESS
+   * env var, read only by src/server/digest-config.ts (server-only), because
+   * this file reaches the browser and the repo is public.
    */
-  mailingAddress: "",
   instagramHandle: "@catamountsublets",
   instagramUrl: "https://www.instagram.com/catamountsublets/",
   /** Shown in the footer and on the share page. Keep it. */

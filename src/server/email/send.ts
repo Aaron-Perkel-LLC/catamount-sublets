@@ -64,11 +64,23 @@ export function senderFor(kind: MailKind): string {
   return SITE.mailFrom;
 }
 
-let client: Resend | undefined;
-function resend(): Resend {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) throw new Error("RESEND_API_KEY is not set");
-  return (client ??= new Resend(key));
+/**
+ * The key a message goes out with. The digest's is passed in by its caller
+ * (digestResendKey(), server-only, scoped in Resend to the digest's
+ * subdomain); everything else uses the root-scoped RESEND_API_KEY. No
+ * fallback for the digest: the root key can't send from the subdomain.
+ * (This file stays importable by the admin scripts, so it does not read the
+ * digest key itself.)
+ */
+export function apiKeyFor(kind: MailKind, digestKey: string | undefined): { key: string | undefined; name: string } {
+  return kind === "digest" ? { key: digestKey, name: "RESEND_DIGEST_API_KEY" } : { key: process.env.RESEND_API_KEY, name: "RESEND_API_KEY" };
+}
+
+const clients = new Map<string, Resend>();
+function resend(key: string): Resend {
+  let c = clients.get(key);
+  if (!c) clients.set(key, (c = new Resend(key)));
+  return c;
 }
 
 export interface SendMailArgs {
@@ -90,6 +102,8 @@ export interface SendMailArgs {
    * List-Unsubscribe-Post, so mail clients can offer one-click unsubscribe.
    */
   oneClickUnsubscribeUrl?: string;
+  /** Kind "digest" only: the digest's own sending key (digestResendKey()). Required there; ignored otherwise. */
+  apiKey?: string;
 }
 
 /** The unsubscribe headers for a kind of mail; none for codes and the admin's own notes. */
@@ -130,14 +144,15 @@ export async function sendMail(args: SendMailArgs): Promise<SendMailResult> {
     return { ok: true, id: "console" };
   }
 
-  if (!process.env.RESEND_API_KEY) {
-    log.error("mail.not_configured", new Error("RESEND_API_KEY is not set"), { kind: args.kind, ref: args.ref });
-    return { ok: false, error: "Mail is not configured here (no RESEND_API_KEY)." };
+  const { key, name: keyName } = apiKeyFor(args.kind, args.apiKey);
+  if (!key) {
+    log.error("mail.not_configured", new Error(`${keyName} is not set`), { kind: args.kind, ref: args.ref });
+    return { ok: false, error: `Mail is not configured here (no ${keyName}).` };
   }
 
   try {
     const send = () =>
-      resend().emails.send(
+      resend(key).emails.send(
         {
           from,
           to: args.to,
