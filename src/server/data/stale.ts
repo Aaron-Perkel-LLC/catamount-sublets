@@ -1,7 +1,7 @@
 import { and, asc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { DbOrTx } from "@/db";
 import { listings, session, user } from "@/db/schema";
-import { posterFirstName } from "@/lib/person-name";
+import { greetingName, posterFirstName } from "@/lib/person-name";
 import { isTestAddress } from "@/server/email/send";
 import { posterColumns } from "./names";
 
@@ -25,11 +25,11 @@ import { posterColumns } from "./names";
 export interface StaleRow {
   id: string;
   email: string;
-  /** For "Hi Sam,"; null means "Hi," alone (never their login). */
+  /** For "Hi Sam,"; null means "Hi," alone (never their login, never a squashed lower-case name). */
   firstName: string | null;
   listingId: number;
-  /** The street line of the listing's address (up to the first comma). */
-  street: string;
+  /** The street line of the listing's address; null when it has no street name to say ("your listing" alone). */
+  street: string | null;
   /** The listing's first semester code, for counts. */
   semester: string | null;
   status: string;
@@ -40,9 +40,17 @@ export interface StaleAudience {
   noEmail: StaleRow[];
 }
 
-/** "12 Main St, Burlington, VT 05401" → "12 Main St". */
-export function streetOf(address: string): string {
-  return address.split(",")[0]?.trim() || address.trim();
+/**
+ * "12 Main St, Burlington, VT 05401" → "12 Main St". A house number that got
+ * its own comma takes the next part with it ("235, Pearl Street, …" →
+ * "235 Pearl Street"). Null when what is left has no letters ("235"): the
+ * mail then says "your listing" and names no street.
+ */
+export function streetOf(address: string): string | null {
+  const parts = address.split(",").map((p) => p.trim());
+  let street = parts[0] || address.trim();
+  if (/^\d+$/.test(street) && parts[1]) street = `${street} ${parts[1]}`;
+  return /\p{L}/u.test(street) ? street : null;
 }
 
 /** True when the account shows no sign-in on this site by any of the three signals. */
@@ -75,7 +83,7 @@ export async function staleAudience(db: DbOrTx): Promise<StaleAudience> {
     const row: StaleRow = {
       id: r.id,
       email: r.email,
-      firstName: posterFirstName({ ...r, legacyNames: [r.displayName, r.name] }),
+      firstName: greetingName(posterFirstName({ ...r, legacyNames: [r.displayName, r.name] })),
       listingId: r.listingId,
       street: streetOf(r.address),
       semester: r.semester,

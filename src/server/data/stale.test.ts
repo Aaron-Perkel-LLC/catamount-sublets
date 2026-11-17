@@ -101,6 +101,18 @@ describe("staleAudience", () => {
     expect(streetOf("12 Main St, Burlington, VT 05401")).toBe("12 Main St");
     expect(streetOf("12 Main St")).toBe("12 Main St");
   });
+
+  it("joins a house number that got its own comma to the street after it", () => {
+    expect(streetOf("235, Pearl Street, Burlington, VT 05401")).toBe("235 Pearl Street");
+    expect(streetOf("235,Pearl Street")).toBe("235 Pearl Street");
+    expect(streetOf("235A, Pearl Street")).toBe("235A");
+  });
+
+  it("gives no street when what is left has no letters", () => {
+    expect(streetOf("235")).toBeNull();
+    expect(streetOf("235, 05401")).toBeNull();
+    expect(streetOf("235, ")).toBeNull();
+  });
 });
 
 describe("removeStale", () => {
