@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { AMENITY_FILTER_VALUES, type AmenityFilter, LISTING_SORT_VALUES, type ListingSort, OPEN_TO_VALUES, type OpenToFilter } from "./options";
+import { formatMoney } from "./format";
+import { AMENITY_FILTER_VALUES, AMENITY_FILTERS, type AmenityFilter, LISTING_SORT_VALUES, type ListingSort, OPEN_TO_FILTERS, OPEN_TO_VALUES, type OpenToFilter } from "./options";
 
 /**
  * The Browse and Map query string, parsed leniently: an unusable value is
@@ -83,6 +84,55 @@ export function filterSearchParams(q: ListingQuery): URLSearchParams {
   if (q.negotiable) p.set("negotiable", "1");
   if (q.openTo) p.set("open_to", q.openTo);
   return p;
+}
+
+/** A query string ("min_price=0&max_price=900&amenities=furnished") as the SearchParams Next.js hands a page. */
+export function searchParamsFromString(query: string): SearchParams {
+  const out: Record<string, string | string[]> = {};
+  for (const [k, v] of new URLSearchParams(query)) {
+    const prev = out[k];
+    out[k] = prev === undefined ? v : Array.isArray(prev) ? [...prev, v] : [prev, v];
+  }
+  return out;
+}
+
+/**
+ * A saved search's stored form: the filter half of the Browse query string,
+ * run through the same lenient parser Browse uses and written back out, so
+ * the same filters always store as the same string (sort, deep link and
+ * anything unusable dropped). Amenities are sorted so their order in the URL
+ * doesn't make two copies of one search.
+ */
+export function canonicalFilterQuery(query: string): string {
+  const q = parseListingQuery(searchParamsFromString(query));
+  return filterSearchParams({ ...q, amenities: [...q.amenities].sort() }).toString();
+}
+
+/** A stored saved search, read back exactly as Browse reads its URL. */
+export function parseSavedQuery(query: string): ListingQuery {
+  return parseListingQuery(searchParamsFromString(query));
+}
+
+/**
+ * The filters in words, for a saved search's default name and its line on
+ * Account: "Spring 2027 · $500–$900 · Within 1 mi · Furnished, Pets OK".
+ * `semesterName` is the semester's display name when the caller knows it.
+ */
+export function describeFilters(q: ListingQuery, semesterName?: string): string {
+  const bits: string[] = [];
+  if (q.semester) bits.push(semesterName ?? q.semester);
+  if (q.minPrice !== undefined && q.maxPrice !== undefined) bits.push(q.minPrice > 0 ? `${formatMoney(q.minPrice)}–${formatMoney(q.maxPrice)}` : `Up to ${formatMoney(q.maxPrice)}`);
+  if (q.maxDistance !== undefined) bits.push(`Within ${q.maxDistance} mi`);
+  if (q.amenities.length) bits.push(q.amenities.map((a) => AMENITY_FILTERS[a].label).join(", "));
+  if (q.negotiable) bits.push("Negotiable");
+  if (q.openTo) bits.push(OPEN_TO_FILTERS[q.openTo].label);
+  return bits.join(" · ") || "Every new listing";
+}
+
+/** describeFilters cut to fit a saved search's name. */
+export function defaultSearchName(q: ListingQuery, semesterName: string | undefined, maxChars: number): string {
+  const full = describeFilters(q, semesterName);
+  return full.length <= maxChars ? full : `${full.slice(0, maxChars - 1).trimEnd()}…`;
 }
 
 export function withQuery(path: string, p: URLSearchParams): string {

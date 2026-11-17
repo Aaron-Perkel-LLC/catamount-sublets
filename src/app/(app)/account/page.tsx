@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { NameForm } from "@/components/account/NameForm";
+import { SavedSearches } from "@/components/account/SavedSearches";
 import { getDb } from "@/db";
 import { requireUser } from "@/server/auth";
 import { getNames } from "@/server/data/names";
+import { myAlerts } from "@/server/services/digest";
 import { DeleteAccount } from "./delete-account";
 
 /** The account: what we hold, and the way out. */
 export default async function AccountPage() {
   const user = await requireUser("/account");
-  const names = await getNames(await getDb(), user.id);
+  const db = await getDb();
+  const [names, alerts] = await Promise.all([getNames(db, user.id), myAlerts(db, user.id)]);
   return (
     <section className="mx-auto flex w-full max-w-2xl flex-col gap-8">
       <div className="flex flex-col gap-1">
@@ -27,12 +30,21 @@ export default async function AccountPage() {
         </div>
         <NameForm initial={names.prefill} next="/account" submitLabel="Save name" />
       </section>
+      <section id="alerts" aria-labelledby="alerts-heading" className="flex scroll-mt-20 flex-col gap-3">
+        <div>
+          <h2 id="alerts-heading" className="text-lg font-bold">
+            Alerts
+          </h2>
+          <p className="text-sm text-ink-2">Saved searches, and the weekly email of new listings that match them.</p>
+        </div>
+        <SavedSearches alerts={alerts} email={user.email} noEmail={alerts.stoppedEmail} />
+      </section>
       <section aria-labelledby="data-heading" className="flex flex-col gap-1 text-sm text-ink-2">
         <h2 id="data-heading" className="text-lg font-bold text-ink">
           Your data
         </h2>
         <p>
-          We keep your email, your listing and totals of views and contacts on it, never who.{" "}
+          We keep your email, your listing, totals of views and contacts on it (never who), and your saved searches.{" "}
           <Link href="/privacy" className="link">
             Privacy
           </Link>{" "}

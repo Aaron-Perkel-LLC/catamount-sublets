@@ -19,7 +19,7 @@ import { log } from "@/server/log";
  * a code is never queued behind a bulk send.
  */
 
-export type MailKind = "login_code" | "admin_notice" | "access_request" | "welcome" | "broadcast" | "broadcast_copy" | "survey_invite" | "admin_message" | "outcome_ask" | "stale_notice";
+export type MailKind = "login_code" | "admin_notice" | "access_request" | "welcome" | "broadcast" | "broadcast_copy" | "survey_invite" | "admin_message" | "outcome_ask" | "stale_notice" | "digest";
 
 /**
  * Print instead of send only on a developer's machine. On Vercel (preview or
@@ -50,10 +50,15 @@ export function mailMode(): "resend" | "console" | "unconfigured" {
 }
 
 /** Under vitest, mail is collected here instead of printed, so tests can assert on it. */
-export const sentInTests: { to: string; subject: string; kind: MailKind; text: string }[] = [];
+export const sentInTests: { to: string; subject: string; kind: MailKind; text: string; html: string; from: string; headers: Record<string, string>; replyTo?: string; idempotencyKey?: string }[] = [];
 
-/** Codes come from the transactional sender, the admin's notices from their own, and the notes signed by the author from the author. */
+/**
+ * Codes come from the transactional sender, the admin's notices from their
+ * own, the notes signed by the author from the author, and the weekly digest
+ * from its own subdomain, so bulk mail's reputation stays apart from codes'.
+ */
 export function senderFor(kind: MailKind): string {
+  if (kind === "digest") return SITE.mailFromDigest;
   if (kind === "broadcast" || kind === "broadcast_copy" || kind === "welcome" || kind === "survey_invite" || kind === "admin_message" || kind === "outcome_ask" || kind === "stale_notice") return SITE.mailFromPersonal;
   if (kind === "admin_notice" || kind === "access_request") return SITE.mailFromNotices;
   return SITE.mailFrom;
@@ -79,6 +84,21 @@ export interface SendMailArgs {
   text?: string;
   /** Sent to Resend as Idempotency-Key: a repeat with the same key is not sent twice. */
   idempotencyKey?: string;
+  /**
+   * An https link that unsubscribes on POST (RFC 8058). Sent as
+   * List-Unsubscribe (with the mailto as a fallback) plus
+   * List-Unsubscribe-Post, so mail clients can offer one-click unsubscribe.
+   */
+  oneClickUnsubscribeUrl?: string;
+}
+
+/** The unsubscribe headers for a kind of mail; none for codes and the admin's own notes. */
+export function unsubscribeHeaders(kind: MailKind, oneClickUrl?: string): Record<string, string> {
+  const mailto = `<mailto:${SITE.supportEmail}?subject=unsubscribe>`;
+  if (oneClickUrl) return { "List-Unsubscribe": `<${oneClickUrl}>, ${mailto}`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" };
+  // Relationship mail still says how to stop it; a code does not need the header.
+  if (kind === "welcome" || kind === "broadcast" || kind === "survey_invite" || kind === "outcome_ask" || kind === "stale_notice") return { "List-Unsubscribe": mailto };
+  return {};
 }
 
 export interface SendMailResult {
@@ -97,10 +117,11 @@ export async function sendMail(args: SendMailArgs): Promise<SendMailResult> {
   const text = args.text ?? (await render(args.react, { plainText: true }));
   const from = senderFor(args.kind);
   const replyTo = args.replyTo === null ? undefined : (args.replyTo ?? SITE.mailReplyTo);
+  const headers = { "X-Entity-Ref-ID": `${args.kind}:${args.ref ?? ""}`, ...unsubscribeHeaders(args.kind, args.oneClickUnsubscribeUrl) };
 
   if (consoleMode()) {
     if (process.env.VITEST) {
-      sentInTests.push({ to: args.to, subject: args.subject, kind: args.kind, text });
+      sentInTests.push({ to: args.to, subject: args.subject, kind: args.kind, text, html, from, headers, replyTo, idempotencyKey: args.idempotencyKey });
       return { ok: true, id: "test" };
     }
     // Development only (see consoleMode): the whole message, code included.
@@ -124,11 +145,7 @@ export async function sendMail(args: SendMailArgs): Promise<SendMailResult> {
           html,
           text,
           replyTo,
-          headers: {
-            "X-Entity-Ref-ID": `${args.kind}:${args.ref ?? ""}`,
-            // Relationship mail still says how to stop it; a code does not need the header.
-            ...(args.kind === "welcome" || args.kind === "broadcast" || args.kind === "survey_invite" || args.kind === "outcome_ask" || args.kind === "stale_notice" ? { "List-Unsubscribe": `<mailto:${SITE.supportEmail}?subject=unsubscribe>` } : {}),
-          },
+          headers,
         },
         args.idempotencyKey ? { idempotencyKey: args.idempotencyKey } : undefined,
       );

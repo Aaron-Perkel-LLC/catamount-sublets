@@ -8,6 +8,7 @@ import type { ActivityRange, ListingActivity } from "@/server/data/events";
 import type { Announcement, ReadOnly } from "@/server/data/settings";
 import { ActivityTab } from "./ActivityTab";
 import { AnnounceTab } from "./AnnounceTab";
+import { DigestTab } from "./DigestTab";
 import { ImagesTab, type StorageUsage } from "./ImagesTab";
 import type { AdminMessageDto } from "./MailComposer";
 import { MailTab } from "./MailTab";
@@ -73,9 +74,9 @@ export interface ActivityDto {
   outcomes: OutcomeSummary;
 }
 
-export const TABS = ["people", "requests", "mail", "activity", "survey", "semesters", "images", "announce"] as const;
+export const TABS = ["people", "requests", "mail", "digest", "activity", "survey", "semesters", "images", "announce"] as const;
 export type Tab = (typeof TABS)[number];
-const LABELS: Record<Tab, string> = { semesters: "Semesters", announce: "Announce", images: "Images", people: "People", requests: "Requests", mail: "Mail", activity: "Activity", survey: "Survey" };
+const LABELS: Record<Tab, string> = { semesters: "Semesters", announce: "Announce", images: "Images", people: "People", requests: "Requests", mail: "Mail", digest: "Digest", activity: "Activity", survey: "Survey" };
 /** Hashes from before a section moved, so old links (and already-sent notices) still land. #email is the broadcast's old home; the one-off Mail section is #mail. */
 const ALIASES: Record<string, Tab> = { posts: "people", announcement: "announce", email: "announce" };
 
@@ -158,6 +159,7 @@ function AdminSections(props: Props) {
     people: `${stats.people} ${stats.people === 1 ? "person" : "people"} · ${stats.posts} post${stats.posts === 1 ? "" : "s"} · ${stats.hidden} hidden · ${stats.taken} taken`,
     requests: `${waiting === 0 ? "Nothing" : waiting} waiting · ${props.requests.approved.length} approved address${props.requests.approved.length === 1 ? "" : "es"}`,
     mail: "One email to one address, from you, previewed before it goes.",
+    digest: "The weekly saved-search email: its switch, who would get it, and a test to yourself.",
     activity: "Views, contacts and shares, counted without names.",
     survey: `${props.survey.summary.answered} of ${props.survey.invited} invited answered the feedback survey.`,
     semesters: "What students can post for, and what is on the board.",
@@ -215,6 +217,7 @@ function AdminSections(props: Props) {
           {tab === "people" && <PeopleTab people={props.people} initialSearch={props.peopleSearch} meId={props.me.id} focus={personFocus} onOpenPost={openPost} />}
           {tab === "requests" && <RequestsTab requests={props.requests} />}
           {tab === "mail" && <MailTab history={props.mail.history} />}
+          {tab === "digest" && <DigestTab />}
           {tab === "activity" && <ActivityTab activity={props.activity} onOpenPost={openPost} />}
           {tab === "survey" && <SurveyTab survey={props.survey} />}
         </div>

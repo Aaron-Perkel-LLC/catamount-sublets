@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertIsoDate, daysBetweenDates, deadlineWords, easternDate, easternDayStart, easternDeadlinePassed, easternOffsetMinutes, nextDate, postedAgo, shortDate } from "./dates";
+import { assertIsoDate, daysBetweenDates, deadlineWords, easternClock, easternDate, easternDayStart, easternDeadlinePassed, easternOffsetMinutes, nextDate, postedAgo, shortDate } from "./dates";
 
 describe("easternDate", () => {
   it("uses the Eastern calendar day, not UTC", () => {
@@ -68,5 +68,14 @@ describe("Eastern deadlines", () => {
     expect(assertIsoDate("2026-11-20")).toBe("2026-11-20");
     expect(() => assertIsoDate("2026-11-31")).toThrow();
     expect(() => assertIsoDate("Nov 20")).toThrow();
+  });
+});
+
+describe("easternClock", () => {
+  it("gives the Eastern weekday and hour on both sides of DST", () => {
+    expect(easternClock(new Date("2026-11-23T13:05:00Z"))).toEqual({ date: "2026-11-23", weekday: 1, hour: 8 }); // EST
+    expect(easternClock(new Date("2027-07-05T12:05:00Z"))).toEqual({ date: "2027-07-05", weekday: 1, hour: 8 }); // EDT
+    expect(easternClock(new Date("2026-11-23T04:59:00Z"))).toEqual({ date: "2026-11-22", weekday: 0, hour: 23 });
+    expect(easternClock(new Date("2026-11-23T05:00:00Z"))).toEqual({ date: "2026-11-23", weekday: 1, hour: 0 });
   });
 });

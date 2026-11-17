@@ -52,9 +52,30 @@ only after a clean week of reports for both senders. Confirm with
 - Webhooks → `https://catamountsublets.com/api/resend/webhook` for `email.bounced` and `email.complained` (create the endpoint once the handler exists).
 - Upgrade before cutover (removes the 100/day cap).
 
+### 5a. The digest's sending subdomain (`SITE.mailDigestDomain`, not set up yet; Aaron's)
+
+The weekly saved-search digest sends from `digest@updates.catamountsublets.com` (`SITE.mailFromDigest`), a separate Resend domain, so bulk-mail complaints build reputation on `updates.` and never on the root domain that sign-in codes use. Reply-To stays `aaron@`.
+
+1. Resend → Domains → **Add domain** `updates.catamountsublets.com`, region **us-east-1** (the root domain's region). Leave **click tracking and open tracking off** (click tracking rewrites every link through a redirect, which Microsoft 365 treats like a link shortener; open tracking adds a pixel image).
+2. Resend then shows the records. Add them in Cloudflare exactly as shown, **DNS only (grey cloud)**. They should have the same shape as the root domain's records today (checked 16 Nov 2026 with `dig`):
+
+   | Type | Name (in the `catamountsublets.com` zone) | Value | Notes |
+   |---|---|---|---|
+   | TXT | `resend._domainkey.updates` | `p=MIGf…` | DKIM. The key is new for this domain: copy it from Resend, don't reuse the root's |
+   | CNAME | `send.updates` | `send.forge.rmta.net` (as Resend shows it) | Return path: carries the SPF and bounce MX, so SPF aligns with the From domain |
+   | CNAME | `rsend.updates` | `rsend.forge.rmta.net` (as Resend shows it) | Second return path, as on the root |
+
+   If Resend instead shows the older MX + TXT pair for `send.updates` (`MX 10 feedback-smtp.us-east-1.amazonses.com`, `TXT "v=spf1 include:amazonses.com ~all"`), add those. Use whatever the dashboard lists for this domain.
+3. **DMARC**: nothing new is required. The root's `_dmarc` (`v=DMARC1; p=none;`) covers `updates.` because there is no `sp=`. Once a few weekly sends have passed cleanly, tightening the root to `p=quarantine` (or adding `_dmarc.updates` with `p=quarantine`) is what Microsoft 365 rewards. That is a separate decision.
+4. Nothing at `updates` itself (no MX, no A): replies go to Reply-To, and the return-path records handle bounces.
+5. Press **Verify** in Resend. The sending-only API key is scoped to the root domain, so either widen it to "all domains" or create a second sending-only key for `updates.` and tell Claude which. `sendMail` uses the one `RESEND_API_KEY`, so widening is simpler.
+6. Then, in order: fill in `SITE.mailingAddress` (src/config/site.ts, deploy), Admin → **Digest** → pick an account → **Send a test to me** and check where it lands at a `uvm.edu` inbox, then **Turn on**.
+
 ## 6. Vercel Cron
 
-`vercel.json`: `/api/cron/sweep` once a day at 09:20 UTC, authenticated by `CRON_SECRET`. Hobby allows daily schedules only, with up to an hour of jitter; both are fine for a sweep.
+`vercel.json`: `/api/cron/sweep` once a day at 09:20 UTC, authenticated by `CRON_SECRET`. Hobby allowed daily schedules only, with up to an hour of jitter; both were fine for a sweep.
+
+`/api/cron/digest` every hour on the hour (needs Pro, which the project has been on since 12 Oct). Vercel runs in UTC, so the route itself decides: it acts only on the digest morning (`DIGEST.weekday`, `DIGEST.hour` Eastern, then `DIGEST.catchUpHours` catch-up hours) and only while Admin → Digest is on, `SITE.mailingAddress` is filled in and `SURVEY_SECRET` is set. Every other firing returns `{acted: false}` at once. Vercel runs crons on Production only; to try it on a preview, call it yourself with `Authorization: Bearer $CRON_SECRET` during the digest hour.
 
 ## 7. Silk (legacy) — only at cutover prep, on explicit go-ahead
 

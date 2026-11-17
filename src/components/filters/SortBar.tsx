@@ -1,11 +1,11 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
+import { type ReactNode, useTransition } from "react";
 import { LISTING_SORTS, LISTING_SORT_VALUES, type ListingSort } from "@/lib/options";
 
-/** "12 Spring 2027 sublets match these filters" and the sort select. */
-export function SortBar({ count, semesterName, filtered, sort }: { count: number; semesterName?: string; filtered: boolean; sort: ListingSort }) {
+/** "12 Spring 2027 sublets match these filters", the sort select, and anything else the page puts beside it (Browse: the alerts button). */
+export function SortBar({ count, semesterName, filtered, sort, children }: { count: number; semesterName?: string; filtered: boolean; sort: ListingSort; children?: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -14,6 +14,8 @@ export function SortBar({ count, semesterName, filtered, sort }: { count: number
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h1 className="text-xl font-bold">{heading}</h1>
+      <div className="flex flex-wrap items-center gap-3">
+      {children}
       <label className="flex items-center gap-2 text-sm">
         <span className="text-ink-2">Sort</span>
         <select
@@ -36,6 +38,7 @@ export function SortBar({ count, semesterName, filtered, sort }: { count: number
           ))}
         </select>
       </label>
+      </div>
     </div>
   );
 }

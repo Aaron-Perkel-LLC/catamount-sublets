@@ -17,16 +17,23 @@ export interface ApprovedEmails {
   emails: string[];
 }
 
+/** The weekly digest's master switch. Off by default: the cron does nothing until the admin turns it on (src/server/services/digest.ts). */
+export interface DigestSwitch {
+  enabled: boolean;
+}
+
 interface Settings {
   announcement: Announcement;
   read_only: ReadOnly;
   approved_emails: ApprovedEmails;
+  digest: DigestSwitch;
 }
 
 const DEFAULTS: Settings = {
   announcement: { active: false, message: "", style: "info" },
   read_only: { active: false, message: "" },
   approved_emails: { emails: [] },
+  digest: { enabled: false },
 };
 
 export async function getSetting<K extends keyof Settings>(db: DbOrTx, key: K): Promise<Settings[K]> {

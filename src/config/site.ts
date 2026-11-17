@@ -22,6 +22,19 @@ export const SITE = {
   /** Sender for the notes signed by the author (broadcasts, the welcome): they are not about signing in. */
   mailFromPersonal: "Aaron at Catamount Sublets <aaron@catamountsublets.com>",
   mailReplyTo: "aaron@catamountsublets.com",
+  /**
+   * The weekly digest's own sending subdomain, verified in Resend separately
+   * (records in docs/vercel-setup.md §5), so complaints about bulk mail can't
+   * touch the root domain's reputation, which sign-in codes depend on.
+   */
+  mailDigestDomain: "updates.catamountsublets.com",
+  mailFromDigest: "Catamount Sublets <digest@updates.catamountsublets.com>",
+  /**
+   * The postal address in the digest's footer (CAN-SPAM wants one in bulk
+   * mail). Empty until Aaron fills it in; while empty, the digest switch
+   * cannot be turned on and the cron sends nothing.
+   */
+  mailingAddress: "",
   instagramHandle: "@catamountsublets",
   instagramUrl: "https://www.instagram.com/catamountsublets/",
   /** Shown in the footer and on the share page. Keep it. */
@@ -76,6 +89,33 @@ export const LIMITS = {
   addressMaxChars: 255,
   displayNameMaxChars: 60,
   priceMax: 20000,
+} as const;
+
+/**
+ * The weekly saved-search digest. The cron runs hourly (vercel.json) and acts
+ * on `weekday` from `hour` Eastern, then for `catchUpHours` more hours to
+ * finish what a timed-out or crashed run left (src/server/services/digest.ts).
+ */
+export const DIGEST = {
+  /** 0 = Sunday … 6 = Saturday, Eastern. */
+  weekday: 1,
+  /** Eastern hour, 24-hour clock. */
+  hour: 8,
+  catchUpHours: 3,
+  maxSavedSearches: 10,
+  /** The first digest after opting in covers listings since then, at most this far back. */
+  firstWindowDays: 7,
+  /**
+   * Later digests start where the last one that went (or found nothing)
+   * ended, at most this far back: a failed week rolls into the next, but a
+   * long pause never produces a month-old pile.
+   */
+  maxWindowDays: 14,
+  /** Listings written out in one email; the rest are "N more on the site". */
+  maxListingsShown: 10,
+  /** One small photo for the first listing only. Off: start text-only, turn on once inbox placement looks good. */
+  firstListingThumbnail: false,
+  savedSearchNameMaxChars: 60,
 } as const;
 
 /** One-time code settings; mirrored in the better-auth config. */

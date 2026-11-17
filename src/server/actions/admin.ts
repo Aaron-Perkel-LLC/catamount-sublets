@@ -13,6 +13,7 @@ import * as admin from "@/server/services/admin";
 import { type AdminMailPreview, type MailResult, previewAdminMessage, sendAdminMessage, type SendOutcome } from "@/server/services/admin-mail";
 import { type AskPreview, askPreview, sendAsks, sendAskTest } from "@/server/services/listing-outcome";
 import { photoOpFor, type PhotoOp, type PhotosResult } from "@/server/services/listing";
+import { type DigestOverview, type DigestRender, digestOverview, renderDigestFor, sendDigestTest, setDigestSwitch } from "@/server/services/digest";
 
 const revalidate = () => {
   for (const p of ["/admin", "/browse", "/map", "/post", "/"]) revalidatePath(p);
@@ -216,4 +217,31 @@ export async function adminRevokeApprovedEmail(email: string): Promise<admin.Res
   if (!(await revokeApprovedEmail(await getDb(), z.string().email().max(254).parse(email), me.id))) return { ok: false, error: "That address wasn't on the list." };
   revalidatePath("/admin");
   return { ok: true, data: undefined };
+}
+
+/* ------------------------------------------------------- weekly digest */
+
+/** Who would get the digest now, as counts (no addresses), and the switch's state. */
+export async function adminDigestOverview(): Promise<DigestOverview> {
+  await requireAdmin();
+  return digestOverview(await getDb());
+}
+
+/** One person's digest, rendered in full; its unsubscribe links are the admin's own. */
+export async function adminDigestRender(userId: string): Promise<DigestRender | null> {
+  const me = await requireAdmin();
+  return renderDigestFor(await getDb(), z.string().uuid().parse(userId), me.id);
+}
+
+/** Send one person's digest to the admin's own address only. Records nothing; works with the switch off. */
+export async function adminDigestSendTest(userId: string): Promise<admin.Result<{ to: string; total: number; fallback: boolean }>> {
+  const me = await requireAdmin();
+  return sendDigestTest(await getDb(), { id: me.id, email: me.email }, userId);
+}
+
+/** The master switch; turning it on is refused while anything blocks the digest. */
+export async function adminSetDigestSwitch(enabled: boolean): Promise<admin.Result> {
+  const me = await requireAdmin();
+  const r = await setDigestSwitch(await getDb(), z.boolean().parse(enabled), me.id);
+  return r.ok ? { ok: true, data: undefined } : r;
 }

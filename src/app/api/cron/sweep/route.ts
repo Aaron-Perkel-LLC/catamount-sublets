@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { otpSends, rateLimit, rateLimitBuckets, verification } from "@/db/schema";
 import { expiredBucketsBefore } from "@/server/rate-limit";
 import { failStalePending } from "@/server/data/admin-messages";
+import { failStaleDigestSends } from "@/server/data/digest";
 import { log } from "@/server/log";
 import { sweepRawUploads } from "@/server/services/admin";
 
@@ -12,8 +13,10 @@ export const runtime = "nodejs";
 /**
  * Daily housekeeping (vercel.json): raw uploads nobody attached within a
  * day, expired one-time codes, lapsed rate-limit windows and code-send rows,
- * and admin emails left pending an hour (their send was interrupted), which
- * are marked failed. Nothing user-visible is touched.
+ * admin emails left pending an hour (their send was interrupted), which
+ * are marked failed, and weekly-digest sends left pending a day (past the
+ * catch-up runs and Resend's 24-hour idempotency window), also failed.
+ * Nothing user-visible is touched.
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -26,7 +29,8 @@ export async function GET(request: Request) {
   const sends = await db.delete(otpSends).where(lt(otpSends.sentAt, dayAgo)).returning({ id: otpSends.id });
   const buckets = await db.delete(rateLimitBuckets).where(lt(rateLimitBuckets.windowStart, expiredBucketsBefore(new Date()))).returning({ key: rateLimitBuckets.key });
   const interrupted = await failStalePending(db, new Date(Date.now() - 3_600_000));
-  const summary = { raw, codes: codes.length, limits: limits.length, sends: sends.length, buckets: buckets.length, interrupted };
+  const digestInterrupted = await failStaleDigestSends(db, dayAgo);
+  const summary = { raw, codes: codes.length, limits: limits.length, sends: sends.length, buckets: buckets.length, interrupted, digestInterrupted };
   log.info("cron.sweep", summary);
   return NextResponse.json(summary);
 }

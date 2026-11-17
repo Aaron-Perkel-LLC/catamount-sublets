@@ -36,7 +36,8 @@ npm run email:dev    # react-email preview on :3001
 ## Conventions
 
 - Server-only modules under `src/server/`; `src/lib/` is safe for both sides.
-- Mutations are Server Actions in `src/server/actions/`; Route Handlers only for the beacon, uploads, auth and the share-card image.
+- Mutations are Server Actions in `src/server/actions/`; Route Handlers only for the beacon, uploads, auth, the share-card image, the crons and the digest's RFC 8058 one-click unsubscribe (a POST from the mail provider, so it can't be a Server Action).
+- The weekly digest matches through `newBoardListings()`, which is Browse's own query narrowed by date and owner, and saved searches store Browse's query string. Never add a second filter path or format, or the email and the site disagree. Digest listings show `shareCardLines()` fields only.
 - Data access in `src/server/data/`, one module per table family, returning DTOs that never include another user's email or id.
 - Tests next to the code as `*.test.ts`; data tests boot PGlite and run the real migrations (`src/db/test-db.ts`).
 - Commit messages: imperative, one line of what and why.

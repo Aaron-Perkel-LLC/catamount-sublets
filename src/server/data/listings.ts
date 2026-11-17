@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, exists, gte, inArray, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gt, gte, inArray, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import type { DbOrTx } from "@/db";
 import { listingPhotos, listings, listingSemesters, user } from "@/db/schema";
@@ -134,15 +134,40 @@ export interface BrowseResult {
  * viewer's id only decides `isMine`.
  */
 export async function browseListings(db: DbOrTx, q: ListingQuery, viewerId: string | null): Promise<BrowseResult> {
+  return { listings: await boardListings(db, q, { viewerId }), filterCount: filterCount(q) };
+}
+
+/**
+ * The one query behind Browse and the weekly digest: the board's visibility
+ * plus the query's filters (listingFilterWhere), in the query's order.
+ * `narrow` can only take rows away (it is ANDed on), so anything the digest
+ * finds is on Browse with the same filters.
+ */
+async function boardListings(db: DbOrTx, q: ListingQuery, opts: { viewerId: string | null; narrow?: SQL }): Promise<ListingDto[]> {
   const distance = campusDistanceMiles();
+  const where = opts.narrow ? and(listingFilterWhere(q, distance), opts.narrow)! : listingFilterWhere(q, distance);
   const rows = await db
     .select({ l: listings, email: user.email, poster: posterColumns, distanceMi: distance })
     .from(listings)
     .innerJoin(user, eq(user.id, listings.userId))
-    .where(listingFilterWhere(q, distance))
+    .where(where)
     .orderBy(...orderFor(q.sort, distance))
     .limit(BROWSE_LIMIT);
-  return { listings: await toDtos(db, rows, viewerId), filterCount: filterCount(q) };
+  return toDtos(db, rows, opts.viewerId);
+}
+
+/**
+ * A saved search's new listings for the weekly digest: exactly Browse's
+ * query for those filters, narrowed to listings posted in (since, until]
+ * and not the recipient's own.
+ */
+export async function newBoardListings(
+  db: DbOrTx,
+  q: ListingQuery,
+  opts: { recipientId: string; since: Date; until: Date },
+): Promise<ListingDto[]> {
+  const narrow = and(gt(listings.postedAt, opts.since), lte(listings.postedAt, opts.until), ne(listings.userId, opts.recipientId))!;
+  return boardListings(db, q, { viewerId: opts.recipientId, narrow });
 }
 
 /**

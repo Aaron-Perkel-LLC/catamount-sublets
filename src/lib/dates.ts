@@ -121,3 +121,14 @@ export function deadlineWords(date: string): { long: string; short: string } {
     short: noon.toLocaleDateString("en-US", { timeZone: SITE_TIME_ZONE, month: "short", day: "numeric" }),
   };
 }
+
+const weekdayHour = new Intl.DateTimeFormat("en-US", { timeZone: SITE_TIME_ZONE, weekday: "short", hour: "2-digit", hourCycle: "h23" });
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** The Eastern date, weekday (0 = Sunday) and hour (0–23) at an instant: what the weekly digest's cron checks. */
+export function easternClock(instant: Date): { date: string; weekday: number; hour: number } {
+  const parts = weekdayHour.formatToParts(instant);
+  const weekday = WEEKDAYS.indexOf(parts.find((p) => p.type === "weekday")?.value ?? "");
+  const hour = Number(parts.find((p) => p.type === "hour")?.value) % 24;
+  return { date: easternDate(instant), weekday, hour };
+}
