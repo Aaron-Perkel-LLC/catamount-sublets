@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { type Auth, buildAuth } from "./config";
@@ -21,10 +22,12 @@ export interface SessionUser {
   legacyNetid: string | null;
 }
 
-/** The signed-in person, or null. Banned accounts have no session. */
-export async function getSessionUser(): Promise<SessionUser | null> {
+/** The signed-in person, or null. Banned accounts have no session. Once per request (layout, metadata and page all ask). */
+export const getSessionUser = cache(async function getSessionUser(): Promise<SessionUser | null> {
+  // headers() first: at build time it marks the page dynamic before anything builds the auth instance (which has no secret then).
+  const requestHeaders = await headers();
   const a = await getAuth();
-  const session = await a.api.getSession({ headers: await headers() });
+  const session = await a.api.getSession({ headers: requestHeaders });
   if (!session) return null;
   const u = session.user as typeof session.user & { role?: string; legacyNetid?: string | null };
   return {
@@ -34,7 +37,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     role: u.role === "admin" ? "admin" : "user",
     legacyNetid: u.legacyNetid ?? null,
   };
-}
+});
 
 /** The signed-in person, or a redirect to sign-in that comes back to `next`. */
 export async function requireUser(next?: string): Promise<SessionUser> {

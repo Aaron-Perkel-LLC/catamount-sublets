@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SITE } from "@/config/site";
 import robots from "./robots";
-import sitemap from "./sitemap";
+import { sitemapEntries } from "@/lib/sitemap";
 
 describe("robots and sitemap", () => {
   const rules = robots().rules;
@@ -15,8 +15,16 @@ describe("robots and sitemap", () => {
     for (const path of ["/s/", "/share-card/", "/request", "/survey"]) expect(disallow.some((d) => d && path.startsWith(d))).toBe(false);
   });
 
+  it("lets the signed-out board, map and listings be crawled", () => {
+    for (const path of ["/browse", "/map", "/listing/12"]) expect(disallow.some((d) => d && path.startsWith(d))).toBe(false);
+  });
+
+  it("keeps the signed-in-only pages out", () => {
+    for (const path of ["/post", "/account", "/admin", "/welcome", "/api/events"]) expect(disallow.some((d) => d && path.startsWith(d))).toBe(true);
+  });
+
   it("lists only pages robots allows", () => {
-    for (const { url } of sitemap()) {
+    for (const { url } of sitemapEntries([{ id: 12, updatedAt: new Date() }])) {
       const path = new URL(url).pathname;
       expect(url.startsWith(SITE.url)).toBe(true);
       expect(disallow.some((d) => d && path.startsWith(d))).toBe(false);

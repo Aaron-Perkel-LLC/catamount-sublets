@@ -211,6 +211,9 @@ export function PostForm({
           placeholder="Describe your place — the room, the roommates, parking, what's nearby."
           defaultValue={r?.description ?? ""}
         />
+        <span className="text-xs text-ink-3">
+          Don&apos;t put your address or phone number here; the address field and How to reach you below are for that.
+        </span>
         {err.description && <span className="text-sm text-error-ink">{err.description}</span>}
       </label>
 
@@ -276,10 +279,24 @@ export function PostForm({
         </div>
       </fieldset>
 
-      <p className="text-xs text-ink-3">
-        Your address, description and contact details are shown to signed-in students only. Shared links and previews show the
-        price, semester, size and distance from campus, nothing else.
-      </p>
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-0.5 text-base font-bold">Who can see it</legend>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="signedInOnly" defaultChecked={r?.signedInOnly ?? false} className="mt-0.5 h-4 w-4" />
+          <span>
+            <span className="font-bold">Only show to signed-in students</span>
+            <span className="block text-ink-2">
+              Unticked, anyone can find it without signing in, with the address and your name and contact details left out: they see
+              the photos, the price, semester, size, utilities and amenities, the description with any address, phone number or email
+              taken out, and a circle of about 150 m around your place with its neighborhood.
+            </span>
+          </span>
+        </label>
+        <p className="text-xs text-ink-3">
+          Your exact address, name and contact details are shown to signed-in students only, either way. Shared links and previews show
+          the price, semester, size and distance from campus, nothing else.
+        </p>
+      </fieldset>
 
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" className="btn-primary px-6 py-3" aria-busy={pending} aria-disabled={pending}>

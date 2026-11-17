@@ -34,6 +34,13 @@ export function SiteFooter() {
           </span>
         </p>
         <p>{SITE.disclaimer}</p>
+        <p>
+          Neighborhood borders from{" "}
+          <a href="https://www.openstreetmap.org/copyright" className={link}>
+            © OpenStreetMap contributors
+          </a>
+          .
+        </p>
       </div>
     </footer>
   );

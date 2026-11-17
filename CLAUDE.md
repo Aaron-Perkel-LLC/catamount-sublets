@@ -4,7 +4,7 @@ Guidance for Claude Code working in this repository.
 
 ## What this is
 
-Catamount Sublets (catamountsublets.com): students post one sublet listing each and browse the others by price, semester, distance from campus and amenities, on a grid or a map; listings can be shared outside sign-in through a public preview link. It replaces "UVM Sublets", a PHP app on UVM hosting whose code is linked read-only at `sublets-legacy/` for reference. **`PLAN.md` is the migration plan and the status board**; keep its Status table current when a phase changes state.
+Catamount Sublets (catamountsublets.com): students post one sublet listing each and browse the others by price, semester, distance from campus and amenities, on a grid or a map. Anyone can browse without signing in, seeing an approximate area and no address, poster or contact (unless the poster keeps the listing to signed-in students); signing in shows the rest. Listings can also be shared through a public preview link. It replaces "UVM Sublets", a PHP app on UVM hosting whose code is linked read-only at `sublets-legacy/` for reference. **`PLAN.md` is the migration plan and the status board**; keep its Status table current when a phase changes state.
 
 Stack: Next.js 16 App Router, React 19, TypeScript strict, Tailwind v4, npm, `src/`. Neon Postgres through Drizzle (`casing: "snake_case"`, migrations in `drizzle/`). better-auth with the email-OTP and admin plugins. Resend for mail. Two Vercel Blob stores (private `uploads`, public `media`). MapLibre GL. vitest + PGlite for tests.
 
@@ -30,7 +30,7 @@ npm run email:dev    # react-email preview on :3001
 6. **Authorisation lives in the data-access layer.** Every mutating function takes the acting user's id and filters by it; a zero-row update is a 404. `requireAdmin()` is the first line of every admin action.
 7. **Every input is a zod schema** shared by the Server Action and the form.
 8. **Photos**: raw uploads go to the private store; only sharp output (ICC kept, everything else stripped) reaches the public store. The server chooses pathnames. Never serve a raw upload.
-9. **The public share surface is `shareCardLines()`** (price, negotiable, semester, size, distance) and thumbnails. Adding a field there publishes it.
+9. **The public surface is `toPublicListing()`** (`PublicListing` in `src/server/data/public-listings.ts`: price, negotiable, semester, size, utilities, amenities, posted N days ago, photos, redacted description, generated title, neighborhood, distance from the approximate area and the ~150 m area itself). Every signed-out path (pages, client props, route handlers, map data, sitemap, metadata) takes `PublicListing`, never `ListingDto`, and signed-out queries go through `listingFilterWhere(…, "signed-out")`. `shareCardLines()` is its share-card subset (price, negotiable, semester, size, distance); it goes out for signed-in-only listings too, so it must not grow. Adding a field to either publishes it.
 10. **Dates are Eastern where the product says a "day"**: event dedupe keys, "posted N days ago", the activity chart's buckets. `src/lib/dates.ts` pins `America/New_York`; Vercel runs UTC.
 
 ## Conventions

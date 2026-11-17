@@ -1,57 +1,18 @@
 "use client";
 
-import {
-  Bed,
-  Bolt,
-  Calendar,
-  Car,
-  Droplet,
-  Flame,
-  Mail,
-  MapPin,
-  PawPrint,
-  Pencil,
-  Phone,
-  Receipt,
-  Share2,
-  Shirt,
-  Snowflake,
-  Sofa,
-  UserRound,
-  Users,
-  UtensilsCrossed,
-  Wifi,
-  X,
-} from "lucide-react";
+import { Bed, Calendar, Mail, MapPin, Pencil, Phone, Share2, UserRound, Users, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatMiles } from "@/lib/distance-format";
 import { formatMoney } from "@/lib/format";
-import { AMENITIES, type AmenityKey, amenityFormLabel, type EventSource, UTILITY_KINDS, type UtilityKind } from "@/lib/options";
+import type { EventSource } from "@/lib/options";
 import type { ListingDto } from "@/server/data/listings";
 import { ContactPanel } from "./ContactPanel";
 import { useShareSheet } from "@/components/share/share-sheet";
 import { formatMoney as money } from "@/lib/format";
+import { UtilitiesAndAmenities } from "./facts";
 import { Gallery } from "./Gallery";
 import type { Viewer } from "./listing-view";
-
-const UTILITY_LABELS: Record<UtilityKind, { label: string; icon: ReactNode }> = {
-  electric: { label: "Electric", icon: <Bolt className="h-4 w-4" aria-hidden /> },
-  gas: { label: "Gas", icon: <Flame className="h-4 w-4" aria-hidden /> },
-  water: { label: "Water", icon: <Droplet className="h-4 w-4" aria-hidden /> },
-  internet: { label: "Internet", icon: <Wifi className="h-4 w-4" aria-hidden /> },
-};
-
-const AMENITY_ICONS: Record<AmenityKey, ReactNode> = {
-  freeParking: <Car className="h-4 w-4" aria-hidden />,
-  paidParking: <Car className="h-4 w-4" aria-hidden />,
-  laundryFree: <Shirt className="h-4 w-4" aria-hidden />,
-  laundryPaid: <Shirt className="h-4 w-4" aria-hidden />,
-  dishwasher: <UtensilsCrossed className="h-4 w-4" aria-hidden />,
-  airConditioning: <Snowflake className="h-4 w-4" aria-hidden />,
-  petsAllowed: <PawPrint className="h-4 w-4" aria-hidden />,
-  furnished: <Sofa className="h-4 w-4" aria-hidden />,
-};
 
 function prefersAppleMaps(): boolean {
   return typeof navigator !== "undefined" && /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
@@ -124,8 +85,6 @@ export function ListingModal({
   // Only the distance up here: the semester and the size have their own rows below.
   const facts = formatMiles(listing.distanceMi);
   const useApple = prefersAppleMaps();
-  const utilities = UTILITY_KINDS.filter((k) => listing.utilities[k] !== "");
-  const amenities = (Object.keys(AMENITIES) as AmenityKey[]).filter((k) => listing.amenities[k]);
   const canContact = !listing.isMine;
 
   return (
@@ -245,45 +204,7 @@ export function ListingModal({
 
                 <p className="whitespace-pre-line text-ink">{listing.description || "No description provided."}</p>
 
-                {(utilities.length > 0 || amenities.length > 0 || listing.utilityCost) && (
-                  <div className="flex flex-col gap-3 rounded-lg border border-line bg-cream p-3">
-                    {utilities.length > 0 && (
-                      <div>
-                        <h4 className="mb-1.5 text-sm font-bold">Utilities</h4>
-                        <div className="flex flex-wrap gap-2">
-                          {utilities.map((k) => {
-                            const included = listing.utilities[k] === "landlord";
-                            return (
-                              <span
-                                key={k}
-                                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${included ? "border-included-line bg-included-tint text-included-ink" : "border-tenant-line bg-tenant-tint text-tenant-ink"}`}
-                              >
-                                {UTILITY_LABELS[k].icon} {UTILITY_LABELS[k].label}: {included ? "Included" : "Tenant pays"}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    {listing.utilityCost !== null && listing.utilityCost > 0 && (
-                      <p className="flex items-center gap-1.5 text-sm">
-                        <Receipt className="h-4 w-4" aria-hidden /> Est. monthly utilities: <strong>{formatMoney(listing.utilityCost)}</strong>
-                      </p>
-                    )}
-                    {amenities.length > 0 && (
-                      <div>
-                        <h4 className="mb-1.5 text-sm font-bold">Amenities</h4>
-                        <div className="flex flex-wrap gap-2">
-                          {amenities.map((k) => (
-                            <span key={k} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-2.5 py-1 text-xs">
-                              {AMENITY_ICONS[k]} {amenityFormLabel(k)}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <UtilitiesAndAmenities utilities={listing.utilities} utilityCost={listing.utilityCost} amenities={listing.amenities} />
               </div>
             </>
           )}

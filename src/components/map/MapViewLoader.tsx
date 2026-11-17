@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { preconnect } from "react-dom";
 import { useEffect } from "react";
-import type { ListingDto } from "@/server/data/listings";
+import type { BoardListing } from "../listings/board-listing";
 import { loadMapStyle } from "./basemap";
 
 /** MapLibre needs the DOM, so the map is a client-only chunk loaded on demand. */
@@ -16,7 +16,7 @@ const MapView = dynamic(() => import("./MapView"), {
   ),
 });
 
-export function MapViewLoader({ listings }: { listings: ListingDto[] }) {
+export function MapViewLoader({ listings }: { listings: BoardListing[] }) {
   // The chunk is the slow part; the style and the first tiles can start now.
   preconnect("https://tiles.openfreemap.org");
   useEffect(() => {

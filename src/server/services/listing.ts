@@ -15,6 +15,7 @@ import {
   photoOwner,
   setCoverPhoto,
   setListingStatus,
+  setListingVisibility,
   updateListing,
   type PhotoRow,
 } from "@/server/data/my-listing";
@@ -105,6 +106,22 @@ export async function setStatusFor(db: Db, user: ServiceUser, status: ListingSta
       const snap = await listingSnapshot(db, mine.row.id);
       if (snap) await noticeStatus(snap, status, "poster");
     }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: friendlyError(error) };
+  }
+}
+
+/** The My post switch: show the listing to signed-out visitors (without its address) or keep it to signed-in students. */
+export async function setVisibilityFor(db: Db, user: ServiceUser, signedInOnly: unknown): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await assertWritable(db);
+    const flag = z.boolean().parse(signedInOnly);
+    const mine = await myListing(db, user.id);
+    if (!mine) return { ok: false, error: "You don't have a listing yet." };
+    const changed = await setListingVisibility(db, mine.row.id, { userId: user.id, isAdmin: false }, flag);
+    if (!changed) return { ok: false, error: "You don't have a listing yet." };
+    log.info("listing.visibility", { listingId: mine.row.id, signedInOnly: flag });
     return { ok: true };
   } catch (error) {
     return { ok: false, error: friendlyError(error) };

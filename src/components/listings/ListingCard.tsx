@@ -4,25 +4,27 @@ import { useState } from "react";
 import { formatMiles } from "@/lib/distance-format";
 import { formatMoney } from "@/lib/format";
 import type { EventSource } from "@/lib/options";
-import type { ListingDto } from "@/server/data/listings";
+import { type BoardListing, headingOf, isPublicListing } from "./board-listing";
 import { preloadPhoto } from "./Gallery";
 import { useListingView } from "./listing-view";
 
 /**
  * One listing on the board. The whole card is the button that opens the view;
  * its first photo is preloaded on pointerdown, about 100 ms before the click.
+ * Signed out, the heading is the generated title ("2BR · Old North End").
  */
-export function ListingCard({ listing, source }: { listing: ListingDto; source: EventSource }) {
+export function ListingCard({ listing, source }: { listing: BoardListing; source: EventSource }) {
   const { open } = useListingView();
   const [imgFailed, setImgFailed] = useState(0);
   const cover = listing.photos[0];
   const facts = [formatMiles(listing.distanceMi), listing.sizeSummary].filter(Boolean).join(" · ");
+  const heading = headingOf(listing);
 
   return (
     <article
       role="button"
       tabIndex={0}
-      aria-label={`${formatMoney(listing.price)} a month, ${listing.shortAddress}`}
+      aria-label={`${formatMoney(listing.price)} a month, ${heading}`}
       className="group flex cursor-pointer flex-col overflow-hidden rounded-xl border border-line bg-paper shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-3"
       onClick={() => open(listing, source)}
       onKeyDown={(e) => {
@@ -61,9 +63,9 @@ export function ListingCard({ listing, source }: { listing: ListingDto; source: 
         <span className="absolute right-2 top-2 rounded-full bg-ink/70 px-2 py-0.5 text-xs font-bold text-paper">{listing.semesterLabel}</span>
       </div>
       <div className="flex flex-col gap-1.5 p-3">
-        <h3 className="truncate font-bold text-ink">{listing.shortAddress}</h3>
+        <h3 className="truncate font-bold text-ink">{heading}</h3>
         {facts && <p className="text-sm text-ink-2">{facts}</p>}
-        {listing.confirmedAvailable && <p className="text-xs font-bold text-included-ink">Confirmed available {listing.confirmedAvailable}</p>}
+        {!isPublicListing(listing) && listing.confirmedAvailable && <p className="text-xs font-bold text-included-ink">Confirmed available {listing.confirmedAvailable}</p>}
         {listing.tags.length > 0 && (
           <ul className="flex flex-wrap gap-1.5 text-xs">
             {listing.tags.map((t) => (

@@ -69,9 +69,12 @@ export function verifyShareToken(id: number, token: string, legacyToken: string 
 }
 
 /**
- * Everything the public ever sees of a listing: on the share page's meta
- * tags and painted into the card. Price, semester, size and distance from
- * campus — and nothing else. Adding a field here publishes it.
+ * The share card's lines: on the share page's meta tags and painted into
+ * the card. Price, semester, size and distance from campus (measured from
+ * the approximate area) — and nothing else. A subset of PublicListing
+ * (src/server/data/public-listings.ts), the whole public surface; it goes
+ * out for signed-in-only listings too, so it must never grow towards it.
+ * Adding a field here publishes it.
  */
 export interface ShareCardLines {
   price: string;

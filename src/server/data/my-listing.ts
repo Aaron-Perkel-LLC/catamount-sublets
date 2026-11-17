@@ -6,6 +6,7 @@ import type { ListingInput } from "@/lib/listing-input";
 import type { ListingStatus } from "@/lib/options";
 import { sortSemesters } from "@/lib/semesters";
 import type { ProcessedPhoto } from "@/server/images/process";
+import { fuzzedArea } from "@/server/geo-fuzz";
 import { posterColumns, shownName } from "./names";
 import { setListingSemesters } from "./semesters";
 
@@ -93,6 +94,12 @@ function columns(input: ListingInput) {
   return { ...(rest as Omit<ListingInput, "semesters">), contactEmail: input.contactEmail || null, contactPhone: input.contactPhone || null, description: input.description || null };
 }
 
+/** The approximate area's center for a listing at (lat, lon); written whenever lat/lon is (src/server/geo-fuzz.ts). */
+function areaColumns(listingId: number, lat: number, lon: number) {
+  const area = fuzzedArea(listingId, lat, lon);
+  return { areaLat: area.lat, areaLon: area.lon };
+}
+
 /** Create the listing (no photos yet; it is not on the board until one is added). */
 export async function createListing(
   tx: DbOrTx,
@@ -104,6 +111,8 @@ export async function createListing(
     .insert(listings)
     .values({ userId, ...columns(input) })
     .returning({ id: listings.id });
+  // The area is keyed by the id, which only exists now.
+  await tx.update(listings).set(areaColumns(row.id, input.lat, input.lon)).where(eq(listings.id, row.id));
   await setListingSemesters(tx, row.id, orderedSemesters);
   return row.id;
 }
@@ -118,12 +127,28 @@ export async function updateListing(
 ): Promise<boolean> {
   const updated = await tx
     .update(listings)
-    .set({ ...columns(input), updatedAt: new Date() })
+    .set({ ...columns(input), ...areaColumns(listingId, input.lat, input.lon), updatedAt: new Date() })
     .where(owned(listingId, actor))
     .returning({ id: listings.id });
   if (updated.length === 0) return false;
   await setListingSemesters(tx, listingId, orderedSemesters);
   return true;
+}
+
+/**
+ * Show the listing to signed-out visitors too, or keep it to signed-in
+ * students. Making it public works out its area if it has none yet (a
+ * listing from before signed-out browsing). False when it is not the actor's.
+ */
+export async function setListingVisibility(db: DbOrTx, listingId: number, actor: Actor, signedInOnly: boolean): Promise<boolean> {
+  const [row] = await db.select({ lat: listings.lat, lon: listings.lon }).from(listings).where(owned(listingId, actor));
+  if (!row) return false;
+  const rows = await db
+    .update(listings)
+    .set({ signedInOnly, ...areaColumns(listingId, row.lat, row.lon), updatedAt: new Date() })
+    .where(owned(listingId, actor))
+    .returning({ id: listings.id });
+  return rows.length > 0;
 }
 
 /** Returns true when the status actually changed. */

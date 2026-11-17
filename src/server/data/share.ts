@@ -1,9 +1,11 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { DbOrTx } from "@/db";
 import { listingPhotos, listings } from "@/db/schema";
+import { milesFromCampus } from "@/lib/distance";
 import { shareCardLines, type ShareCardLines, verifyShareToken } from "@/lib/share";
+import { fuzzedArea } from "@/server/geo-fuzz";
 import { labelFor, listingSemestersByListing } from "./semesters";
-import { campusDistanceMiles, publicListingWhere, visibleSemesterWhere } from "./visibility";
+import { publicListingWhere, visibleSemesterWhere } from "./visibility";
 
 /**
  * What a share link resolves to. Read by anyone, crawlers included, so it
@@ -18,8 +20,14 @@ export type ShareResolution =
   | { state: "taken" }
   | { state: "unavailable" };
 
+/**
+ * Bumped when every card's content changes at once, so the CDN and the
+ * apps that cached a card under the old URL fetch the new one. v2 (16 Nov
+ * 2026): the distance is measured from the approximate area, not the house.
+ */
+const CARD_VERSION = "v2";
+
 export async function resolveShare(db: DbOrTx, id: number, token: string): Promise<ShareResolution> {
-  const distance = campusDistanceMiles();
   const [row] = await db
     .select({
       id: listings.id,
@@ -30,7 +38,8 @@ export async function resolveShare(db: DbOrTx, id: number, token: string): Promi
       roommates: listings.roommates,
       status: listings.status,
       legacyToken: listings.legacyShareToken,
-      distanceMi: distance,
+      lat: listings.lat,
+      lon: listings.lon,
     })
     .from(listings)
     .where(and(eq(listings.id, id), visibleSemesterWhere(), inArray(listings.status, ["open", "taken"])))
@@ -50,8 +59,19 @@ export async function resolveShare(db: DbOrTx, id: number, token: string): Promi
     .where(eq(listingPhotos.listingId, id))
     .orderBy(asc(listingPhotos.sortOrder), asc(listingPhotos.id))
     .limit(1);
-  const lines = shareCardLines({ ...row, distanceMi: Number(row.distanceMi), semesterLabel: label });
-  const fingerprint = fingerprintOf([cover?.stem ?? "", lines.price, lines.semester, lines.facts, String(lines.negotiable)]);
+  // From the approximate area, as the signed-out board shows it (works for a signed-in-only listing too:
+  // its share link still works, and the card must not be more exact than the public board).
+  const area = fuzzedArea(id, row.lat, row.lon);
+  const lines = shareCardLines({
+    price: row.price,
+    priceNegotiable: row.priceNegotiable,
+    bedrooms: row.bedrooms,
+    bathrooms: row.bathrooms,
+    roommates: row.roommates,
+    distanceMi: milesFromCampus(area.lat, area.lon),
+    semesterLabel: label,
+  });
+  const fingerprint = fingerprintOf([CARD_VERSION, cover?.stem ?? "", lines.price, lines.semester, lines.facts, String(lines.negotiable)]);
   return { state: "open", id, lines, cardImageUrl: cover?.cardUrl ?? null, fingerprint };
 }
 

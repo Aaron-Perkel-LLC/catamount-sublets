@@ -2,6 +2,7 @@
 
 import {
   AttributionControl,
+  type GeoJSONSource,
   LngLatBounds,
   Map as MlMap,
   Marker,
@@ -15,8 +16,9 @@ import { useEffect, useRef, useState } from "react";
 import { CAMPUS } from "@/config/site";
 import { pinGroupKey } from "@/lib/distance";
 import { formatMoney } from "@/lib/format";
+import { circleRing } from "@/lib/geo-fuzz";
 import { track } from "@/lib/track";
-import type { ListingDto } from "@/server/data/listings";
+import { type BoardListing, headingOf, isPublicListing, pointOf } from "../listings/board-listing";
 import { preloadPhoto } from "../listings/Gallery";
 import { useListingView } from "../listings/listing-view";
 import { fallbackStyle, foldAttribution, loadMapStyle, MAP_MAX_ZOOM, watchVectorMap, webglAvailable } from "./basemap";
@@ -28,9 +30,11 @@ pointMapLibreAtServedWorker();
  * The Map page's map. The map instance lives for the page; markers are
  * rebuilt whenever the listings change (a filter). Listings within about
  * 10 m share one pin showing the lowest rent and a count, and its popup
- * stacks them, cheapest first.
+ * stacks them, cheapest first. Signed out, each listing is its approximate
+ * area instead: a circle with the price tag in its middle, pointing at
+ * nothing (PublicListing has no true point to point at).
  */
-export default function MapView({ listings }: { listings: ListingDto[] }) {
+export default function MapView({ listings }: { listings: BoardListing[] }) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const markers = useRef<Marker[]>([]);
@@ -80,6 +84,10 @@ export default function MapView({ listings }: { listings: ListingDto[] }) {
       map.addControl(new ScaleControl({ unit: "imperial" }), "bottom-left");
       map.addControl(new AttributionControl({ compact: true }), "bottom-right");
       foldAttribution(map);
+      // The circles are a map layer, so a style swap (the raster fallback) drops them: draw them again.
+      const built = map;
+      built.on("style.load", () => drawAreas(built, listingsRef.current));
+      built.on("load", () => drawAreas(built, listingsRef.current));
       const campusEl = document.createElement("div");
       campusEl.className = "campus-pin";
       campusEl.title = "Campus";
@@ -112,9 +120,11 @@ export default function MapView({ listings }: { listings: ListingDto[] }) {
     for (const m of markers.current) m.remove();
     markers.current = [];
 
-    const groups = new Map<string, ListingDto[]>();
+    if (map.isStyleLoaded()) drawAreas(map, listings);
+    const groups = new Map<string, BoardListing[]>();
     for (const l of listings) {
-      const key = pinGroupKey(l.lat, l.lon);
+      const p = pointOf(l);
+      const key = pinGroupKey(p.lat, p.lon);
       groups.set(key, [...(groups.get(key) ?? []), l]);
     }
     const bounds = new LngLatBounds();
@@ -123,13 +133,15 @@ export default function MapView({ listings }: { listings: ListingDto[] }) {
     for (const group of groups.values()) {
       group.sort((a, b) => a.price - b.price);
       const first = group[0];
+      const at = pointOf(first);
+      const area = isPublicListing(first);
       const label =
         group.length > 1
           ? `${group.length} listings from ${formatMoney(first.price)} a month`
-          : `${formatMoney(first.price)} a month, ${first.shortAddress}`;
+          : `${formatMoney(first.price)} a month, ${headingOf(first)}`;
 
       const el = document.createElement("div");
-      el.className = "price-pin";
+      el.className = area ? "price-pin is-area" : "price-pin";
       el.setAttribute("role", "button");
       el.setAttribute("aria-label", label);
       el.tabIndex = 0;
@@ -146,10 +158,10 @@ export default function MapView({ listings }: { listings: ListingDto[] }) {
       }
       el.appendChild(tag);
 
-      const popup = new Popup({ offset: 36, closeButton: true, maxWidth: "260px", anchor: "bottom", className: "listing-popup" }).setDOMContent(
+      const popup = new Popup({ offset: area ? 18 : 36, closeButton: true, maxWidth: "260px", anchor: "bottom", className: "listing-popup" }).setDOMContent(
         popupContent(group, (l) => openRef.current(l, "map")),
       );
-      const marker = new Marker({ element: el, anchor: "bottom" }).setLngLat([first.lon, first.lat]).setPopup(popup).addTo(map);
+      const marker = new Marker({ element: el, anchor: area ? "center" : "bottom" }).setLngLat([at.lon, at.lat]).setPopup(popup).addTo(map);
       el.addEventListener("keydown", (e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -171,7 +183,7 @@ export default function MapView({ listings }: { listings: ListingDto[] }) {
         el.style.zIndex = "";
       });
       markers.current.push(marker);
-      bounds.extend([first.lon, first.lat]);
+      bounds.extend([at.lon, at.lat]);
     }
 
     if (listings.length > 0 && !firstFit.current) {
@@ -209,16 +221,46 @@ export default function MapView({ listings }: { listings: ListingDto[] }) {
 const FIT = { padding: { top: 70, left: 60, right: 90, bottom: 50 }, maxZoom: 16 };
 
 /** Campus plus every listing, or null when there are none. */
-function boundsOf(listings: ListingDto[]): LngLatBounds | null {
+function boundsOf(listings: BoardListing[]): LngLatBounds | null {
   if (listings.length === 0) return null;
   const b = new LngLatBounds();
   b.extend([CAMPUS.lon, CAMPUS.lat]);
-  for (const l of listings) b.extend([l.lon, l.lat]);
+  for (const l of listings) {
+    const p = pointOf(l);
+    b.extend([p.lon, p.lat]);
+  }
   return b;
 }
 
-/** One pin's popup: each listing's thumbnail, price, address, size, semester and a View button. */
-function popupContent(group: ListingDto[], onOpen: (l: ListingDto) => void): HTMLElement {
+const AREAS = "public-areas";
+/** The lake token by hand: a GL style cannot read CSS variables (see MAP_COLOURS in ./basemap). */
+const AREA_COLOUR = "#1D4F73";
+
+/** The approximate-area circles, one per public listing; nothing at all for a signed-in map. */
+function drawAreas(map: MlMap, listings: BoardListing[]) {
+  const features = listings.filter(isPublicListing).map((l) => ({
+    type: "Feature" as const,
+    properties: { id: l.id },
+    geometry: { type: "Polygon" as const, coordinates: [circleRing(l.area)] },
+  }));
+  const source = map.getSource(AREAS) as GeoJSONSource | undefined;
+  const data = { type: "FeatureCollection" as const, features };
+  try {
+    if (source) {
+      source.setData(data);
+      return;
+    }
+    if (features.length === 0) return;
+    map.addSource(AREAS, { type: "geojson", data });
+    map.addLayer({ id: `${AREAS}-fill`, type: "fill", source: AREAS, paint: { "fill-color": AREA_COLOUR, "fill-opacity": 0.14 } });
+    map.addLayer({ id: `${AREAS}-line`, type: "line", source: AREAS, paint: { "line-color": AREA_COLOUR, "line-width": 1.5, "line-opacity": 0.6 } });
+  } catch {
+    // The style is mid-swap; its "style.load" draws them again.
+  }
+}
+
+/** One pin's popup: each listing's thumbnail, price, heading (address, or the public title), size, semester and a View button. */
+function popupContent(group: BoardListing[], onOpen: (l: BoardListing) => void): HTMLElement {
   const root = document.createElement("div");
   root.className = "map-popup";
   if (group.length > 1) {
@@ -246,7 +288,7 @@ function popupContent(group: ListingDto[], onOpen: (l: ListingDto) => void): HTM
     entry.appendChild(price);
     const addr = document.createElement("div");
     addr.className = "popup-address";
-    addr.textContent = l.shortAddress;
+    addr.textContent = headingOf(l);
     entry.appendChild(addr);
     if (l.sizeSummary) {
       const size = document.createElement("div");

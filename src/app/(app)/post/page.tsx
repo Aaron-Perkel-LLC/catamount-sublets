@@ -5,6 +5,7 @@ import { PostEditor } from "@/components/post/PostEditor";
 import { PostedBanner } from "@/components/post/PostedBanner";
 import { ManagePanel } from "@/components/post/ManagePanel";
 import { StatusBar } from "@/components/post/StatusBar";
+import { VisibilityNotice } from "@/components/post/VisibilityNotice";
 import { formatMoney } from "@/lib/format";
 import { semesterLabel } from "@/lib/semesters";
 import { shareUrl } from "@/lib/share";
@@ -62,6 +63,7 @@ export default async function PostPage({ searchParams }: { searchParams: Promise
             }}
           />
         )}
+        {listing && <VisibilityNotice signedInOnly={listing.row.signedInOnly} />}
       </div>
       <PostEditor listing={listing} semesterOptions={options} accountEmail={user.email} uploadMode={storageMode()} />
       {listing && <ManagePanel status={listing.row.status as ListingStatus} />}

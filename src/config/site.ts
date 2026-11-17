@@ -80,6 +80,17 @@ export const ADMIN_INBOX: string | undefined = ALLOWED_EMAILS[0];
  */
 export const CAMPUS = { lat: 44.477435, lon: -73.195323 } as const;
 
+/**
+ * What a signed-out visitor sees instead of the address (src/server/data/public-listings.ts).
+ * The true point lies `minOffsetM`–`maxOffsetM` from the circle's center, always
+ * inside its `radiusM`. With fewer than `landingMinThumbs` public listings the
+ * front page shows the count and the sign-in line instead of covers.
+ */
+export const PUBLIC_AREA = { radiusM: 150, minOffsetM: 40, maxOffsetM: 110, landingMinThumbs: 4 } as const;
+
+/** The named areas the approximate circle is labelled with (polygons in ./neighborhoods.ts, generated from docs/neighborhoods/). */
+export { NEIGHBORHOOD_FALLBACK, NEIGHBORHOODS } from "./neighborhoods";
+
 /** Posting limits. */
 export const LIMITS = {
   photosPerListing: 25,

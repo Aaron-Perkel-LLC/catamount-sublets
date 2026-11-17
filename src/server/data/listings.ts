@@ -24,10 +24,15 @@ import {
 } from "@/lib/options";
 import { posterColumns, shownName, type PosterColumns } from "./names";
 import { labelFor, listingSemestersByListing } from "./semesters";
-import { campusDistanceMiles, publicListingWhere } from "./visibility";
+import { type Audience, campusDistanceMiles, publicListingWhere, signedOutAudienceWhere } from "./visibility";
 
-/** What a card and the listing view need. No contact details, no owner id. */
+/**
+ * What a card and the listing view need, for a signed-in viewer only. No
+ * contact details, no owner id. Signed-out paths take PublicListing
+ * (./public-listings.ts) instead; `audience?: never` keeps the two apart.
+ */
 export interface ListingDto {
+  audience?: never;
   id: number;
   price: number;
   priceNegotiable: boolean;
@@ -80,9 +85,15 @@ const AMENITY_COLUMNS: Record<AmenityKey, PgColumn> = {
   furnished: listings.amenityFurnished,
 };
 
-/** The WHERE for Browse and Map: visibility plus every filter in use. */
-export function listingFilterWhere(q: ListingQuery, distance: SQL<number>): SQL {
+/**
+ * The WHERE for Browse and Map: visibility plus every filter in use. Signed
+ * out, only listings their posters show publicly, `distance` must be the
+ * area's (campusDistanceMiles("signed-out")), and "Open to" is ignored: it
+ * would reveal roommate preferences, which are signed-in only.
+ */
+export function listingFilterWhere(q: ListingQuery, distance: SQL<number>, audience: Audience = "signed-in"): SQL {
   const parts: (SQL | undefined)[] = [publicListingWhere()];
+  if (audience === "signed-out") parts.push(signedOutAudienceWhere());
   if (q.minPrice !== undefined && q.maxPrice !== undefined) {
     parts.push(gte(listings.price, q.minPrice), lte(listings.price, q.maxPrice));
   }
@@ -99,14 +110,14 @@ export function listingFilterWhere(q: ListingQuery, distance: SQL<number>): SQL 
     parts.push(or(...flags.map((f) => eq(AMENITY_COLUMNS[f], true))));
   }
   if (q.negotiable) parts.push(eq(listings.priceNegotiable, true));
-  if (q.openTo) {
+  if (q.openTo && audience === "signed-in") {
     const prefs = OPEN_TO_FILTERS[q.openTo].prefs;
     parts.push(or(eq(listings.roommatePreference, ""), inArray(listings.roommatePreference, [...prefs])));
   }
   return and(...parts)!;
 }
 
-function orderFor(sort: ListingSort, distance: SQL<number>): SQL[] {
+export function orderFor(sort: ListingSort, distance: SQL<number>): SQL[] {
   switch (sort) {
     case "oldest":
       return [asc(listings.id)];
@@ -121,7 +132,7 @@ function orderFor(sort: ListingSort, distance: SQL<number>): SQL[] {
   }
 }
 
-const BROWSE_LIMIT = 200;
+export const BROWSE_LIMIT = 200;
 
 export interface BrowseResult {
   listings: ListingDto[];
@@ -293,8 +304,8 @@ export interface FilterBounds {
  * paused listing cannot stretch a slider. Prices to the nearest $50, distance
  * to the nearest half mile; defaults when the board is empty.
  */
-export async function filterBounds(db: DbOrTx): Promise<FilterBounds> {
-  const distance = campusDistanceMiles();
+export async function filterBounds(db: DbOrTx, audience: Audience = "signed-in"): Promise<FilterBounds> {
+  const distance = campusDistanceMiles(audience);
   const [row] = await db
     .select({
       min: sql<number | null>`min(${listings.price})::float`,
@@ -302,7 +313,7 @@ export async function filterBounds(db: DbOrTx): Promise<FilterBounds> {
       dist: sql<number | null>`max(${distance})::float`,
     })
     .from(listings)
-    .where(publicListingWhere());
+    .where(audience === "signed-out" ? and(publicListingWhere(), signedOutAudienceWhere()) : publicListingWhere());
   const maxPrice = Math.max(Math.ceil((row?.max ?? 3000) / 50) * 50, 100);
   const minPrice = Math.min(Math.floor((row?.min ?? 0) / 50) * 50, maxPrice - 50);
   const maxDistance = Math.max(Math.ceil((row?.dist ?? 20) * 2) / 2, 1);

@@ -1,12 +1,12 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import type { DbOrTx } from "@/db";
 import { listingPhotos, listings } from "@/db/schema";
 import { semesterLabel } from "@/lib/semesters";
 import { boardSemesters } from "./semesters";
-import { publicListingWhere } from "./visibility";
+import { publicListingWhere, signedOutAudienceWhere } from "./visibility";
 
 export interface LandingBoard {
-  /** Cover thumbnails of the newest listings on the board, for the photo board. */
+  /** Cover thumbnails of the newest listings on the signed-out board (a listing kept to signed-in students never shows here). */
   thumbs: string[];
   count: number;
   /** "Spring 2027" / "Spring & Summer 2027" / "" */
@@ -15,17 +15,22 @@ export interface LandingBoard {
 
 /**
  * The front page's facts: what is on the board right now. Public, and read
- * without a session, so it carries thumbnails and counts only.
+ * without a session, so it carries thumbnails and counts only. The count is
+ * the whole board; the covers come only from listings shown to signed-out
+ * visitors.
  */
 export async function landingBoard(db: DbOrTx): Promise<LandingBoard> {
-  const rows = await db
-    .select({ id: listings.id })
-    .from(listings)
-    .where(publicListingWhere())
-    .orderBy(desc(listings.id));
-  const ids = rows.map((r) => r.id);
+  const [all, open] = await Promise.all([
+    db.select({ id: listings.id }).from(listings).where(publicListingWhere()),
+    db
+      .select({ id: listings.id })
+      .from(listings)
+      .where(and(publicListingWhere(), signedOutAudienceWhere()))
+      .orderBy(desc(listings.id))
+      .limit(12),
+  ]);
   const thumbs: string[] = [];
-  for (const id of ids.slice(0, 12)) {
+  for (const { id } of open) {
     const [cover] = await db
       .select({ thumb: listingPhotos.thumbUrl })
       .from(listingPhotos)
@@ -35,5 +40,5 @@ export async function landingBoard(db: DbOrTx): Promise<LandingBoard> {
     if (cover?.thumb) thumbs.push(cover.thumb);
   }
   const sems = await boardSemesters(db);
-  return { thumbs, count: ids.length, semesters: semesterLabel(sems.map((s) => s.name)) };
+  return { thumbs, count: all.length, semesters: semesterLabel(sems.map((s) => s.name)) };
 }

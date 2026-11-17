@@ -1,4 +1,4 @@
-import { bigint, char, check, index, integer, pgTable, text, unique } from "drizzle-orm/pg-core";
+import { bigint, boolean, char, check, index, integer, pgTable, text, unique } from "drizzle-orm/pg-core";
 import { EVENT_SOURCES, EVENT_TYPE_VALUES, SHARE_TARGETS } from "@/lib/options";
 import { createdAt, inList, inListOrNull } from "./helpers";
 import { listings } from "./listings";
@@ -16,8 +16,14 @@ export const listingEvents = pgTable(
     listingId: integer()
       .notNull()
       .references(() => listings.id, { onDelete: "cascade" }),
-    /** hmac_sha256(APP_SECRET, 'actor:' + user.id)[0:16]. */
+    /**
+     * hmac_sha256(APP_SECRET, 'actor:' + user.id)[0:16]; for a signed-out
+     * view, hmac_sha256(APP_SECRET, 'anon-view:' + Eastern date + ':' + IP + UA)[0:16],
+     * which changes every day and from which the IP cannot be recovered.
+     */
     actorKey: char({ length: 16 }).notNull(),
+    /** A signed-out visitor's listing view (the only event a signed-out visitor can record). */
+    signedOut: boolean().notNull().default(false),
     /** The listing's first semester at the time, so archiving can count by semester. */
     semesterCode: text(),
     type: text().notNull(),

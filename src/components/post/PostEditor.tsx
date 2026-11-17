@@ -36,6 +36,9 @@ export function PostEditor({
         <h2 id="photos-heading" className="text-lg font-bold">
           Photos
         </h2>
+        <p className="text-sm text-ink-2">
+          Photos can be seen without signing in. Leave out people, mail, the house number and the street sign.
+        </p>
         <PhotoManager ref={photos} listingId={listing?.row.id ?? null} initial={listing?.photos ?? []} uploadMode={uploadMode} onPendingChange={setReady} />
       </section>
       <section aria-labelledby="details-heading" className="flex flex-col gap-3">

@@ -14,8 +14,15 @@ import { NextResponse, type NextRequest } from "next/server";
  * 2. An optimistic gate for the signed-in area: no session cookie at all means
  *    a redirect to sign-in without touching the database. The real check is
  *    src/app/(app)/layout.tsx, which validates the session on every request.
+ *
+ * 3. The board (/browse, /map, /listing/…) is open to signed-out visitors and
+ *    renders differently with a session, so no cache between here and the
+ *    browser may keep one render and hand it to someone else: private,
+ *    no-store, and Vary: Cookie for anything that ignores no-store.
  */
-const PROTECTED = ["/browse", "/map", "/post", "/account", "/admin", "/listing", "/welcome"];
+const PROTECTED = ["/post", "/account", "/admin", "/welcome"];
+const BOARD = ["/browse", "/map", "/listing"];
+const under = (pathname: string, roots: readonly string[]) => roots.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 const COOKIE_NAMES = ["__Secure-catamount.session_token", "catamount.session_token"];
 
 function csp(nonce: string): string {
@@ -42,7 +49,7 @@ function csp(nonce: string): string {
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  if (PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !COOKIE_NAMES.some((name) => request.cookies.has(name))) {
+  if (under(pathname, PROTECTED) && !COOKIE_NAMES.some((name) => request.cookies.has(name))) {
     const signIn = new URL("/sign-in", request.url);
     signIn.searchParams.set("next", pathname + search);
     return NextResponse.redirect(signIn);
@@ -56,6 +63,10 @@ export function proxy(request: NextRequest) {
   requestHeaders.set("Content-Security-Policy", policy);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", policy);
+  if (under(pathname, BOARD)) {
+    response.headers.set("Cache-Control", "private, no-store, max-age=0");
+    response.headers.set("Vary", "Cookie");
+  }
   return response;
 }
 

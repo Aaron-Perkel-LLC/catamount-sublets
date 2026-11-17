@@ -13,8 +13,9 @@ import {
   SHARE_TARGETS,
   type ShareTarget,
 } from "@/lib/options";
-import { actorKey } from "@/lib/share";
-import { visibleSemesterWhere } from "./visibility";
+import { createHmac } from "node:crypto";
+import { actorKey, appSecret } from "@/lib/share";
+import { publicListingWhere, signedOutAudienceWhere, visibleSemesterWhere } from "./visibility";
 
 /**
  * The activity log. No user ids are stored: the actor is a keyed hash, and
@@ -67,6 +68,58 @@ export async function recordEvent(db: DbOrTx, actor: { id: string; role: "user" 
   const inserted = await db
     .insert(listingEvents)
     .values({ listingId: input.listingId, actorKey: key, semesterCode: listing.semesterCode, type, source, target, dedupeKey })
+    .onConflictDoNothing({ target: listingEvents.dedupeKey })
+    .returning({ id: listingEvents.id });
+  return inserted.length > 0 ? "stored" : "duplicate";
+}
+
+/**
+ * A signed-out visitor's actor key: HMAC(APP_SECRET, "anon-view:" + Eastern
+ * date + ":" + IP + "\n" + user agent), first 16 hex. It changes every
+ * Eastern day, so one visitor is one view per listing per day and cannot be
+ * followed from one day to the next, and the IP cannot be recovered from it.
+ * The IP itself is never stored or logged.
+ */
+export function anonymousActorKey(ip: string, userAgent: string, at = new Date()): string {
+  return createHmac("sha256", appSecret()).update(`anon-view:${easternDate(at)}:${ip}\n${userAgent}`).digest("hex").slice(0, 16);
+}
+
+/**
+ * A signed-out view (listing_open, nothing else): only for a listing on the
+ * signed-out board, with the same per-key rate limit and Eastern-day dedupe
+ * as a signed-in view, flagged signed_out. The caller has dropped bots.
+ */
+export async function recordAnonymousView(db: DbOrTx, input: { listingId: number; source?: string | null; ip: string; userAgent: string }): Promise<RecordResult> {
+  if (!Number.isInteger(input.listingId) || input.listingId <= 0 || !input.ip) return "invalid";
+  const source = input.source && (EVENT_SOURCES as readonly string[]).includes(input.source) ? (input.source as EventSource) : null;
+  const [listing] = await db
+    .select({ semesterCode: listingSemesters.semesterCode })
+    .from(listings)
+    .leftJoin(listingSemesters, and(eq(listingSemesters.listingId, listings.id), eq(listingSemesters.position, 0)))
+    .where(and(eq(listings.id, input.listingId), publicListingWhere(), signedOutAudienceWhere()))
+    .limit(1);
+  if (!listing) return "invalid";
+
+  const now = new Date();
+  const key = anonymousActorKey(input.ip, input.userAgent, now);
+  const [{ n }] = await db
+    .select({ n: count() })
+    .from(listingEvents)
+    .where(and(eq(listingEvents.actorKey, key), gt(listingEvents.createdAt, new Date(now.getTime() - 60_000))));
+  if (n >= EVENTS_PER_MINUTE) return "limited";
+
+  const type: EventType = "listing_open";
+  const inserted = await db
+    .insert(listingEvents)
+    .values({
+      listingId: input.listingId,
+      actorKey: key,
+      semesterCode: listing.semesterCode,
+      type,
+      source,
+      signedOut: true,
+      dedupeKey: `${type}:${input.listingId}:${key}:${easternDate(now)}`,
+    })
     .onConflictDoNothing({ target: listingEvents.dedupeKey })
     .returning({ id: listingEvents.id });
   return inserted.length > 0 ? "stored" : "duplicate";

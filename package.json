@@ -18,6 +18,7 @@
     "migrate:legacy": "node --env-file-if-exists=.env.local --import tsx scripts/migrate-legacy/index.ts",
     "delete-user": "node --env-file-if-exists=.env.local --import tsx scripts/admin/delete-user.ts",
     "check:brand": "bash scripts/check-brand.sh",
+    "check:public-leaks": "node --import tsx scripts/check-public-leaks.ts",
     "send-welcome": "node --env-file-if-exists=.env.local --import tsx scripts/admin/send-welcome.ts",
     "clear-rate-limits": "node --env-file-if-exists=.env.local --import tsx scripts/admin/clear-rate-limits.ts",
     "welcome-batches": "node --env-file-if-exists=.env.local --import tsx scripts/admin/welcome-batches.ts",

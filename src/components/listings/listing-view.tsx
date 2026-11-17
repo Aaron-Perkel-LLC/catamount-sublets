@@ -4,7 +4,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { EventSource } from "@/lib/options";
 import { track } from "@/lib/track";
 import type { ListingDto } from "@/server/data/listings";
+import { type BoardListing, isPublicListing } from "./board-listing";
 import { ListingModal } from "./ListingModal";
+import { PublicListingModal } from "./PublicListingModal";
 
 /**
  * Who is looking, for the parts of the view that depend on it: the email
@@ -18,9 +20,9 @@ export interface Viewer {
 }
 
 interface ListingViewApi {
-  open: (listing: ListingDto, source: EventSource) => void;
+  open: (listing: BoardListing, source: EventSource) => void;
   close: () => void;
-  current: ListingDto | null;
+  current: BoardListing | null;
 }
 
 const Ctx = createContext<ListingViewApi | null>(null);
@@ -36,11 +38,12 @@ export function ListingViewProvider({
   actions: Actions,
 }: {
   children: ReactNode;
-  viewer: Viewer;
+  /** Null for a signed-out visitor, whose listings are all PublicListing and open in the public view. */
+  viewer: Viewer | null;
   /** Extra controls at the top of the view; the admin page's status, photos and delete. */
   actions?: ComponentType<{ listing: ListingDto; close: () => void }>;
 }) {
-  const [current, setCurrent] = useState<ListingDto | null>(null);
+  const [current, setCurrent] = useState<BoardListing | null>(null);
   const [source, setSource] = useState<EventSource>("browse");
   const pushed = useRef(false);
   const lastFocused = useRef<HTMLElement | null>(null);
@@ -52,7 +55,7 @@ export function ListingViewProvider({
     if (el && document.contains(el)) el.focus();
   }, []);
 
-  const open = useCallback((listing: ListingDto, from: EventSource) => {
+  const open = useCallback((listing: BoardListing, from: EventSource) => {
     lastFocused.current = document.activeElement as HTMLElement | null;
     setSource(from);
     setCurrent(listing);
@@ -86,7 +89,12 @@ export function ListingViewProvider({
   return (
     <Ctx.Provider value={api}>
       {children}
-      {current && <ListingModal key={current.id} listing={current} source={source} viewer={viewer} onClose={close} actions={Actions && <Actions listing={current} close={close} />} />}
+      {current &&
+        (isPublicListing(current) ? (
+          <PublicListingModal key={current.id} listing={current} onClose={close} />
+        ) : (
+          viewer && <ListingModal key={current.id} listing={current} source={source} viewer={viewer} onClose={close} actions={Actions && <Actions listing={current} close={close} />} />
+        ))}
     </Ctx.Provider>
   );
 }

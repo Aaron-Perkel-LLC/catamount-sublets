@@ -25,6 +25,8 @@ interface Props {
   count: number;
   /** Results on the page, for the sheet's Apply button. */
   resultCount: number;
+  /** Signed out: no roommate-preference filter (preferences are for signed-in students only). */
+  signedOut?: boolean;
 }
 
 const PHONE = "(max-width: 767px)";
@@ -35,7 +37,7 @@ const PHONE = "(max-width: 767px)";
  * slider leaves its parameter out, so it is not a filter. On a desktop it is
  * an inline panel; on a phone a bottom sheet behind a sticky bar.
  */
-export function FilterBar({ mode, query, bounds, semesters, emptySemesters, count, resultCount }: Props) {
+export function FilterBar({ mode, query, bounds, semesters, emptySemesters, count, resultCount, signedOut = false }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
@@ -208,6 +210,7 @@ export function FilterBar({ mode, query, bounds, semesters, emptySemesters, coun
               ))}
             </select>
           </label>
+          {!signedOut && (
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-bold">Roommate preference</span>
             <select
@@ -223,6 +226,7 @@ export function FilterBar({ mode, query, bounds, semesters, emptySemesters, coun
               ))}
             </select>
           </label>
+          )}
           <SingleRange
             label="Distance from campus"
             min={0.25}

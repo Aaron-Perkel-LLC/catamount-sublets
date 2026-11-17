@@ -229,6 +229,13 @@
   .price-pin-count {
     @apply rounded-full bg-paper/25 px-1.5 text-xs;
   }
+  /* Signed out: the tag sits in the middle of the approximate-area circle and points at nothing. */
+  .price-pin.is-area .price-pin-tag {
+    transform-origin: 50% 50%;
+  }
+  .price-pin.is-area .price-pin-tag::after {
+    display: none;
+  }
   .map-popup {
     @apply w-[220px] p-3 text-ink;
   }

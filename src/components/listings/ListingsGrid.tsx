@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 import type { EventSource } from "@/lib/options";
 import { track } from "@/lib/track";
-import type { ListingDto } from "@/server/data/listings";
+import type { BoardListing } from "./board-listing";
 import { ListingCard } from "./ListingCard";
 import { useListingView } from "./listing-view";
 
@@ -19,12 +19,15 @@ export function ListingsGrid({
   openSource,
   anyExists,
   filtered,
+  signedOut = false,
 }: {
-  listings: ListingDto[];
+  listings: BoardListing[];
   openId?: number;
   openSource?: EventSource;
   anyExists: boolean;
   filtered: boolean;
+  /** Signed out, a followed listing may only be missing because it is for signed-in students: say so, without saying which. */
+  signedOut?: boolean;
 }) {
   const { open } = useListingView();
   const opened = useRef<number | null>(null);
@@ -49,7 +52,9 @@ export function ListingsGrid({
     <div id="listingsGrid" className="flex flex-col gap-4">
       {missing && (
         <p className="rounded-lg border border-notice-line bg-notice-tint px-3 py-2 text-sm text-notice-ink">
-          The listing you followed isn&apos;t up any more. Here is everything that is.
+          {signedOut
+            ? "The listing you followed isn't on the public board: it's for signed-in students, or it isn't up any more. Here is everything that is."
+            : "The listing you followed isn't up any more. Here is everything that is."}
         </p>
       )}
       {listings.length === 0 ? (

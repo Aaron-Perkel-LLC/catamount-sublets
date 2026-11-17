@@ -9,6 +9,7 @@ import { ADMIN_INBOX, ALLOWED_EMAIL_DOMAINS } from "@/config/site";
 import { getDb } from "@/db";
 import * as s from "@/db/schema";
 import { setListingSemesters } from "@/server/data/semesters";
+import { fuzzedArea } from "@/server/geo-fuzz";
 
 const SEMESTERS = [
   { code: "spring27", name: "Spring 2027", sortOrder: 6 },
@@ -46,6 +47,8 @@ interface SeedListing {
     >
   >;
   status?: "open" | "paused" | "taken";
+  /** Kept off the signed-out board; the seed has some of each. */
+  signedInOnly?: boolean;
   photos: number;
 }
 
@@ -204,6 +207,10 @@ async function main() {
           ...l.amenities,
         })
         .returning({ id: s.listings.id });
+      const area = fuzzedArea(row.id, l.lat, l.lon);
+      // Every other listing is signed-in only, unless it says otherwise, so both boards have something.
+      const signedInOnly = l.signedInOnly ?? LISTINGS.indexOf(l) % 2 === 1;
+      await tx.update(s.listings).set({ areaLat: area.lat, areaLon: area.lon, signedInOnly }).where(eq(s.listings.id, row.id));
 
       await setListingSemesters(
         tx,

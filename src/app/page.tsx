@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ACCESS, ALLOWED_EMAIL_DOMAINS, SITE } from "@/config/site";
+import { ACCESS, ALLOWED_EMAIL_DOMAINS, PUBLIC_AREA, SITE } from "@/config/site";
 import { getDb } from "@/db";
 import { landingBoard, type LandingBoard } from "@/server/data/landing";
 import { log } from "@/server/log";
@@ -74,14 +74,17 @@ export default async function LandingPage({ searchParams }: { searchParams: Prom
               distance from campus, then email or call. No fees, no ads, no brokers.
             </p>
             <div className="flex flex-wrap items-center gap-3">
-              <Link href="/sign-in?next=%2Fbrowse" className="btn-primary px-5 py-3">
+              <Link href="/browse" className="btn-primary px-5 py-3">
                 Browse sublets
               </Link>
               <Link href="/sign-in?next=%2Fpost" className="btn-secondary px-5 py-3">
                 Post yours
               </Link>
             </div>
-            <p className="text-sm text-ink-3">Sign in with a code sent to your {domains} address. No password, nothing to install.</p>
+            <p className="text-sm text-ink-3">
+              Browse without signing in. To see addresses and get in touch, sign in with a code sent to your {domains} address. No
+              password, nothing to install.
+            </p>
             {/* Right under the sign-in line, so nobody without the address scrolls past the board to find out. */}
             <div className="rounded-xl border border-notice-line bg-notice-tint px-4 py-3 text-sm text-ink-2">
               <p>
@@ -132,8 +135,25 @@ export default async function LandingPage({ searchParams }: { searchParams: Prom
   );
 }
 
-/** The board: a grid of current covers with the live count, or a quiet card when the board is empty. */
+/**
+ * The board: a grid of current covers (from listings shown to signed-out
+ * visitors only) with the live count. With too few covers for a grid, the
+ * count and the sign-in line instead; a quiet card when the board is empty.
+ */
 function Board({ board }: { board: LandingBoard }) {
+  if (board.count > 0 && board.thumbs.length < PUBLIC_AREA.landingMinThumbs) {
+    return (
+      <div className="flex aspect-[4/3] flex-col items-center justify-center gap-3 rounded-2xl bg-lake p-6 text-center text-paper shadow-lg">
+        <p className="text-4xl font-bold">{board.count}</p>
+        <p className="text-lg">
+          listing{board.count === 1 ? "" : "s"} up now{board.semesters ? ` · ${board.semesters}` : ""}
+        </p>
+        <Link href="/sign-in?next=%2Fbrowse" className="rounded-lg bg-maple px-4 py-2 font-bold text-paper hover:opacity-90">
+          Sign in to see them
+        </Link>
+      </div>
+    );
+  }
   return (
     <div className="relative overflow-hidden rounded-2xl bg-lake p-4 shadow-lg">
       {board.thumbs.length > 0 ? (

@@ -38,19 +38,35 @@ export function posterNotBannedWhere(): SQL {
   return sql`not exists (select 1 from ${user} pu where pu.id = ${listings.userId} and coalesce(pu.banned, false))`;
 }
 
+/**
+ * On the signed-out board too: the poster has not kept it to signed-in
+ * students, and its approximate area has been worked out. A missing area
+ * keeps it off (fails closed). Always ANDed onto publicListingWhere().
+ */
+export function signedOutAudienceWhere(): SQL {
+  // Parenthesised: drizzle's not() and friends splice a raw fragment in as is.
+  return sql`(not ${listings.signedInOnly} and ${listings.areaLat} is not null and ${listings.areaLon} is not null)`;
+}
+
 export function publicListingWhere(): SQL {
   return and(visibleSemesterWhere(), eq(listings.status, "open"), hasPhotoWhere(), posterNotBannedWhere())!;
 }
 
+/** Which point a query measures from: the true one (signed in) or the approximate area's center (signed out). */
+export type Audience = "signed-in" | "signed-out";
+
 /**
  * Miles from campus, as the legacy computed it in SQL: the spherical law of
  * cosines with a LEAST(1, …) guard so acos never sees 1.0000001 and returns
- * NULL. Double precision in, so no casts per row.
+ * NULL. Double precision in, so no casts per row. Signed out, it measures
+ * from the area's center, so neither the filter nor the sort can be used to
+ * close in on the true point.
  */
-export function campusDistanceMiles(): SQL<number> {
+export function campusDistanceMiles(audience: Audience = "signed-in"): SQL<number> {
+  const [pLat, pLon] = audience === "signed-out" ? [listings.areaLat, listings.areaLon] : [listings.lat, listings.lon];
   const lat = sql`radians(${CAMPUS.lat})`;
   const lon = sql`radians(${CAMPUS.lon})`;
   return sql<number>`3959 * acos(least(1::double precision,
-      cos(${lat}) * cos(radians(${listings.lat})) * cos(radians(${listings.lon}) - ${lon})
-    + sin(${lat}) * sin(radians(${listings.lat}))))`;
+      cos(${lat}) * cos(radians(${pLat})) * cos(radians(${pLon}) - ${lon})
+    + sin(${lat}) * sin(radians(${pLat}))))`;
 }

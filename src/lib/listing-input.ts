@@ -55,6 +55,8 @@ export const listingInput = z
       .min(0, "Rent can't be negative.")
       .max(LIMITS.priceMax, "That rent looks too high."),
     priceNegotiable: z.boolean(),
+    /** "Only show to signed-in students": off for a new listing, so it is on the signed-out board without its address. */
+    signedInOnly: z.boolean().default(false),
     address: z.string().trim().min(1, "Enter the address.").max(LIMITS.addressMaxChars, "That address is too long."),
     lat: z.number().min(-90).max(90),
     lon: z.number().min(-180).max(180),
@@ -131,6 +133,7 @@ export function formToListingInput(fd: FormData): Record<string, unknown> {
   return {
     price: num(fd, "price") ?? Number.NaN,
     priceNegotiable: fd.has("priceNegotiable"),
+    signedInOnly: fd.has("signedInOnly"),
     address: alias("search_place"),
     lat: num(fd, "lat") ?? 0,
     lon: num(fd, "lon") ?? 0,

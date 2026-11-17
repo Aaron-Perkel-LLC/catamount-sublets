@@ -71,6 +71,22 @@ export const listings = pgTable(
     statusChangedAt: nullableTimestamp(),
     /** When the poster last said "Still available" from the email before their semester was archived; shown on the card. */
     confirmedAvailableAt: nullableTimestamp(),
+    /**
+     * Only signed-in students see it: off the signed-out board, map and
+     * sitemap, and a signed-out direct URL is a 404. Its share link still
+     * works. New listings default public; migration 0010 set every listing
+     * that existed before it to true.
+     */
+    signedInOnly: boolean().notNull().default(false),
+    /**
+     * The approximate area's center, a fixed offset of the true point
+     * (src/server/geo-fuzz.ts), stored because the signed-out distance
+     * filter and sort run on it in SQL and a migration cannot hold the
+     * secret. Written with lat/lon; null until then, and a null keeps the
+     * listing off the signed-out board (fails closed).
+     */
+    areaLat: doublePrecision(),
+    areaLon: doublePrecision(),
     /** The share token the legacy site issued, so links already sent keep working. */
     legacyShareToken: char({ length: 10 }),
     /** Set by the migration script; lets --prune tell migrated rows from new ones. */
@@ -85,6 +101,7 @@ export const listings = pgTable(
     check("listings_address_check", sql`length(${t.address}) <= ${num(LIMITS.addressMaxChars)}`),
     check("listings_lat_check", sql`${t.lat} between -90 and 90`),
     check("listings_lon_check", sql`${t.lon} between -180 and 180`),
+    check("listings_area_check", sql`(${t.areaLat} is null) = (${t.areaLon} is null)`),
     check("listings_bedrooms_check", sql`${t.bedrooms} between 0 and 20`),
     check("listings_bathrooms_check", sql`${t.bathrooms} between 0.5 and 9.5`),
     check("listings_roommates_check", sql`${t.roommates} between 0 and 20`),
