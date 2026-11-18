@@ -193,7 +193,8 @@ export async function adminSendBroadcast(audience: admin.Audience, subject: stri
 
 export async function adminBroadcastCount(audience: admin.Audience): Promise<number> {
   await requireAdmin();
-  return (await admin.broadcastRecipients(await getDb(), audience)).length;
+  const parsed = admin.parseAudience(audience);
+  return parsed ? (await admin.broadcastRecipients(await getDb(), parsed)).length : 0;
 }
 
 const requestId = z.number().int().positive();

@@ -158,14 +158,14 @@ describe("orphans and broadcast", () => {
     // Fresh listing for a (a's old one was archived) so "all" has someone.
     const [l] = await db.insert(s.listings).values({ userId: people.a.id, price: 500, address: "x", lat: 44.47, lon: -73.2 }).returning({ id: s.listings.id });
     await db.insert(s.listingSemesters).values({ listingId: l.id, semesterCode: "spring27", position: 0 });
-    expect(await admin.broadcastRecipients(db, { kind: "all" })).toEqual([]); // no photo yet: not on the board
+    expect(await admin.broadcastRecipients(db, { kind: "all", tier: "everyone" })).toEqual([]); // no photo yet: not on the board
     const ref = await saveRawUploadLocal(await sharp({ create: { width: 400, height: 300, channels: 3, background: "#000" } }).jpeg().toBuffer());
     expect((await attachPhotoFor(db, people.a, ref)).ok).toBe(true);
-    expect(await admin.broadcastRecipients(db, { kind: "all" })).toEqual([{ id: people.a.id, email: "a@uvm.edu", name: null, posted: true }]);
-    expect(await admin.broadcastRecipients(db, { kind: "semester", code: "spring27" })).toEqual([{ id: people.a.id, email: "a@uvm.edu", name: null, posted: true }]);
+    expect(await admin.broadcastRecipients(db, { kind: "all", tier: "everyone" })).toEqual([{ id: people.a.id, email: "a@uvm.edu", name: null, posted: true }]);
+    expect(await admin.broadcastRecipients(db, { kind: "semester", code: "spring27", tier: "everyone" })).toEqual([{ id: people.a.id, email: "a@uvm.edu", name: null, posted: true }]);
     // First names greet; without one, the account name does unless it is the login.
     await db.update(s.user).set({ firstName: "Avery", lastName: "Ames" }).where(eq(s.user.id, people.a.id));
-    expect(await admin.broadcastRecipients(db, { kind: "all" })).toEqual([{ id: people.a.id, email: "a@uvm.edu", name: "Avery", posted: true }]);
+    expect(await admin.broadcastRecipients(db, { kind: "all", tier: "everyone" })).toEqual([{ id: people.a.id, email: "a@uvm.edu", name: "Avery", posted: true }]);
     const n = sentInTests.length;
     const r = await admin.sendBroadcastTo(db, { kind: "individual", userIds: [people.a.id, people.viewer.id] }, { subject: "Hello", body: "Hi {name}, spring is coming.\n\nSee you." });
     expect(r).toEqual({ ok: true, data: { sent: 2, failed: 0 } });
@@ -180,28 +180,47 @@ describe("orphans and broadcast", () => {
   });
 
   it("reaches every account, posters or not, and never a banned one", async () => {
-    const everyone = await admin.broadcastRecipients(db, { kind: "accounts" });
+    const everyone = await admin.broadcastRecipients(db, { kind: "accounts", tier: "everyone" });
     expect(everyone).toContainEqual({ id: people.viewer.id, email: "v@uvm.edu", name: "viewer", posted: false });
     expect(everyone).toContainEqual({ id: people.a.id, email: "a@uvm.edu", name: "Avery", posted: true });
     await db.update(s.user).set({ banned: true }).where(eq(s.user.id, people.viewer.id));
-    expect((await admin.broadcastRecipients(db, { kind: "accounts" })).map((r) => r.email)).not.toContain("v@uvm.edu");
+    expect((await admin.broadcastRecipients(db, { kind: "accounts", tier: "everyone" })).map((r) => r.email)).not.toContain("v@uvm.edu");
     expect(await admin.broadcastRecipients(db, { kind: "individual", userIds: [people.viewer.id] })).toEqual([]);
     await db.update(s.user).set({ banned: true }).where(eq(s.user.id, people.a.id));
-    expect(await admin.broadcastRecipients(db, { kind: "all" })).toEqual([]);
-    expect(await admin.broadcastRecipients(db, { kind: "semester", code: "spring27" })).toEqual([]);
+    expect(await admin.broadcastRecipients(db, { kind: "all", tier: "everyone" })).toEqual([]);
+    expect(await admin.broadcastRecipients(db, { kind: "semester", code: "spring27", tier: "everyone" })).toEqual([]);
     await db.update(s.user).set({ banned: false }).where(inArray(s.user.id, [people.a.id, people.viewer.id]));
+  });
+
+  it("splits every audience by tier: students, community accounts, or everyone; named people stay as named", async () => {
+    const [c] = await db.insert(s.user).values({ email: "robin@gmail.com", name: "robin", tier: "community" }).returning({ id: s.user.id });
+    await db.update(s.user).set({ tier: "student" }).where(inArray(s.user.id, [people.a.id, people.viewer.id]));
+    try {
+      const emails = async (a: import("@/server/services/admin").Audience) => (await admin.broadcastRecipients(db, a)).map((r) => r.email);
+      expect(await emails({ kind: "accounts", tier: "student" })).toEqual(expect.arrayContaining(["a@uvm.edu", "v@uvm.edu"]));
+      expect(await emails({ kind: "accounts", tier: "student" })).not.toContain("robin@gmail.com");
+      expect(await emails({ kind: "accounts", tier: "community" })).toContain("robin@gmail.com");
+      expect(await emails({ kind: "accounts", tier: "community" })).not.toContain("a@uvm.edu");
+      expect(await emails({ kind: "accounts", tier: "everyone" })).toEqual(expect.arrayContaining(["a@uvm.edu", "robin@gmail.com"]));
+      expect(await emails({ kind: "survey", tier: "student" })).not.toContain("robin@gmail.com");
+      expect(await emails({ kind: "individual", userIds: [c.id] })).toEqual(["robin@gmail.com"]);
+      // The tier has to be said: an audience without one is refused.
+      expect((await admin.sendBroadcastTo(db, { kind: "accounts" } as never, { subject: "x", body: "y" })).ok).toBe(false);
+    } finally {
+      await db.delete(s.user).where(eq(s.user.id, c.id));
+    }
   });
 
   it("sends the survey to those who have not answered, each with their own link", async () => {
     await db.insert(s.surveyResponses).values({ userId: people.b.id, used: "both", overall: 4 });
     // Admins are never in the survey audience; b has answered.
-    expect((await admin.broadcastRecipients(db, { kind: "survey" })).map((r) => r.email)).toEqual(["a@uvm.edu", "v@uvm.edu"]);
+    expect((await admin.broadcastRecipients(db, { kind: "survey", tier: "everyone" })).map((r) => r.email)).toEqual(["a@uvm.edu", "v@uvm.edu"]);
     const n = sentInTests.length;
-    const missing = await admin.sendBroadcastTo(db, { kind: "survey" }, { subject: "A quick question", body: "Could you spare two minutes?" });
+    const missing = await admin.sendBroadcastTo(db, { kind: "survey", tier: "everyone" }, { subject: "A quick question", body: "Could you spare two minutes?" });
     expect(missing).toMatchObject({ ok: false, error: expect.stringContaining("{survey}") });
     expect(sentInTests.length).toBe(n);
 
-    const r = await admin.sendBroadcastTo(db, { kind: "survey" }, { subject: "A quick question", body: "Could you spare two minutes?\n\n{survey}" });
+    const r = await admin.sendBroadcastTo(db, { kind: "survey", tier: "everyone" }, { subject: "A quick question", body: "Could you spare two minutes?\n\n{survey}" });
     expect(r).toEqual({ ok: true, data: { sent: 2, failed: 0 } });
     expect(sentInTests.length - n).toBe(3);
     for (const [i, who] of [people.a, people.viewer].entries()) {
@@ -224,15 +243,15 @@ describe("orphans and broadcast", () => {
   it("leaves out anyone marked no email, from every audience, until they are let back in", async () => {
     expect(await admin.setNoEmail(db, people.viewer.id, true)).toEqual({ ok: true, data: undefined });
     expect((await admin.listPeople(db)).find((p) => p.id === people.viewer.id)?.noEmail).toBe(true);
-    expect((await admin.broadcastRecipients(db, { kind: "accounts" })).map((r) => r.email)).not.toContain("v@uvm.edu");
-    expect((await admin.broadcastRecipients(db, { kind: "survey" })).map((r) => r.email)).not.toContain("v@uvm.edu");
+    expect((await admin.broadcastRecipients(db, { kind: "accounts", tier: "everyone" })).map((r) => r.email)).not.toContain("v@uvm.edu");
+    expect((await admin.broadcastRecipients(db, { kind: "survey", tier: "everyone" })).map((r) => r.email)).not.toContain("v@uvm.edu");
     expect(await admin.broadcastRecipients(db, { kind: "individual", userIds: [people.viewer.id] })).toEqual([]);
     await admin.setNoEmail(db, people.a.id, true);
-    expect(await admin.broadcastRecipients(db, { kind: "all" })).toEqual([]);
-    expect(await admin.broadcastRecipients(db, { kind: "semester", code: "spring27" })).toEqual([]);
+    expect(await admin.broadcastRecipients(db, { kind: "all", tier: "everyone" })).toEqual([]);
+    expect(await admin.broadcastRecipients(db, { kind: "semester", code: "spring27", tier: "everyone" })).toEqual([]);
     await admin.setNoEmail(db, people.a.id, false);
     expect(await admin.setNoEmail(db, people.viewer.id, false)).toEqual({ ok: true, data: undefined });
-    expect((await admin.broadcastRecipients(db, { kind: "accounts" })).map((r) => r.email)).toContain("v@uvm.edu");
+    expect((await admin.broadcastRecipients(db, { kind: "accounts", tier: "everyone" })).map((r) => r.email)).toContain("v@uvm.edu");
     expect((await admin.setNoEmail(db, "00000000-0000-4000-8000-000000000000", true)).ok).toBe(false);
   });
 });

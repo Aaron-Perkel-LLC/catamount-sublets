@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { adminBroadcastCount, adminSendBroadcast, adminSetAnnouncement, adminSetReadOnly } from "@/server/actions/admin";
 import type { Announcement, ReadOnly } from "@/server/data/settings";
-import type { Audience } from "@/server/services/admin";
+import type { Audience, BroadcastTier } from "@/server/services/admin";
 import { AnnouncementBanner } from "../AnnouncementBanner";
 import type { NoticeAdminRow } from "@/server/data/notices";
 import type { PersonDto, SemesterRowDto } from "./AdminTabs";
@@ -150,9 +150,22 @@ function Maintenance({ readOnly }: { readOnly: ReadOnly }) {
   );
 }
 
-/** A broadcast: to posters on the board, every account, posters in a semester, people yet to answer the survey, or named people. */
+const TIER_LABELS: Record<BroadcastTier, string> = {
+  student: "Students",
+  community: "Community accounts",
+  everyone: "Everyone (students and community)",
+};
+
+/**
+ * A broadcast: to posters on the board, every account, posters in a
+ * semester, people yet to answer the survey, or named people. Every kind but
+ * named people also says which accounts: students (the default), community
+ * accounts, or both, so "every account" never quietly reaches community
+ * accounts. The count is for exactly that choice, before anything is sent.
+ */
 function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people: PersonDto[] }) {
   const [kind, setKind] = useState<Audience["kind"]>("all");
+  const [tier, setTier] = useState<BroadcastTier>("student");
   const [code, setCode] = useState(semesters.find((s) => s.active)?.code ?? "");
   const [ids, setIds] = useState<Set<string>>(new Set());
   const [subject, setSubject] = useState("");
@@ -161,7 +174,9 @@ function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people:
   const [note, setNote] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  const audience: Audience = kind === "all" || kind === "accounts" || kind === "survey" ? { kind } : kind === "semester" ? { kind, code } : { kind, userIds: [...ids] };
+  const audience: Audience =
+    kind === "all" || kind === "accounts" || kind === "survey" ? { kind, tier } : kind === "semester" ? { kind, code, tier } : { kind, userIds: [...ids] };
+  const who = kind === "individual" ? "named people" : TIER_LABELS[tier].toLowerCase();
   const key = JSON.stringify(audience);
   useEffect(() => {
     let cancelled = false;
@@ -176,7 +191,7 @@ function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people:
       className="flex flex-col gap-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!confirm(`Send to ${count ?? "?"} people?`)) return;
+        if (!confirm(`Send to ${count ?? "?"} ${count === 1 ? "person" : "people"} (${who})?`)) return;
         start(async () => {
           const r = await adminSendBroadcast(audience, subject, body);
           setNote(r.ok ? `Sent to ${r.data.sent} recipient(s)${r.data.failed ? `, ${r.data.failed} failed` : ""}.` : r.error);
@@ -193,7 +208,7 @@ function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people:
           <input type="radio" name="kind" checked={kind === "all"} onChange={() => setKind("all")} /> Everyone with a listing on the board
         </label>
         <label className="flex items-center gap-2">
-          <input type="radio" name="kind" checked={kind === "accounts"} onChange={() => setKind("accounts")} /> Every account, with or without a listing
+          <input type="radio" name="kind" checked={kind === "accounts"} onChange={() => setKind("accounts")} /> All accounts of the kind below, with or without a listing
         </label>
         <label className="flex items-center gap-2">
           <input type="radio" name="kind" checked={kind === "semester"} onChange={() => setKind("semester")} /> Every poster in a semester
@@ -232,8 +247,21 @@ function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people:
             ))}
           </div>
         )}
-        <p className="text-xs text-ink-3">{count === null ? "Counting…" : `${count} recipient${count === 1 ? "" : "s"}. Banned people and anyone marked "no email" are never included.`}</p>
       </fieldset>
+      {kind !== "individual" && (
+        <fieldset className="flex flex-col gap-2 text-sm">
+          <legend className="font-bold">Which accounts</legend>
+          {(["student", "community", "everyone"] as const).map((t) => (
+            <label key={t} className="flex items-center gap-2">
+              <input type="radio" name="tier" checked={tier === t} onChange={() => setTier(t)} /> {TIER_LABELS[t]}
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <p className="text-sm font-bold" role="status" aria-live="polite">
+        {count === null ? "Counting…" : `${count} recipient${count === 1 ? "" : "s"} (${who}).`}{" "}
+        <span className="font-normal text-xs text-ink-3">Banned people and anyone marked &quot;no email&quot; are never included.</span>
+      </p>
       <label className="flex flex-col gap-1 text-sm">
         Subject
         <input className="field" value={subject} onChange={(e) => setSubject(e.target.value)} required maxLength={150} />

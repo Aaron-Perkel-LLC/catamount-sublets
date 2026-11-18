@@ -490,16 +490,32 @@ export async function setNoEmail(db: Db, userId: string, noEmail: boolean): Prom
 
 /* ------------------------------------------------------------ broadcast */
 
-export type Audience = { kind: "all" } | { kind: "accounts" } | { kind: "semester"; code: string } | { kind: "individual"; userIds: string[] } | { kind: "survey" };
+/** Which accounts a broadcast may reach (phase 31): never "every account" by accident. Named people are exactly the people named. */
+export const BROADCAST_TIERS = ["student", "community", "everyone"] as const;
+export type BroadcastTier = (typeof BROADCAST_TIERS)[number];
+export type Audience =
+  | ({ kind: "all" } | { kind: "accounts" } | { kind: "semester"; code: string } | { kind: "survey" }) & { tier: BroadcastTier }
+  | { kind: "individual"; userIds: string[] };
 
 /**
  * Who a broadcast goes to: posters of public listings, every account (with or
  * without a listing), every poster in a semester, named people, or everyone
  * invited to the survey who has not answered it (which also leaves out admins
- * and test addresses). Banned people and people who asked for no email are
- * left out of every audience, named or not.
+ * and test addresses). Every audience but named people also says which
+ * tier: students (the default in the form), community accounts, or
+ * everyone. Banned people and people who asked for no email are left out of
+ * every audience, named or not.
  */
 export async function broadcastRecipients(db: Db, audience: Audience): Promise<Recipient[]> {
+  const all = await recipientsBeforeTier(db, audience);
+  if (audience.kind === "individual" || audience.tier === "everyone" || all.length === 0) return all;
+  const keep = new Set(
+    (await db.select({ id: user.id }).from(user).where(and(inArray(user.id, all.map((r) => r.id)), eq(user.tier, audience.tier)))).map((r) => r.id),
+  );
+  return all.filter((r) => keep.has(r.id));
+}
+
+async function recipientsBeforeTier(db: Db, audience: Audience): Promise<Recipient[]> {
   if (audience.kind === "individual" && audience.userIds.length === 0) return [];
   if (audience.kind === "survey") return (await surveyUnanswered(db)).map((r) => ({ id: r.id, email: r.email, name: r.firstName, posted: r.posted }));
   const columns = { id: user.id, email: user.email, displayName: listings.displayName, firstName: user.firstName, lastName: user.lastName, name: user.name, legacyNetid: user.legacyNetid, listingId: listings.id };
@@ -527,13 +543,20 @@ export async function broadcastRecipients(db: Db, audience: Audience): Promise<R
 }
 
 const broadcastInput = z.object({ subject: z.string().trim().min(1).max(150).refine((s) => !/[\r\n]/.test(s)), body: z.string().trim().min(1).max(10_000) });
+const tierInput = z.enum(BROADCAST_TIERS);
 const audienceInput: z.ZodType<Audience> = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("all") }),
-  z.object({ kind: z.literal("accounts") }),
-  z.object({ kind: z.literal("semester"), code: z.string().min(1) }),
+  z.object({ kind: z.literal("all"), tier: tierInput }),
+  z.object({ kind: z.literal("accounts"), tier: tierInput }),
+  z.object({ kind: z.literal("semester"), code: z.string().min(1), tier: tierInput }),
   z.object({ kind: z.literal("individual"), userIds: z.array(z.string().uuid()).max(5000) }),
-  z.object({ kind: z.literal("survey") }),
+  z.object({ kind: z.literal("survey"), tier: tierInput }),
 ]);
+
+/** The audience if it is well formed (a tier said for every kind but named people), else null. */
+export function parseAudience(raw: unknown): Audience | null {
+  const r = audienceInput.safeParse(raw);
+  return r.success ? r.data : null;
+}
 
 export async function sendBroadcastTo(db: Db, audience: Audience, raw: { subject: string; body: string }): Promise<Result<{ sent: number; failed: number }>> {
   const parsed = broadcastInput.safeParse(raw);
