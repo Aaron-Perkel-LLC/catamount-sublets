@@ -17,8 +17,8 @@
  * fields (address, street, true coordinates, contact and account email,
  * phone, display and poster name, a run of its description), public or
  * signed-in only, become strings that must not appear in any signed-out
- * response (true coordinates by coordinateLeaks' rule: both anywhere, or
- * either outside the public area fields). They are never printed: a hit names the field and listing id.
+ * response (true coordinates by coordinateLeaks' rule: any outside the
+ * public listings' own areas, or both inside one of them). They are never printed: a hit names the field and listing id.
  * The local counterpart, against a seeded database, is check-public-leaks.ts.
  * Exits 1 on any failed check.
  */
@@ -45,7 +45,7 @@ async function main(): Promise<number> {
       tx`begin read only`,
       tx`select l.id, l.address, l.lat, l.lon, l.description, l.contact_email, l.contact_phone, l.display_name, u.email, u.first_name, u.last_name
          from listings l join "user" u on u.id = l.user_id where l.status = 'open'`,
-      tx`select id from listings where not signed_in_only and area_lat is not null and status = 'open'`,
+      tx`select id, area_lat, area_lon from listings where not signed_in_only and area_lat is not null and status = 'open'`,
       tx`select min(id)::int id from listings where signed_in_only and status = 'open'`,
       tx`select count(*) filter (where status = 'open')::int open, count(*) filter (where status = 'open' and not signed_in_only)::int public from listings`,
     ],
@@ -54,7 +54,7 @@ async function main(): Promise<number> {
 
   // [field, listing id, value]: every open listing's private fields; none may appear signed out.
   const needles: [string, number, string][] = [];
-  // [listing id, true point]: read by coordinateLeaks (both coordinates anywhere, or either outside the public area fields).
+  // [listing id, true point]: read by coordinateLeaks against the public listings' own areas.
   const points: [number, { lat: number; lon: number }][] = [];
   // The site's own addresses (the footer's support mailto) are published on every page; an account that uses one (the admin's) is not a leak.
   const published = new Set((Object.values(SITE) as unknown[]).filter((v): v is string => typeof v === "string" && v.includes("@")).map((v) => v.toLowerCase()));
@@ -92,9 +92,11 @@ async function main(): Promise<number> {
     return { status: res.status, cc: res.headers.get("cache-control") ?? "", ct: res.headers.get("content-type") ?? "", body: await res.text() };
   }
   const hits = new Map<string, string[]>();
+  // The areas a signed-out page may carry: the public listings' own, exactly as stored.
+  const publicAreas = pub.map((r) => ({ lat: Number(r.area_lat), lon: Number(r.area_lon) }));
   const leaked = (body: string, where: string) => {
     const found = needles.filter(([, , v]) => body.includes(v)).map(([f, id]) => `${f} of #${id}`);
-    for (const [id, point] of points) found.push(...coordinateLeaks(body, point).map((c) => `${c} of #${id}`));
+    for (const [id, point] of points) found.push(...coordinateLeaks(body, point, publicAreas).map((c) => `${c} of #${id}`));
     const key = body.replace(AREA, "").match(PRIVATE_KEYS);
     if (key) found.push(`a private key (${key[1]})`);
     if (found.length) hits.set(where, found);

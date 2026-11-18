@@ -55,7 +55,7 @@ export function NavLinks({ isAdmin, hasListing }: { isAdmin: boolean; hasListing
 export function AccountLink() {
   const current = isCurrent(usePathname(), "/account");
   return (
-    <Link href="/account" aria-current={current ? "page" : undefined} className={`self-stretch font-bold text-ink-2 ${barLink(current)}`}>
+    <Link href="/account" aria-current={current ? "page" : undefined} className={`shrink-0 self-stretch font-bold text-ink-2 ${barLink(current)}`}>
       Account
     </Link>
   );

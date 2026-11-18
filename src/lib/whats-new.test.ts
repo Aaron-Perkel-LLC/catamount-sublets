@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { CHANGELOG } from "@/content/changelog";
 import { isRelativePath } from "./notices";
-import { newestShown, showNewDot, shownEntries } from "./whats-new";
+import { isNewer, latestMarker, showNewDot, shownEntries } from "./whats-new";
 
 const e = (date: string, title = date) => ({ date, title });
 
@@ -15,23 +15,29 @@ describe("shownEntries", () => {
   });
 });
 
-describe("showNewDot", () => {
-  const dates = ["2026-11-17", "2026-11-16", "2026-11-21"];
+describe("latestMarker and showNewDot", () => {
+  const entries = [e("2026-11-17"), e("2026-11-16"), e("2026-11-21")];
+  it("marks the newest entry due, with how many share its date", () => {
+    expect(latestMarker(entries, "2026-11-20")).toBe("2026-11-17#1");
+    expect(latestMarker([...entries, e("2026-11-17", "second")], "2026-11-20")).toBe("2026-11-17#2");
+    expect(latestMarker(entries, "2026-11-01")).toBeNull();
+  });
+
   it("shows for an entry newer than the last one seen, and not otherwise", () => {
-    expect(showNewDot(dates, "2026-11-20", "2026-11-16")).toBe(true);
-    expect(showNewDot(dates, "2026-11-20", "2026-11-17")).toBe(false);
-    // The 21 Nov entry isn't out yet on the 20th; it is on the 21st.
-    expect(showNewDot(dates, "2026-11-21", "2026-11-17")).toBe(true);
+    expect(showNewDot("2026-11-17#1", "2026-11-20", "2026-11-16#1")).toBe(true);
+    expect(showNewDot("2026-11-17#1", "2026-11-20", "2026-11-17#1")).toBe(false);
+    expect(showNewDot("2026-11-17#2", "2026-11-20", "2026-11-17#1")).toBe(true); // a second entry that day
+    expect(showNewDot("2026-11-21#1", "2026-11-21", "2026-11-17#1")).toBe(true);
+    expect(isNewer("2026-11-16#3", "2026-11-17#1")).toBe(false);
   });
 
   it("on a first visit, shows while the newest entry is under 14 days old", () => {
-    expect(newestShown(dates, "2026-11-20")).toBe("2026-11-17");
-    expect(showNewDot(dates, "2026-11-30", null)).toBe(true); // 13 days
-    expect(showNewDot(["2026-11-17"], "2026-12-01", null)).toBe(false); // 14 days
+    expect(showNewDot("2026-11-17#1", "2026-11-30", null)).toBe(true); // 13 days
+    expect(showNewDot("2026-11-17#1", "2026-12-01", null)).toBe(false); // 14 days
   });
 
   it("no entries due, no dot", () => {
-    expect(showNewDot(["2026-12-01"], "2026-11-20", null)).toBe(false);
+    expect(showNewDot(null, "2026-11-20", null)).toBe(false);
   });
 });
 

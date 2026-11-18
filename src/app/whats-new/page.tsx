@@ -5,7 +5,7 @@ import { MarkWhatsNewSeen } from "@/components/WhatsNew";
 import { SITE } from "@/config/site";
 import { CHANGELOG } from "@/content/changelog";
 import { easternDate, SITE_TIME_ZONE } from "@/lib/dates";
-import { shownEntries } from "@/lib/whats-new";
+import { latestMarker, shownEntries } from "@/lib/whats-new";
 
 export const metadata: Metadata = {
   title: `What's new · ${SITE.name}`,
@@ -25,7 +25,8 @@ const longDate = (date: string) =>
  */
 export default async function WhatsNewPage() {
   await connection();
-  const entries = shownEntries(CHANGELOG, easternDate(new Date()));
+  const today = easternDate(new Date());
+  const entries = shownEntries(CHANGELOG, today);
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-10">
       <Link href="/" className="text-sm font-bold text-lake">
@@ -48,7 +49,7 @@ export default async function WhatsNewPage() {
           </li>
         ))}
       </ol>
-      <MarkWhatsNewSeen newest={entries[0]?.date ?? null} />
+      <MarkWhatsNewSeen latest={latestMarker(CHANGELOG, today)} />
     </main>
   );
 }

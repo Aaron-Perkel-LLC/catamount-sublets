@@ -12,10 +12,9 @@ import { MarkWhatsNewSeen, WhatsNewLink } from "./WhatsNew";
  */
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const DATES = ["2026-11-17", "2026-11-16"];
 let host: HTMLElement;
 let root: Root | null = null;
-const link = () => createElement(WhatsNewLink, { dates: DATES, className: "link" });
+const link = () => createElement(WhatsNewLink, { latest: "2026-11-17#1", today: "2026-11-20", className: "link" });
 const hasDot = () => host.textContent?.includes("(new)") ?? false;
 async function mount(el: ReactElement = link()) {
   root = createRoot(host);
@@ -23,8 +22,6 @@ async function mount(el: ReactElement = link()) {
 }
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-11-20T15:00:00Z"));
   localStorage.clear();
   host = document.createElement("div");
   document.body.appendChild(host);
@@ -33,7 +30,6 @@ afterEach(() => {
   if (root) act(() => root!.unmount());
   root = null;
   document.body.innerHTML = "";
-  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -52,11 +48,11 @@ describe("WhatsNewLink", () => {
   });
 
   it("no dot once the newest entry has been seen; a dot again for a newer one", async () => {
-    localStorage.setItem(WHATS_NEW_SEEN_KEY, "2026-11-17");
+    localStorage.setItem(WHATS_NEW_SEEN_KEY, "2026-11-17#1");
     await mount();
     expect(hasDot()).toBe(false);
     act(() => root!.unmount());
-    localStorage.setItem(WHATS_NEW_SEEN_KEY, "2026-11-16");
+    localStorage.setItem(WHATS_NEW_SEEN_KEY, "2026-11-16#1");
     await mount();
     expect(hasDot()).toBe(true);
   });
@@ -72,17 +68,26 @@ describe("WhatsNewLink", () => {
 
 describe("MarkWhatsNewSeen", () => {
   it("records the newest entry shown, never moving backwards", async () => {
-    await mount(createElement(MarkWhatsNewSeen, { newest: "2026-11-17" }));
-    expect(localStorage.getItem(WHATS_NEW_SEEN_KEY)).toBe("2026-11-17");
+    await mount(createElement(MarkWhatsNewSeen, { latest: "2026-11-17#1" }));
+    expect(localStorage.getItem(WHATS_NEW_SEEN_KEY)).toBe("2026-11-17#1");
     act(() => root!.unmount());
-    await mount(createElement(MarkWhatsNewSeen, { newest: "2026-11-16" }));
-    expect(localStorage.getItem(WHATS_NEW_SEEN_KEY)).toBe("2026-11-17");
+    await mount(createElement(MarkWhatsNewSeen, { latest: "2026-11-16#2" }));
+    expect(localStorage.getItem(WHATS_NEW_SEEN_KEY)).toBe("2026-11-17#1");
   });
 
-  it("survives blocked storage", async () => {
+  it("when storage reads but won't write, the dot still goes for the rest of the page session", async () => {
+    vi.resetModules(); // a fresh page session: the earlier tests set the module's flag
+    const fresh = await import("./WhatsNew");
+    const freshLink = () => createElement(fresh.WhatsNewLink, { latest: "2026-11-17#1", today: "2026-11-20", className: "link" });
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-      throw new Error("SecurityError");
+      throw new Error("QuotaExceededError");
     });
-    await mount(createElement(MarkWhatsNewSeen, { newest: "2026-11-17" }));
+    await mount(freshLink());
+    expect(hasDot()).toBe(true); // nothing stored: a first visit
+    act(() => root!.unmount());
+    await mount(createElement(fresh.MarkWhatsNewSeen, { latest: "2026-11-17#1" }));
+    act(() => root!.unmount());
+    await mount(freshLink());
+    expect(hasDot()).toBe(false);
   });
 });

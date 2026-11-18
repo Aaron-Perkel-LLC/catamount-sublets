@@ -25,7 +25,7 @@ export const SECRET = {
 };
 
 /** The secret strings found in `text`; empty when nothing leaked. */
-export function leaks(text: string): string[] {
+export function leaks(text: string, publicAreas: readonly { lat: number; lon: number }[] = []): string[] {
   const needles = [
     SECRET.street,
     `${SECRET.number} `,
@@ -37,32 +37,63 @@ export function leaks(text: string): string[] {
     "5550199",
     SECRET.descriptionMarker,
   ];
-  return [...needles.filter((n) => text.includes(n)), ...coordinateLeaks(text, SECRET).map((c) => `true ${c}`)];
+  return [...needles.filter((n) => text.includes(n)), ...coordinateLeaks(text, SECRET, publicAreas).map((c) => `true ${c}`)];
+}
+
+type Point = { lat: number; lon: number };
+
+/** A quote as it appears in JSON (`"`), in JSON escaped inside an HTML script (`\"`, `\\\"`), or as an HTML entity. */
+const Q = String.raw`(?:\\*"|&quot;)`;
+/** Any `"area":{…}` object, whatever its key order or escaping. */
+const AREA_OBJECT = new RegExp(String.raw`${Q}area${Q}:\{([^{}]*)\}`, "g");
+const areaField = (inner: string, key: "lat" | "lon") => {
+  const m = new RegExp(String.raw`${Q}${key}${Q}:(-?[\d.]+)`).exec(inner);
+  return m ? Number(m[1]) : NaN;
+};
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Patterns for a coordinate however it might be printed: any printing with
+ * five or more decimals starts with it truncated to five (or reads as its
+ * five-decimal rounding); a shorter one (44.4762, or 44.47620 with its zeros
+ * dropped) must stand alone, not run on into more digits.
+ */
+function coordinatePatterns(v: number): RegExp[] {
+  const [int, dec = ""] = String(v).split(".");
+  const fixed = v.toFixed(5);
+  const forms = new Set([fixed]);
+  const exact = new Set<string>();
+  if (dec.length >= 5) forms.add(`${int}.${dec.slice(0, 5)}`);
+  else exact.add(String(v));
+  const trimmed = fixed.replace(/\.?0+$/, "");
+  if (trimmed !== fixed) exact.add(trimmed);
+  return [
+    ...[...forms].map((f) => new RegExp(String.raw`(?<!\d)${escapeRe(f)}`)),
+    ...[...exact].map((f) => new RegExp(String.raw`(?<!\d)${escapeRe(f)}(?![\d])`)),
+  ];
 }
 
 /**
- * A public listing's approximate area (`"area":{"lat":…,"lon":…,"radiusM":…}`),
- * as JSON or escaped inside an HTML script (`\"area\":…`). Its coordinates
- * are meant to be there.
+ * Which of a listing's true coordinates `body` gives away. `publicAreas` are
+ * the approximate areas the page may legitimately carry (the public
+ * listings'); an `"area"` object exactly equal to one of them is excused,
+ * because another listing's area can share a latitude with this point to
+ * five decimals by chance. Any coordinate outside the excused areas is a
+ * leak, and so is an excused area that holds both of this point's
+ * coordinates (an area centred on the true point). With no `publicAreas`,
+ * nothing is excused.
  */
-const PUBLIC_AREA_JSON = /\\*"area\\*":\{\\*"lat\\*":-?[\d.]+,\\*"lon\\*":-?[\d.]+,\\*"radiusM\\*":\d+\}/g;
-
-/** How a coordinate would be written out: five decimals, and its full form when that is longer. */
-function coordinateForms(v: number): string[] {
-  const full = String(v);
-  return full.length > v.toFixed(5).length ? [v.toFixed(5), full] : [v.toFixed(5)];
-}
-
-/**
- * Which of a listing's true coordinates `body` gives away. Both together
- * anywhere in the body are a leak (an area centred on the true point, say);
- * either one outside the public `area` objects is a leak too. A lone
- * coordinate inside an area is not: another listing's area, kilometres
- * away, can share a latitude to five decimals by chance.
- */
-export function coordinateLeaks(body: string, point: { lat: number; lon: number }): ("lat" | "lon")[] {
-  const has = (text: string, v: number) => coordinateForms(v).some((f) => text.includes(f));
-  if (has(body, point.lat) && has(body, point.lon)) return ["lat", "lon"];
-  const outside = body.replace(PUBLIC_AREA_JSON, "");
-  return (["lat", "lon"] as const).filter((k) => has(outside, point[k]));
+export function coordinateLeaks(body: string, point: Point, publicAreas: readonly Point[] = []): ("lat" | "lon")[] {
+  const pats = { lat: coordinatePatterns(point.lat), lon: coordinatePatterns(point.lon) };
+  const has = (text: string, k: "lat" | "lon") => pats[k].some((re) => re.test(text));
+  const excused: string[] = [];
+  const outside = body.replace(AREA_OBJECT, (whole, inner: string) => {
+    const lat = areaField(inner, "lat");
+    const lon = areaField(inner, "lon");
+    if (!publicAreas.some((a) => a.lat === lat && a.lon === lon)) return whole;
+    excused.push(inner);
+    return "";
+  });
+  if (excused.some((inner) => has(inner, "lat") && has(inner, "lon"))) return ["lat", "lon"];
+  return (["lat", "lon"] as const).filter((k) => has(outside, k));
 }

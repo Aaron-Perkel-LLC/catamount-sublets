@@ -15,7 +15,7 @@ import { browseListings, filterBounds, listingForViewer, newBoardListings } from
 import { createListing, setListingVisibility, updateListing } from "./my-listing";
 import { publicBoardListings, publicListingById, publicSitemapEntries, signedInOnlyCount } from "./public-listings";
 import { boardSemesters, emptyActiveSemesters, setListingSemesters } from "./semesters";
-import { leaks, SECRET } from "./public-leak-fixture";
+import { coordinateLeaks, leaks, SECRET } from "./public-leak-fixture";
 import { resolveShare } from "./share";
 
 /** The public projection against a real (PGlite) database, seeded with the easy-to-spot listing in ./public-leak-fixture.ts. */
@@ -90,6 +90,17 @@ describe("the public projection", () => {
     const one = (await publicListingById(db, secretId))!;
     expect(metersBetween(one.area.lat, one.area.lon, SECRET.lat, SECRET.lon)).toBeLessThan(one.area.radiusM);
     expect(one.area).toEqual(fuzzedArea(SECRET.lat, SECRET.lon));
+  });
+
+  it("the leak checks recognise the real projection's area, as JSON and inside HTML", async () => {
+    const board = await publicBoardListings(db, parseListingQuery({}));
+    const { area } = (await publicListingById(db, secretId))!;
+    const sharesLat = { lat: area.lat, lon: -73.1 }; // a point that shares only the area's latitude
+    for (const body of [JSON.stringify(board), JSON.stringify(JSON.stringify(board))]) {
+      expect(coordinateLeaks(body, sharesLat)).toEqual(["lat"]); // nothing excused: found
+      expect(coordinateLeaks(body, sharesLat, [area])).toEqual([]); // the area recognised and excused
+      expect(coordinateLeaks(body, area, [area])).toEqual(["lat", "lon"]); // an area on the point itself
+    }
   });
 
   it("measures distance from the circle's center, to a tenth of a mile", async () => {

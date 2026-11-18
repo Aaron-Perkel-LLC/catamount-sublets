@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useSyncExternalStore } from "react";
-import { easternDate } from "@/lib/dates";
-import { showNewDot, WHATS_NEW_SEEN_KEY } from "@/lib/whats-new";
+import { isNewer, showNewDot, WHATS_NEW_SEEN_KEY } from "@/lib/whats-new";
+
+/** Set by /whats-new in this page session, whether or not storage took it: the dot stays off until a reload. */
+let seenThisSession = false;
 
 function readSeen(): string | null | undefined {
   try {
@@ -21,15 +23,18 @@ function subscribe(onChange: () => void) {
 
 /**
  * The footer's What's new link, with a small dot when there's an entry this
- * browser hasn't seen. The server snapshot is "no dot", so the server render
- * and hydration agree; the browser's localStorage decides after that.
+ * browser hasn't seen. `latest` and `today` come from the server render
+ * (latestMarker, Eastern), so the browser's clock can't disagree with the
+ * page. The server snapshot is "no dot", so the server render and hydration
+ * agree; localStorage decides after that.
  */
-export function WhatsNewLink({ dates, className }: { dates: readonly string[]; className: string }) {
+export function WhatsNewLink({ latest, today, className }: { latest: string | null; today: string; className: string }) {
   const dot = useSyncExternalStore(
     subscribe,
     () => {
+      if (seenThisSession) return false;
       const seen = readSeen();
-      return seen !== undefined && showNewDot(dates, easternDate(new Date()), seen);
+      return seen !== undefined && showNewDot(latest, today, seen);
     },
     () => false,
   );
@@ -46,16 +51,17 @@ export function WhatsNewLink({ dates, className }: { dates: readonly string[]; c
   );
 }
 
-/** On /whats-new: records the newest entry shown, which clears the footer's dot until a newer one appears. */
-export function MarkWhatsNewSeen({ newest }: { newest: string | null }) {
+/** On /whats-new: records the newest entry shown (its latestMarker), which clears the footer's dot until a newer one appears. */
+export function MarkWhatsNewSeen({ latest }: { latest: string | null }) {
   useEffect(() => {
-    if (!newest) return;
+    if (!latest) return;
+    seenThisSession = true;
     try {
       const seen = localStorage.getItem(WHATS_NEW_SEEN_KEY);
-      if (!seen || newest > seen) localStorage.setItem(WHATS_NEW_SEEN_KEY, newest);
+      if (!seen || isNewer(latest, seen)) localStorage.setItem(WHATS_NEW_SEEN_KEY, latest);
     } catch {
-      // storage blocked: the dot is already off for this browser (WhatsNewLink)
+      // storage that can't be written: seenThisSession keeps the dot off for this page session
     }
-  }, [newest]);
+  }, [latest]);
   return null;
 }

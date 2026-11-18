@@ -1,11 +1,9 @@
 import Link from "next/link";
 import { SITE } from "@/config/site";
 import { CHANGELOG } from "@/content/changelog";
-import { easternYear } from "@/lib/dates";
+import { easternDate, easternYear } from "@/lib/dates";
+import { latestMarker } from "@/lib/whats-new";
 import { WhatsNewLink } from "./WhatsNew";
-
-/** Only the dates go to the browser, for the "New" dot. */
-const ENTRY_DATES = CHANGELOG.map((e) => e.date);
 
 /**
  * The footer on the front page and every signed-in page, in two lines: the
@@ -13,6 +11,8 @@ const ENTRY_DATES = CHANGELOG.map((e) => e.date);
  * counted and who sees it is on the privacy page.
  */
 export function SiteFooter() {
+  // Every frame with this footer renders per request, so this is today (Eastern); only the marker goes to the browser.
+  const today = easternDate(new Date());
   const link = "font-bold text-lake hover:underline";
   return (
     <footer className="border-t border-line px-4 py-6 text-center text-xs leading-5 text-ink-3">
@@ -36,7 +36,7 @@ export function SiteFooter() {
             <Link href="/privacy" className={link}>
               Privacy
             </Link>{" "}
-            · <WhatsNewLink dates={ENTRY_DATES} className={link} />
+            · <WhatsNewLink latest={latestMarker(CHANGELOG, today)} today={today} className={link} />
           </span>
         </p>
         <p>{SITE.disclaimer}</p>

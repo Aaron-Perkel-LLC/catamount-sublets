@@ -57,15 +57,15 @@ export async function AppShell({ user, children }: { user: SessionUser; children
             <NavLinks isAdmin={user.role === "admin"} hasListing={Boolean(mine)} />
           </Suspense>
           {/* Desktop: the greeting (plain text, from 1024 px where it fits), Account, Sign out. Phone: the menu (MobileNav), which has Account and Sign out. */}
-          <div className="ml-auto hidden items-center gap-3 self-stretch text-sm md:flex">
-            <span className="hidden max-w-[16rem] truncate text-ink-3 lg:inline" title={greeting}>
+          <div className="ml-auto hidden min-w-0 items-center gap-3 self-stretch text-sm md:flex">
+            <span className="hidden min-w-0 max-w-[16rem] truncate text-ink-3 lg:block" title={greeting}>
               {greeting}
             </span>
             <Suspense>
               <AccountLink />
             </Suspense>
-            <form action={signOutAction}>
-              <button type="submit" className="link">
+            <form action={signOutAction} className="shrink-0">
+              <button type="submit" className="link whitespace-nowrap">
                 Sign out
               </button>
             </form>
