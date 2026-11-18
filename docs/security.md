@@ -73,6 +73,10 @@ cache can't keep the old tier.
   goes into the email's subject and body. The relay's link check is strict on
   purpose (any scheme, `www.`, any letters-only TLD, after NFKC folding);
   "St.John" without a space is refused with a hint.
+- **Broadcasts name their tier.** Admin → Announce asks which accounts
+  (Students, the default; Community accounts; Everyone) for every audience
+  but named people, and shows the count for exactly that choice before
+  sending; an audience without a tier is refused (`parseAudience`).
 - **Known gaps, accepted:** plus and dot variants of one mailbox
   (`me+1@gmail.com`) make separate community accounts, bounded by the
   per-network (IPv6 by /64) and site-wide caps; someone filling the
