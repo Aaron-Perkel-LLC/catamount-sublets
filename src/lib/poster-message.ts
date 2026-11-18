@@ -15,21 +15,27 @@ export const POSTER_MESSAGE_STATUSES = ["pending", "sent", "failed"] as const;
 export type PosterMessageStatus = (typeof POSTER_MESSAGE_STATUSES)[number];
 
 const EMAIL_ADDRESS = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
-const SCHEME_OR_WWW = /\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)\S/i;
-/** A bare domain mail clients would turn into a link (bit.ly/x, venmo.com), by the common top-level domains. */
-const BARE_DOMAIN =
-  /\b[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9-]+)*\.(?:com|net|org|edu|gov|io|ly|me|co|app|link|site|xyz|info|biz|us|gl|gg|to|tk|ru|cn|top|click|online|shop|page|dev|ai|cc|tv|ws|sh|so|im|is|it|de|uk|ca|li)(?=$|[\s/:?#.,;!)\]'"])/i;
+/** Any scheme (https://, ftp://, javascript:// …) or "www.", checked on the raw text so user@host tricks (https://paypal.com@evil.store) can't hide it. */
+const SCHEME_OR_WWW = /[a-z][a-z0-9+.-]*:\/\/|\bwww\./i;
+/**
+ * A bare domain a mail client would link: labels, a dot, and letters for a
+ * top-level domain (any of them: .store, .live, .zip…), not followed by more
+ * of a word. Over-strict on purpose: "St.John" is refused too, and the
+ * refusal says to add a space after the period.
+ */
+const BARE_DOMAIN = /(?<![a-z0-9@.-])[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,63}(?![a-z0-9-])/i;
 
 /** True when the text holds something a mail client would make a link, email addresses aside. */
 export function containsLink(text: string): boolean {
-  const withoutEmails = text.replace(EMAIL_ADDRESS, " ");
-  return SCHEME_OR_WWW.test(withoutEmails) || BARE_DOMAIN.test(withoutEmails);
+  const normalized = text.normalize("NFKC");
+  if (SCHEME_OR_WWW.test(normalized)) return true;
+  return BARE_DOMAIN.test(normalized.replace(EMAIL_ADDRESS, " "));
 }
 
 /** What the Message poster form shows: open, the poster turned it off, the relay can't send here, or nothing (not a listing they can see). */
 export type RelayStatus = "open" | "not_accepting" | "unavailable" | "not_found";
 
-export const LINK_REFUSAL = "Leave links out; the poster can ask for them when they reply.";
+export const LINK_REFUSAL = "Leave links out; the poster can ask for them when they reply. (If it isn't a link, add a space after the period.)";
 
 export const posterMessageInput = z.object({
   listingId: z.number().int().positive(),

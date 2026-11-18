@@ -64,3 +64,15 @@ describe("takeRateLimit", () => {
     }
   });
 });
+
+describe("networkOf", () => {
+  it("keeps IPv4 and reduces IPv6 to its /64, however it is written", async () => {
+    const { networkOf } = await import("./rate-limit");
+    expect(networkOf("203.0.113.7")).toBe("203.0.113.7");
+    expect(networkOf("2001:db8:1:2:aaaa:bbbb:cccc:dddd")).toBe("2001:db8:1:2::/64");
+    expect(networkOf("2001:db8:1:2::1")).toBe("2001:db8:1:2::/64");
+    expect(networkOf("2001:DB8::1")).toBe("2001:db8:0:0::/64");
+    expect(networkOf("2001:db8:0:0:5::")).toBe(networkOf("2001:db8::9"));
+    expect(networkOf("unknown")).toBe("unknown");
+  });
+});

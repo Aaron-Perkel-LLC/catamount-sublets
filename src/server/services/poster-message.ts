@@ -4,7 +4,7 @@ import type { Db } from "@/db";
 import PosterMessageEmail, { posterMessageSubject, posterMessageText } from "@/emails/poster-message";
 import { appUrl } from "@/env";
 import { formatMoney } from "@/lib/format";
-import { posterMessageInput, type RelayStatus } from "@/lib/poster-message";
+import { containsLink, posterMessageInput, type RelayStatus } from "@/lib/poster-message";
 import { canMessagePosters, viewerLevelOf } from "@/lib/viewer";
 import { getNames } from "@/server/data/names";
 import {
@@ -95,6 +95,8 @@ export async function sendPosterMessage(db: Db, sender: RelaySender, raw: unknow
   const names = await getNames(db, sender.id);
   if (!names.complete) return { ok: false, error: "Add your name on your Account page first: posters see it." };
   const senderName = `${names.first} ${names.last}`;
+  // Names saved before the rule refused web addresses (checkName) still can't carry one into the email.
+  if (containsLink(senderName)) return { ok: false, error: "Your name on your Account page looks like a web address. Change it there first: posters see it." };
 
   const key = `poster-message/${sender.id}/${input.idempotencyKey}`;
   const claimed = await claimPosterMessage(db, { listingId: target.listingId, posterId: target.posterId, senderId: sender.id, body: input.body, idempotencyKey: key });
@@ -109,6 +111,8 @@ export async function sendPosterMessage(db: Db, sender: RelaySender, raw: unknow
   } else {
     const prev = await posterMessageByKey(db, key);
     if (!prev || prev.senderId !== sender.id) return { ok: false, error: "That message is still sending." };
+    // A key is one message: a retry must be the same text to the same listing, or a stuck row would let a different message out past the limits.
+    if (prev.listingId !== target.listingId || prev.body !== input.body) return { ok: false, error: "That message is still sending. Close the form and start a new one." };
     if (prev.status === "sent") return { ok: true, duplicate: true };
     if (prev.status === "failed") return { ok: false, error: "That message didn't go through. Close the form and try again." };
     const staleBefore = new Date(Date.now() - RETRY_PENDING_AFTER_MS);

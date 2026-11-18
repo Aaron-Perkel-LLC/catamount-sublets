@@ -46,7 +46,7 @@ cache can't keep the old tier.
   2026), server-only (not in any client bundle). Refresh with
   `npm run update:disposable-domains -- <sha>` and review the diff; the script
   refuses a short list and any school or big-provider domain. New community
-  accounts are capped at 3 per IP per day and 20 an hour site-wide
+  accounts are capped at 3 per network (IPv4 address, IPv6 /64) per day and 20 an hour site-wide
   (`RATE_LIMITS.communityAccount*`), counted in the create hook, after a
   correct code, so a refusal tells only the mailbox owner and nothing reveals
   whether an address has an account. Students never count against either.
@@ -63,6 +63,22 @@ cache can't keep the old tier.
   warning, and never names the address. Each message is stored (sender,
   poster, listing, text, status) for 180 days, then the daily sweep deletes
   it; admin → Messages lists them and Block bans the sender.
+- **Sessions are read from the database on every request**
+  (`getSessionUser` passes `disableCookieCache`), so a ban, a tier switch, an
+  approval or a revocation takes effect on the next request; better-auth's
+  five-minute signed cookie cache would otherwise keep the old session alive
+  (`src/server/auth/session.test.ts` proves both).
+- **Names can't be links.** `checkName` refuses a name a mail client would
+  link, and the relay refuses one saved before that rule, because the name
+  goes into the email's subject and body. The relay's link check is strict on
+  purpose (any scheme, `www.`, any letters-only TLD, after NFKC folding);
+  "St.John" without a space is refused with a hint.
+- **Known gaps, accepted:** plus and dot variants of one mailbox
+  (`me+1@gmail.com`) make separate community accounts, bounded by the
+  per-network (IPv6 by /64) and site-wide caps; someone filling the
+  site-wide cap blocks new community sign-ups for that hour (students are
+  never blocked). `not_accepting` on a public listing also covers a poster
+  who set Stop email, which says only that they take no outside messages.
 - **Revisit when** another school joins (add it to `SCHOOLS`; the brand check
   pattern names the schools), or relay volume makes per-message review
   impractical.

@@ -163,6 +163,30 @@ describe("the message relay", () => {
     expect(await sendPosterMessage(db, senders.at(-1)!, msg(p.listingId))).toMatchObject({ ok: false, error: expect.stringContaining("a lot of messages") });
   });
 
+  it("refuses a retry under the same key that changes the text or the listing, even after the row went stale", async () => {
+    const a = await mkListing();
+    const b = await mkListing();
+    const key = crypto.randomUUID();
+    const [row] = await db
+      .insert(s.posterMessages)
+      .values({ listingId: a.listingId, posterId: a.id, senderId: community.id, body, idempotencyKey: `poster-message/${community.id}/${key}`, attemptedAt: new Date(Date.now() - 3_600_000) })
+      .returning({ id: s.posterMessages.id });
+    expect(await sendPosterMessage(db, community, { listingId: b.listingId, body, idempotencyKey: key })).toMatchObject({ ok: false });
+    expect(await sendPosterMessage(db, community, { listingId: a.listingId, body: `${body} And one more thing.`, idempotencyKey: key })).toMatchObject({ ok: false });
+    expect(sentInTests).toHaveLength(0);
+    // The same message is the retry it is meant to be.
+    expect(await sendPosterMessage(db, community, { listingId: a.listingId, body, idempotencyKey: key })).toEqual({ ok: true, duplicate: false });
+    expect(sentInTests).toHaveLength(1);
+    expect((await db.select({ status: s.posterMessages.status }).from(s.posterMessages).where(eq(s.posterMessages.id, row.id)))[0].status).toBe("sent");
+  });
+
+  it("refuses a sender whose saved name is a web address (saved before names were checked for one)", async () => {
+    const p = await mkListing();
+    const [u] = await db.insert(s.user).values({ email: "linky@example.org", name: "linky", tier: "community", firstName: "www.paypal-secure.com", lastName: "Support" }).returning({ id: s.user.id });
+    expect(await sendPosterMessage(db, { id: u.id, email: "linky@example.org", role: "user", tier: "community" }, msg(p.listingId))).toMatchObject({ ok: false, error: expect.stringContaining("web address") });
+    expect(sentInTests).toHaveLength(0);
+  });
+
   it("needs the sender's name on file, and honours the read-only switch", async () => {
     const p = await mkListing();
     const nameless = { id: await mkUser("nameless@example.org", "community", false), email: "nameless@example.org", role: "user" as const, tier: "community" as const };
@@ -178,10 +202,27 @@ describe("the message relay", () => {
 });
 
 describe("containsLink", () => {
-  it.each(["https://x.co", "see http://a.b/c", "www.example.com", "pay at venmo.com/me", "bit.ly/abc", "example.org.", "ftp://files.example"])("finds %s", (text) => {
+  it.each([
+    "https://x.co",
+    "see http://a.b/c",
+    "www.example.com",
+    "pay at venmo.com/me",
+    "bit.ly/abc",
+    "example.org.",
+    "ftp://files.example",
+    // From the review: a user@host URL, curly quotes, dashes and brackets after, and newer TLDs.
+    "https://paypal.com@evil.store/login",
+    "\u201cvenmo.com\u201d",
+    "go to evil.com\u2014it\u2019s quick",
+    "<evil.com>",
+    "deposit at pay-now.store today",
+    "my-deposit.zip",
+    "WWW.EXAMPLE.COM",
+    "ｅｖｉｌ．ｃｏｍ", // full-width, which NFKC folds to evil.com
+  ])("finds %s", (text) => {
     expect(containsLink(text)).toBe(true);
   });
-  it.each(["write to me at robin@gmail.com", "call 802-555-0199", "St. John here", "I'm free Jan.15 to May", "U.S. citizen, 3.5 GPA"])("lets %s through", (text) => {
+  it.each(["write to me at robin@gmail.com", "call 802-555-0199", "St. John here", "I'm free Jan.15 to May", "U.S. citizen, 3.5 GPA", "the 2.5 mi walk is fine"])("lets %s through", (text) => {
     expect(containsLink(text)).toBe(false);
   });
 });

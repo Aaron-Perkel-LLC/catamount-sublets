@@ -20,6 +20,12 @@ describe("checkName", () => {
     expect(checkName("<b>x</b>", "first name").ok).toBe(false);
     expect(checkName(undefined, "first name").ok).toBe(false);
   });
+  it("refuses a name that a mail client would turn into a link (it goes to posters in relayed messages)", () => {
+    expect(checkName("www.paypal-secure.com", "first name")).toMatchObject({ ok: false, error: expect.stringContaining("web address") });
+    expect(checkName("Support.Team", "last name").ok).toBe(false);
+    expect(checkName("J.R.", "first name").ok).toBe(true);
+    expect(checkName("A.J. Smith", "first name").ok).toBe(true);
+  });
 });
 
 describe("guessNames", () => {

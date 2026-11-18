@@ -54,6 +54,20 @@ export const RATE_LIMITS = {
   posterMessagePerListing: { scope: "poster_message_listing", limit: 10, windowSeconds: 86_400 },
 } as const satisfies Record<string, RateLimitRule>;
 
+/**
+ * The network an address belongs to, for limits a person could dodge by
+ * changing address: IPv4 as is, IPv6 by its /64 (one connection gets a whole
+ * /64). "::" is expanded first, so "2001:db8::1" and "2001:db8:0:0:5::" agree.
+ */
+export function networkOf(ip: string): string {
+  if (!ip.includes(":")) return ip;
+  const [head, tail = ""] = ip.toLowerCase().split("%")[0].split("::");
+  const h = head ? head.split(":") : [];
+  const t = ip.includes("::") ? (tail ? tail.split(":") : []) : [];
+  const full = ip.includes("::") ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t] : h;
+  return `${full.slice(0, 4).map((p) => p.replace(/^0+(?=.)/, "")).join(":")}::/64`;
+}
+
 export function rateLimitKey(scope: string, subject: string): string {
   return `${scope}:${createHash("sha256").update(subject).digest("hex").slice(0, 32)}`;
 }

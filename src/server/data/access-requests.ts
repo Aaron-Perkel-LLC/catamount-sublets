@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import type { DbOrTx } from "@/db";
-import { accessRequests, session, user } from "@/db/schema";
+import { accessRequests, listings, session, user } from "@/db/schema";
 import type { AccessRequestInput } from "@/lib/access-request";
 import { normalizeEmail } from "@/lib/auth-allow";
 import { getSetting, setSetting } from "./settings";
@@ -94,11 +94,24 @@ export async function dismissAccessRequest(db: DbOrTx, id: number): Promise<bool
   return (await closeRequest(db, id)) !== null;
 }
 
-/** Stops new sign-ins for an approved address. An existing account keeps its session; ban it in People to cut it off. */
-export async function revokeApprovedEmail(db: DbOrTx, email: string, adminId: string): Promise<boolean> {
+/**
+ * Takes an approval back. Since phase 31 anyone can sign in, so revoking
+ * means the address is a community account again: an existing account
+ * without a listing is made community and signed out (its next request sees
+ * the public board). One with a listing stays a student until the listing is
+ * gone ("kept_student"), since a community account can't own one; ban it in
+ * People to cut it off. False when the address was not approved.
+ */
+export async function revokeApprovedEmail(db: DbOrTx, email: string, adminId: string): Promise<false | "revoked" | "kept_student"> {
   const target = normalizeEmail(email);
   const list = await approvedEmails(db);
   if (!list.includes(target)) return false;
   await setSetting(db, "approved_emails", { emails: list.filter((e) => e !== target) }, adminId);
-  return true;
+  const [account] = await db.select({ id: user.id, role: user.role }).from(user).where(eq(user.email, target));
+  if (!account || account.role === "admin") return "revoked";
+  const [listing] = await db.select({ id: listings.id }).from(listings).where(eq(listings.userId, account.id)).limit(1);
+  if (listing) return "kept_student";
+  await db.update(user).set({ tier: "community" }).where(eq(user.id, account.id));
+  await db.delete(session).where(eq(session.userId, account.id));
+  return "revoked";
 }

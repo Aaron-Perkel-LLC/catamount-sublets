@@ -6,6 +6,8 @@
  * ("St. John"); nothing else. A phone's curly apostrophe is saved as a plain one.
  */
 
+import { containsLink } from "./poster-message";
+
 export const NAME_MAX = 40;
 const NAME_RE = /^\p{L}[\p{L}\p{M}'. -]*$/u;
 /** The apostrophes keyboards type in place of ' (an iPhone types ’ by default). */
@@ -18,6 +20,8 @@ export function checkName(input: unknown, label: string): NameCheck {
   if (!value) return { ok: false, error: `Enter your ${label}.` };
   if (value.length > NAME_MAX) return { ok: false, error: `Your ${label} can be up to ${NAME_MAX} characters.` };
   if (!NAME_RE.test(value)) return { ok: false, error: `Your ${label} can only have letters, spaces, hyphens, apostrophes and periods.` };
+  // A name goes to posters in the relay's subject and body (phase 31), where a mail client would link "www.x.com".
+  if (containsLink(value)) return { ok: false, error: `Your ${label} looks like a web address. Add a space after any period.` };
   return { ok: true, value };
 }
 

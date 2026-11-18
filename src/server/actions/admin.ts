@@ -229,12 +229,13 @@ export async function adminSendMail(input: unknown, token: string): Promise<Mail
   return r;
 }
 
-/** Stop new sign-ins for an approved address. */
-export async function adminRevokeApprovedEmail(email: string): Promise<admin.Result> {
+/** Take an approval back: the address is a community account again (see revokeApprovedEmail for one with a listing). */
+export async function adminRevokeApprovedEmail(email: string): Promise<admin.Result<{ keptStudent: boolean }>> {
   const me = await requireAdmin();
-  if (!(await revokeApprovedEmail(await getDb(), z.string().email().max(254).parse(email), me.id))) return { ok: false, error: "That address wasn't on the list." };
+  const r = await revokeApprovedEmail(await getDb(), z.string().email().max(254).parse(email), me.id);
+  if (!r) return { ok: false, error: "That address wasn't on the list." };
   revalidatePath("/admin");
-  return { ok: true, data: undefined };
+  return { ok: true, data: { keptStudent: r === "kept_student" } };
 }
 
 /* ------------------------------------------------------- weekly digest */

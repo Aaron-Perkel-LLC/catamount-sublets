@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createTestDb } from "@/db/test-db";
 import { eq } from "drizzle-orm";
-import { accessRequests, otpSends, rateLimitBuckets, session, siteSettings, user } from "@/db/schema";
+import { accessRequests, listings, otpSends, rateLimitBuckets, session, siteSettings, user } from "@/db/schema";
 import { RATE_LIMITS, takeRateLimit } from "@/server/rate-limit";
 import { buildAuth } from "@/server/auth/config";
 import { sentInTests } from "@/server/email/send";
@@ -25,6 +25,7 @@ beforeAll(async () => {
 });
 afterAll(async () => close());
 beforeEach(async () => {
+  await db.delete(listings);
   await db.delete(accessRequests);
   await db.delete(siteSettings);
   await db.delete(rateLimitBuckets);
@@ -54,7 +55,7 @@ describe("access request approvals", () => {
     expect(await dismissAccessRequest(db, a)).toBe(false);
     expect(await isEmailApproved(db, "sam@example.org")).toBe(false);
     await approveAccessRequest(db, b, adminId);
-    expect(await revokeApprovedEmail(db, "LEE@example.org", adminId)).toBe(true);
+    expect(await revokeApprovedEmail(db, "LEE@example.org", adminId)).toBe("revoked");
     expect(await revokeApprovedEmail(db, "lee@example.org", adminId)).toBe(false);
     expect(await approvedEmails(db)).toEqual([]);
   });
@@ -99,6 +100,25 @@ describe("sign-in through better-auth: tiers, approvals and the new-account limi
     await approveAccessRequest(db, await request("lee@example.org"), adminId);
     expect((await db.select({ tier: user.tier }).from(user).where(eq(user.id, lee.id)))[0].tier).toBe("student");
     expect(await db.select().from(session).where(eq(session.userId, lee.id))).toHaveLength(0);
+  });
+
+  it("revoking an approval makes the account community again and signs it out, unless it has a listing", async () => {
+    const auth = buildAuth(db);
+    await approveAccessRequest(db, await request("grad@example.org"), adminId);
+    expect(await signIn(auth, "grad@example.org")).toBe("student");
+    const [grad] = await db.select({ id: user.id }).from(user).where(eq(user.email, "grad@example.org"));
+    expect(await revokeApprovedEmail(db, "grad@example.org", adminId)).toBe("revoked");
+    expect((await db.select({ tier: user.tier }).from(user).where(eq(user.id, grad.id)))[0].tier).toBe("community");
+    expect(await db.select().from(session).where(eq(session.userId, grad.id))).toHaveLength(0);
+    await db.delete(otpSends);
+    expect(await signIn(auth, "grad@example.org")).toBe("community");
+
+    await approveAccessRequest(db, await request("poster@example.org"), adminId);
+    expect(await signIn(auth, "poster@example.org")).toBe("student");
+    const [p] = await db.select({ id: user.id }).from(user).where(eq(user.email, "poster@example.org"));
+    await db.insert(listings).values({ userId: p.id, price: 800, address: "1 Main St", lat: 44.47, lon: -73.2 });
+    expect(await revokeApprovedEmail(db, "poster@example.org", adminId)).toBe("kept_student");
+    expect((await db.select({ tier: user.tier }).from(user).where(eq(user.id, p.id)))[0].tier).toBe("student");
   });
 
   it("caps new community accounts per IP (students never count), only after a correct code", async () => {

@@ -78,7 +78,8 @@ export async function AppShell({ user, children }: { user: SessionUser; children
           </Suspense>
         </nav>
       </header>
-      <AnnouncementBanner announcement={announcement} />
+      {/* Students' frame only: signed-out visitors (PublicShell) don't get it, and a community account sees what they see. */}
+      {seesFullListings(level) && <AnnouncementBanner announcement={announcement} />}
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
         <ShareSheetProvider>{children}</ShareSheetProvider>
       </main>

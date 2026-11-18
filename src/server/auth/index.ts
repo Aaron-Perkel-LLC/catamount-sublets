@@ -25,12 +25,14 @@ export interface SessionUser {
   legacyNetid: string | null;
 }
 
-/** The signed-in person, or null. Banned accounts have no session. Once per request (layout, metadata and page all ask). */
+/** The signed-in person, or null, read from the database (not the cookie cache). Banned accounts have no session. Once per request (layout, metadata and page all ask). */
 export const getSessionUser = cache(async function getSessionUser(): Promise<SessionUser | null> {
   // headers() first: at build time it marks the page dynamic before anything builds the auth instance (which has no secret then).
   const requestHeaders = await headers();
   const a = await getAuth();
-  const session = await a.api.getSession({ headers: requestHeaders });
+  // Never the five-minute signed cookie cache: a ban, a deleted session or a changed tier (phase 31) must
+  // take effect on the next request, not up to five minutes later. One indexed read per request.
+  const session = await a.api.getSession({ headers: requestHeaders, query: { disableCookieCache: true } });
   if (!session) return null;
   const u = session.user as typeof session.user & { role?: string; tier?: string; legacyNetid?: string | null };
   return {

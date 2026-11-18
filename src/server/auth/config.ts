@@ -13,7 +13,7 @@ import OtpCodeEmail from "@/emails/otp-code";
 import { assertEmailAllowed } from "./allow";
 import { sendMail } from "@/server/email/send";
 import { log } from "@/server/log";
-import { RATE_LIMITS, takeRateLimit } from "@/server/rate-limit";
+import { networkOf, RATE_LIMITS, takeRateLimit } from "@/server/rate-limit";
 
 /**
  * The better-auth configuration. Built once per process by getAuth() in
@@ -52,9 +52,13 @@ export function buildAuth(db: Db) {
     }
   };
 
-  /** A new community account: per IP, then across the site. Students never count. */
+  /**
+   * A new community account: per network, then across the site. Students
+   * never count. An IPv6 address counts by its /64, since one connection
+   * gets a whole /64 and could otherwise rotate past the limit.
+   */
   const newCommunityAccount = async (ip: string) => {
-    const perIp = await takeRateLimit(db, RATE_LIMITS.communityAccountPerIp, ip);
+    const perIp = await takeRateLimit(db, RATE_LIMITS.communityAccountPerIp, networkOf(ip));
     if (!perIp.allowed) throw tooManyAccounts();
     const global = await takeRateLimit(db, RATE_LIMITS.communityAccountGlobal, "all");
     if (!global.allowed) {

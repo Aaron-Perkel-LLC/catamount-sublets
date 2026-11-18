@@ -69,9 +69,16 @@ export async function claimPosterMessage(
 export async function posterMessageByKey(
   db: DbOrTx,
   idempotencyKey: string,
-): Promise<{ id: number; senderId: string; status: PosterMessageStatus; attemptedAt: Date } | null> {
+): Promise<{ id: number; senderId: string; listingId: number | null; body: string; status: PosterMessageStatus; attemptedAt: Date } | null> {
   const [row] = await db
-    .select({ id: posterMessages.id, senderId: posterMessages.senderId, status: posterMessages.status, attemptedAt: posterMessages.attemptedAt })
+    .select({
+      id: posterMessages.id,
+      senderId: posterMessages.senderId,
+      listingId: posterMessages.listingId,
+      body: posterMessages.body,
+      status: posterMessages.status,
+      attemptedAt: posterMessages.attemptedAt,
+    })
     .from(posterMessages)
     .where(eq(posterMessages.idempotencyKey, idempotencyKey));
   return row ? { ...row, status: row.status as PosterMessageStatus } : null;

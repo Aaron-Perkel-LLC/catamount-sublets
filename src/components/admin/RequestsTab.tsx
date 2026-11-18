@@ -118,7 +118,20 @@ export function RequestsTab({ requests }: { requests: RequestsDto }) {
                   type="button"
                   className="btn-secondary px-2 py-1 text-xs text-error-ink"
                   disabled={pending}
-                  onClick={() => confirm(`Remove ${email}? They won't be able to sign in again.`) && run(() => adminRevokeApprovedEmail(email), `Removed ${email}.`)}
+                  onClick={() =>
+                    confirm(`Remove ${email}? They can still sign in, as a community account: the public board and messages to posters, no posting. Ban them in People to cut them off.`) &&
+                    start(async () => {
+                      const r = await adminRevokeApprovedEmail(email);
+                      setNote(
+                        !r.ok
+                          ? r.error
+                          : r.data.keptStudent
+                            ? `Removed ${email}. They have a listing, so they stay a student until it's gone.`
+                            : `Removed ${email}. Their account is a community account now and was signed out.`,
+                      );
+                      router.refresh();
+                    })
+                  }
                 >
                   Remove
                 </button>
