@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertIsoDate, daysBetweenDates, deadlineWords, easternClock, easternDate, easternDayStart, easternDeadlinePassed, easternOffsetMinutes, nextDate, postedAgo, shortDate } from "./dates";
+import { assertIsoDate, daysBetweenDates, deadlineWords, easternClock, easternDate, easternGreeting, easternDayStart, easternDeadlinePassed, easternOffsetMinutes, nextDate, postedAgo, shortDate } from "./dates";
 
 describe("easternDate", () => {
   it("uses the Eastern calendar day, not UTC", () => {
@@ -77,5 +77,36 @@ describe("easternClock", () => {
     expect(easternClock(new Date("2027-07-05T12:05:00Z"))).toEqual({ date: "2027-07-05", weekday: 1, hour: 8 }); // EDT
     expect(easternClock(new Date("2026-11-23T04:59:00Z"))).toEqual({ date: "2026-11-22", weekday: 0, hour: 23 });
     expect(easternClock(new Date("2026-11-23T05:00:00Z"))).toEqual({ date: "2026-11-23", weekday: 1, hour: 0 });
+  });
+});
+
+describe("easternGreeting", () => {
+  const at = (iso: string) => new Date(iso);
+  it.each([
+    ["2026-11-18T09:59:00Z", "Good evening"], // 4:59 EST
+    ["2026-11-18T10:00:00Z", "Good morning"], // 5:00
+    ["2026-11-18T16:59:00Z", "Good morning"], // 11:59
+    ["2026-11-18T17:00:00Z", "Good afternoon"], // 12:00
+    ["2026-11-18T21:59:00Z", "Good afternoon"], // 16:59
+    ["2026-11-18T22:00:00Z", "Good evening"], // 17:00
+    ["2026-11-19T05:00:00Z", "Good evening"], // midnight
+  ])("%s is %s", (iso, greeting) => {
+    expect(easternGreeting(at(iso))).toBe(greeting);
+  });
+
+  it("follows the clock change in November", () => {
+    expect(easternGreeting(at("2026-10-31T16:30:00Z"))).toBe("Good afternoon"); // 12:30 EDT
+    expect(easternGreeting(at("2026-11-01T16:30:00Z"))).toBe("Good morning"); // 11:30 EST, the day the clocks go back
+  });
+
+  it("follows the clock change in March", () => {
+    expect(easternGreeting(at("2027-03-13T16:30:00Z"))).toBe("Good morning"); // 11:30 EST
+    expect(easternGreeting(at("2027-03-14T16:30:00Z"))).toBe("Good afternoon"); // 12:30 EDT, the day the clocks go forward
+  });
+
+  it("adds the first name when there is one", () => {
+    expect(easternGreeting(at("2026-11-18T15:00:00Z"), "Ada")).toBe("Good morning, Ada");
+    expect(easternGreeting(at("2026-11-18T19:00:00Z"), "  ")).toBe("Good afternoon");
+    expect(easternGreeting(at("2026-11-18T19:00:00Z"), null)).toBe("Good afternoon");
   });
 });

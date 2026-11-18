@@ -4,17 +4,16 @@ import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
-import { isCurrent } from "@/lib/nav";
 import { useNavItems } from "./NavLinks";
 
 /**
- * The phone header (up to 768 px, as the old site): the person's first name
- * and a menu button in the bar, and the links in a panel that drops down
- * under it. The panel is a dialog in all but name: the button says whether
+ * The phone header (up to 768 px, as the old site): a menu button in the
+ * bar, and the links (Account among them) and Sign out in a panel that drops
+ * down under it. The panel is a dialog in all but name: the button says whether
  * it is open, focus starts inside it and cycles within it, Escape, the
  * backdrop and any navigation close it, and focus returns to the button.
  */
-export function MobileNav({ isAdmin, hasListing, name, signOut }: { isAdmin: boolean; hasListing: boolean; name: string; signOut: () => Promise<void> }) {
+export function MobileNav({ isAdmin, hasListing, signOut }: { isAdmin: boolean; hasListing: boolean; signOut: () => Promise<void> }) {
   const items = useNavItems({ isAdmin, hasListing, withAccount: true });
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -70,14 +69,6 @@ export function MobileNav({ isAdmin, hasListing, name, signOut }: { isAdmin: boo
 
   return (
     <div className="ml-auto flex min-w-0 items-center gap-1 md:hidden">
-      <Link
-        href="/account"
-        aria-current={isCurrent(pathname, "/account") ? "page" : undefined}
-        className={`max-w-[9rem] truncate text-sm hover:text-lake ${isCurrent(pathname, "/account") ? "font-bold text-lake" : "text-ink-2"}`}
-        title={name}
-      >
-        {name}
-      </Link>
       <button
         ref={button}
         type="button"

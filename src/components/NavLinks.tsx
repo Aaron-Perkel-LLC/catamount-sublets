@@ -31,20 +31,19 @@ export function useNavItems({ isAdmin, hasListing, withAccount = false }: { isAd
   ];
 }
 
-/** The desktop bar (769 px and up, the legacy breakpoint): the current page in lake with a maple bar on the header's edge. */
+/** A desktop bar link: the current page in lake with a maple bar on the header's edge. */
+const barLink = (current: boolean) =>
+  `relative flex items-center px-2.5 hover:text-lake ${
+    current ? "text-lake after:absolute after:inset-x-2.5 after:bottom-0 after:h-[3px] after:rounded-t-full after:bg-maple" : ""
+  }`;
+
+/** The desktop bar (769 px and up, the legacy breakpoint). */
 export function NavLinks({ isAdmin, hasListing }: { isAdmin: boolean; hasListing: boolean }) {
   const items = useNavItems({ isAdmin, hasListing });
   return (
     <div className="hidden self-stretch text-sm font-bold text-ink-2 md:flex">
       {items.map((i) => (
-        <Link
-          key={i.label}
-          href={i.href}
-          aria-current={i.current ? "page" : undefined}
-          className={`relative flex items-center px-2.5 hover:text-lake ${
-            i.current ? "text-lake after:absolute after:inset-x-2.5 after:bottom-0 after:h-[3px] after:rounded-t-full after:bg-maple" : ""
-          }`}
-        >
+        <Link key={i.label} href={i.href} aria-current={i.current ? "page" : undefined} className={barLink(i.current)}>
           {i.label}
         </Link>
       ))}
@@ -52,12 +51,12 @@ export function NavLinks({ isAdmin, hasListing }: { isAdmin: boolean; hasListing
   );
 }
 
-/** The person's name in the desktop bar, linking to their account and marked current there. */
-export function AccountLink({ label }: { label: string }) {
+/** Account in the desktop bar's right-hand group, marked current like the links on the left. */
+export function AccountLink() {
   const current = isCurrent(usePathname(), "/account");
   return (
-    <Link href="/account" aria-current={current ? "page" : undefined} className={`hover:text-lake ${current ? "font-bold text-lake" : "text-ink-2"}`}>
-      {label}
+    <Link href="/account" aria-current={current ? "page" : undefined} className={`self-stretch font-bold text-ink-2 ${barLink(current)}`}>
+      Account
     </Link>
   );
 }

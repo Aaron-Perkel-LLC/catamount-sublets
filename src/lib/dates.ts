@@ -132,3 +132,15 @@ export function easternClock(instant: Date): { date: string; weekday: number; ho
   const hour = Number(parts.find((p) => p.type === "hour")?.value) % 24;
   return { date: easternDate(instant), weekday, hour };
 }
+
+/**
+ * The header's greeting in Eastern time: morning 5:00–11:59, afternoon
+ * 12:00–16:59, evening otherwise; with the first name when there is one.
+ * Rendered on the server, so the browser never computes a different one.
+ */
+export function easternGreeting(instant: Date, firstName?: string | null): string {
+  const { hour } = easternClock(instant);
+  const part = hour >= 5 && hour < 12 ? "morning" : hour >= 12 && hour < 17 ? "afternoon" : "evening";
+  const name = firstName?.trim();
+  return name ? `Good ${part}, ${name}` : `Good ${part}`;
+}

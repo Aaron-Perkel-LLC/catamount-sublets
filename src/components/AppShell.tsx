@@ -21,10 +21,11 @@ import { getNames } from "@/server/data/names";
 import { noticeFor } from "@/server/data/notices";
 import { log } from "@/server/log";
 import { getSetting } from "@/server/data/settings";
+import { easternGreeting } from "@/lib/dates";
 
 /**
  * The signed-in frame: the welcome-name gate, the header with the person's
- * links, the announcement, the share sheet, and any popup notice for them. Used by (app), which
+ * links and a greeting, the announcement, the share sheet, and any popup notice for them. Used by (app), which
  * requires a session, and by (board) when there is one.
  */
 export async function AppShell({ user, children }: { user: SessionUser; children: ReactNode }) {
@@ -37,6 +38,8 @@ export async function AppShell({ user, children }: { user: SessionUser; children
   }
   const [mine] = await db.select({ id: listings.id }).from(listings).where(eq(listings.userId, user.id)).limit(1);
   const announcement = await getSetting(db, "announcement");
+  // On the server, in Eastern time (src/lib/dates.ts): nothing for the browser to compute differently.
+  const greeting = easternGreeting(new Date(), names.first);
   // Only a notice whose audience takes this person in is ever sent (rendered here, on the server).
   const notice = await noticeFor(db, { kind: "signed-in", userId: user.id, hasListing: Boolean(mine) }).catch((e: unknown) => {
     log.error("notice.lookup_failed", e); // best effort: a broken popup never takes the page down
@@ -53,10 +56,13 @@ export async function AppShell({ user, children }: { user: SessionUser; children
           <Suspense>
             <NavLinks isAdmin={user.role === "admin"} hasListing={Boolean(mine)} />
           </Suspense>
-          {/* Desktop: name and sign-out in the bar. Phone: first name and a menu button (MobileNav). */}
-          <div className="ml-auto hidden items-center gap-3 text-sm md:flex">
+          {/* Desktop: the greeting (plain text, from 1024 px where it fits), Account, Sign out. Phone: the menu (MobileNav), which has Account and Sign out. */}
+          <div className="ml-auto hidden items-center gap-3 self-stretch text-sm md:flex">
+            <span className="hidden max-w-[16rem] truncate text-ink-3 lg:inline" title={greeting}>
+              {greeting}
+            </span>
             <Suspense>
-              <AccountLink label={names.first ? `${names.first} ${names.last ?? ""}`.trim() : user.email} />
+              <AccountLink />
             </Suspense>
             <form action={signOutAction}>
               <button type="submit" className="link">
@@ -65,7 +71,7 @@ export async function AppShell({ user, children }: { user: SessionUser; children
             </form>
           </div>
           <Suspense>
-            <MobileNav isAdmin={user.role === "admin"} hasListing={Boolean(mine)} name={names.first ?? user.email.split("@")[0]} signOut={signOutAction} />
+            <MobileNav isAdmin={user.role === "admin"} hasListing={Boolean(mine)} signOut={signOutAction} />
           </Suspense>
         </nav>
       </header>
