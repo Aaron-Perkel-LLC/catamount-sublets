@@ -17,12 +17,14 @@
  * fields (address, street, true coordinates, contact and account email,
  * phone, display and poster name, a run of its description), public or
  * signed-in only, become strings that must not appear in any signed-out
- * response. They are never printed: a hit names the field and listing id.
+ * response (true coordinates by coordinateLeaks' rule: both anywhere, or
+ * either outside the public area fields). They are never printed: a hit names the field and listing id.
  * The local counterpart, against a seeded database, is check-public-leaks.ts.
  * Exits 1 on any failed check.
  */
 import { neon } from "@neondatabase/serverless";
 import { SITE } from "@/config/site";
+import { coordinateLeaks } from "@/server/data/public-leak-fixture";
 
 type Row = Record<string, unknown>;
 
@@ -52,6 +54,8 @@ async function main(): Promise<number> {
 
   // [field, listing id, value]: every open listing's private fields; none may appear signed out.
   const needles: [string, number, string][] = [];
+  // [listing id, true point]: read by coordinateLeaks (both coordinates anywhere, or either outside the public area fields).
+  const points: [number, { lat: number; lon: number }][] = [];
   // The site's own addresses (the footer's support mailto) are published on every page; an account that uses one (the admin's) is not a leak.
   const published = new Set((Object.values(SITE) as unknown[]).filter((v): v is string => typeof v === "string" && v.includes("@")).map((v) => v.toLowerCase()));
   for (const r of all) {
@@ -64,8 +68,7 @@ async function main(): Promise<number> {
     add(first, "address");
     const street = first.replace(/^\s*\d+[A-Za-z]?\s+/, "");
     if (street.split(/\s+/).slice(0, -1).join(" ").length >= 4) add(street, "street"); // the street name with its suffix
-    if (typeof r.lat === "number") add(r.lat.toFixed(5), "lat");
-    if (typeof r.lon === "number") add(r.lon.toFixed(5), "lon");
+    if (typeof r.lat === "number" && typeof r.lon === "number") points.push([id, { lat: r.lat, lon: r.lon }]);
     add(r.contact_email, "contact email");
     add(r.email, "account email");
     add(String(r.contact_phone ?? "").replace(/\D/g, "").slice(-7), "phone"); // last 7 digits
@@ -91,6 +94,7 @@ async function main(): Promise<number> {
   const hits = new Map<string, string[]>();
   const leaked = (body: string, where: string) => {
     const found = needles.filter(([, , v]) => body.includes(v)).map(([f, id]) => `${f} of #${id}`);
+    for (const [id, point] of points) found.push(...coordinateLeaks(body, point).map((c) => `${c} of #${id}`));
     const key = body.replace(AREA, "").match(PRIVATE_KEYS);
     if (key) found.push(`a private key (${key[1]})`);
     if (found.length) hits.set(where, found);
@@ -98,7 +102,7 @@ async function main(): Promise<number> {
   };
   const noShared = (cc: string) => /\bprivate\b/.test(cc) && /\bno-store\b/.test(cc) && !/\b(public|s-maxage|stale-while-revalidate)\b/.test(cc);
 
-  console.log(`${BASE}: ${counts[0].open} open listings, ${counts[0].public} public; ${needles.length} private strings (every open listing's) to look for`);
+  console.log(`${BASE}: ${counts[0].open} open listings, ${counts[0].public} public; ${needles.length} private strings and ${points.length} true points (every open listing's) to look for`);
   const pubIds = pub.map((r) => Number(r.id));
   const pages = ["/", "/browse", "/map", "/browse?sort=closest&max_distance=2", ...pubIds.map((id) => `/listing/${id}`), ...pubIds.map((id) => `/browse?id=${id}&via=share`)];
   for (const p of pages) {

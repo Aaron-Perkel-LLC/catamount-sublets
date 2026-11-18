@@ -36,10 +36,33 @@ export function leaks(text: string): string[] {
     "555-0199",
     "5550199",
     SECRET.descriptionMarker,
-    SECRET.lat.toFixed(5),
-    SECRET.lon.toFixed(5),
-    String(SECRET.lat),
-    String(SECRET.lon),
   ];
-  return needles.filter((n) => text.includes(n));
+  return [...needles.filter((n) => text.includes(n)), ...coordinateLeaks(text, SECRET).map((c) => `true ${c}`)];
+}
+
+/**
+ * A public listing's approximate area (`"area":{"lat":…,"lon":…,"radiusM":…}`),
+ * as JSON or escaped inside an HTML script (`\"area\":…`). Its coordinates
+ * are meant to be there.
+ */
+const PUBLIC_AREA_JSON = /\\*"area\\*":\{\\*"lat\\*":-?[\d.]+,\\*"lon\\*":-?[\d.]+,\\*"radiusM\\*":\d+\}/g;
+
+/** How a coordinate would be written out: five decimals, and its full form when that is longer. */
+function coordinateForms(v: number): string[] {
+  const full = String(v);
+  return full.length > v.toFixed(5).length ? [v.toFixed(5), full] : [v.toFixed(5)];
+}
+
+/**
+ * Which of a listing's true coordinates `body` gives away. Both together
+ * anywhere in the body are a leak (an area centred on the true point, say);
+ * either one outside the public `area` objects is a leak too. A lone
+ * coordinate inside an area is not: another listing's area, kilometres
+ * away, can share a latitude to five decimals by chance.
+ */
+export function coordinateLeaks(body: string, point: { lat: number; lon: number }): ("lat" | "lon")[] {
+  const has = (text: string, v: number) => coordinateForms(v).some((f) => text.includes(f));
+  if (has(body, point.lat) && has(body, point.lon)) return ["lat", "lon"];
+  const outside = body.replace(PUBLIC_AREA_JSON, "");
+  return (["lat", "lon"] as const).filter((k) => has(outside, point[k]));
 }
