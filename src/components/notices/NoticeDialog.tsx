@@ -93,11 +93,12 @@ export function NoticePopup({ notice, signedIn, children }: { notice: NoticeDto;
   const returnFocus = useRef<HTMLElement | null>(null);
   const visible = open && noticeShownOn(pathname);
 
-  // A navigation it didn't start closes it, not dismissed: it shows again after a reload (state adjusted during render, the React way).
+  // A navigation it didn't start closes it if it was showing, not dismissed: it shows again after a reload
+  // (state adjusted during render, the React way). Opened but held back (on /admin), it's left to show on the next page.
   const [seenPath, setSeenPath] = useState(pathname);
   if (seenPath !== pathname) {
     setSeenPath(pathname);
-    if (open) setOpen(false);
+    if (open && noticeShownOn(seenPath)) setOpen(false);
   }
 
   /** Closes it for good: the dismissal row (signed in) or localStorage (signed out), and its count. */
@@ -162,17 +163,22 @@ export function NoticePopup({ notice, signedIn, children }: { notice: NoticeDto;
 
   async function cta() {
     const href = notice.ctaHref;
-    // Let the dismissal land before leaving (briefly; navigating matters more).
-    await Promise.race([dismiss("cta"), new Promise((r) => setTimeout(r, 1500))]);
     // Checked again here: only a path on this site (client navigation) or an https page, never a script URL.
-    if (!href || !safeCtaHref(href)) return;
-    if (isRelativePath(href)) router.push(href);
-    else if (new URL(href).protocol === "https:") window.location.assign(href);
+    if (!href || !safeCtaHref(href)) return void dismiss("cta");
+    if (isRelativePath(href)) return leaveFor(href, "cta");
+    // Leaving the site unloads the page: let the dismissal land first (briefly; leaving matters more).
+    await Promise.race([dismiss("cta"), new Promise((r) => setTimeout(r, 1500))]);
+    if (new URL(href).protocol === "https:") window.location.assign(href);
   }
 
-  /** Leaves for a path here once the dismissal has landed (briefly; navigating matters more). */
-  async function leaveFor(href: string) {
-    await Promise.race([dismiss("dismiss"), new Promise((r) => setTimeout(r, 1500))]);
+  /**
+   * Dismisses, then goes to a path here at once. A client-side navigation
+   * doesn't abort the dismissal already sent (Next only discards the
+   * action's result), and waiting for it could override a click the person
+   * makes in the meantime.
+   */
+  function leaveFor(href: string, how: "dismiss" | "cta") {
+    void dismiss(how);
     router.push(href);
   }
 
@@ -182,17 +188,25 @@ export function NoticePopup({ notice, signedIn, children }: { notice: NoticeDto;
    * after the dismissal; anything else (a new tab, an external page, mailto)
    * is left to the browser.
    */
-  function onBodyClick(e: MouseEvent<HTMLDivElement>) {
+  const bodyLink = (e: MouseEvent<HTMLDivElement>) => {
     const a = e.target instanceof Element ? e.target.closest("a[href]") : null;
-    if (!(a instanceof HTMLAnchorElement) || !e.currentTarget.contains(a)) return;
+    return a instanceof HTMLAnchorElement && e.currentTarget.contains(a) ? a : null;
+  };
+  function onBodyClick(e: MouseEvent<HTMLDivElement>) {
+    const a = bodyLink(e);
+    if (!a) return;
     const href = a.getAttribute("href") ?? "";
     const plain = e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && a.target !== "_blank";
     if (plain && isRelativePath(href)) {
       e.preventDefault();
-      void leaveFor(href);
+      leaveFor(href, "dismiss");
     } else {
       void dismiss("dismiss");
     }
+  }
+  /** A middle click (a background tab) sends auxclick, not click. */
+  function onBodyAuxClick(e: MouseEvent<HTMLDivElement>) {
+    if (e.button === 1 && bodyLink(e)) void dismiss("dismiss");
   }
 
   if (!visible) return null;
@@ -204,7 +218,11 @@ export function NoticePopup({ notice, signedIn, children }: { notice: NoticeDto;
       }}
     >
       <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className="w-full max-w-md outline-none">
-        <NoticeCard notice={notice} body={<div onClick={onBodyClick}>{children}</div>} titleId={titleId} onGotIt={() => void dismiss("dismiss")} onCta={() => void cta()} />
+        <NoticeCard notice={notice} body={
+            <div onClick={onBodyClick} onAuxClick={onBodyAuxClick}>
+              {children}
+            </div>
+          } titleId={titleId} onGotIt={() => void dismiss("dismiss")} onCta={() => void cta()} />
       </div>
     </div>
   );

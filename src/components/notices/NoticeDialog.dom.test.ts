@@ -192,17 +192,21 @@ describe("NoticePopup", () => {
 
   const bodyWith = (href: string, external = false) =>
     createElement("p", null, "See ", createElement("a", { href, ...(external ? { target: "_blank", rel: "noopener noreferrer" } : {}) }, "the map"));
-  const clickBodyLink = async () => {
+  /** Clicks the body's link and returns the click event, to see whether the browser's own navigation was stopped. */
+  const clickBodyLink = async (init: MouseEventInit = {}) => {
+    const ev = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ...init });
     await act(async () => {
-      dialog()!.querySelector<HTMLAnchorElement>("p a")!.click();
+      dialog()!.querySelector<HTMLAnchorElement>("p a")!.dispatchEvent(ev);
     });
+    return ev;
   };
 
   it("signed out, a link in the body dismisses it like Got it (stored, counted as a dismissal) and goes there", async () => {
     const n = notice();
     await mount(n, false, bodyWith("/map"));
     await wait();
-    await clickBodyLink();
+    const ev = await clickBodyLink();
+    expect(ev.defaultPrevented).toBe(true); // no full page load: the router goes there
     expect(dialog()).toBeNull();
     expect(localStorage.getItem(`notice:dismissed:${n.id}`)).not.toBeNull();
     expect(h.track).toHaveBeenCalledWith("dismiss", n.id);
@@ -210,13 +214,37 @@ describe("NoticePopup", () => {
     expect(h.push).toHaveBeenCalledWith("/map");
   });
 
-  it("signed in, a link in the body records the dismissal before navigating", async () => {
+  it("signed in, a link in the body sends the dismissal, then navigates at once without waiting for it", async () => {
     const n = notice();
+    h.dismiss.mockImplementationOnce(() => new Promise<void>(() => {})); // never answers
     await mount(n, true, bodyWith("/map"));
     await wait();
-    await clickBodyLink();
+    const ev = await clickBodyLink();
+    expect(ev.defaultPrevented).toBe(true);
     expect(h.dismiss).toHaveBeenCalledExactlyOnceWith(n.id, "dismiss");
-    expect(h.push).toHaveBeenCalledWith("/map");
+    expect(h.push).toHaveBeenCalledExactlyOnceWith("/map");
+    expect(h.dismiss.mock.invocationCallOrder[0]).toBeLessThan(h.push.mock.invocationCallOrder[0]);
+    expect(dialog()).toBeNull();
+  });
+
+  it("a Cmd/Ctrl-click or a middle click on a body link is left to the browser (a new tab) and dismisses", async () => {
+    const n = notice();
+    await mount(n, false, bodyWith("/map"));
+    await wait();
+    const ev = await clickBodyLink({ metaKey: true });
+    expect(ev.defaultPrevented).toBe(false);
+    expect(h.push).not.toHaveBeenCalled();
+    expect(dialog()).toBeNull();
+    expect(localStorage.getItem(`notice:dismissed:${n.id}`)).not.toBeNull();
+
+    const m = notice();
+    await mount(m, true, bodyWith("/map"));
+    await wait();
+    await act(async () => {
+      dialog()!.querySelector("p a")!.dispatchEvent(new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 }));
+    });
+    expect(h.dismiss).toHaveBeenCalledExactlyOnceWith(m.id, "dismiss");
+    expect(h.push).not.toHaveBeenCalled();
     expect(dialog()).toBeNull();
   });
 
@@ -248,5 +276,17 @@ describe("NoticePopup", () => {
     await mount(n);
     await wait();
     expect(dialog()).toBeNull();
+  });
+
+  it("held back on /admin, it still opens on the next page in the same frame", async () => {
+    const n = notice();
+    h.pathname = "/admin";
+    await mount(n);
+    await wait();
+    expect(dialog()).toBeNull();
+    h.pathname = "/account";
+    await mount(n);
+    await wait();
+    expect(dialog()).not.toBeNull();
   });
 });
