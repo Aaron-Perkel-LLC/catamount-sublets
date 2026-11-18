@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { SITE } from "@/config/site";
+import { CHANGELOG } from "@/content/changelog";
 import { easternYear } from "@/lib/dates";
+import { WhatsNewLink } from "./WhatsNew";
+
+/** Only the dates go to the browser, for the "New" dot. */
+const ENTRY_DATES = CHANGELOG.map((e) => e.date);
 
 /**
  * The footer on the front page and every signed-in page, in two lines: the
- * copyright with the contact and privacy links, then the disclaimer. What is
+ * copyright with the contact, privacy and What's new links, then the disclaimer. What is
  * counted and who sees it is on the privacy page.
  */
 export function SiteFooter() {
@@ -30,7 +35,8 @@ export function SiteFooter() {
             ·{" "}
             <Link href="/privacy" className={link}>
               Privacy
-            </Link>
+            </Link>{" "}
+            · <WhatsNewLink dates={ENTRY_DATES} className={link} />
           </span>
         </p>
         <p>{SITE.disclaimer}</p>

@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { SITE } from "@/config/site";
 
 /**
- * Search engines may list the front page, sign-in, privacy, and the
+ * Search engines may list the front page, sign-in, privacy, What's new, and the
  * signed-out board, map and listings (see src/lib/sitemap.ts). The
  * signed-in-only pages are disallowed: they only redirect to sign-in. Share
  * links, share cards and the request form are deliberately *not*

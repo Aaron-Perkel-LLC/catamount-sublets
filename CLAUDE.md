@@ -41,3 +41,4 @@ npm run email:dev    # react-email preview on :3001
 - Data access in `src/server/data/`, one module per table family, returning DTOs that never include another user's email or id.
 - Tests next to the code as `*.test.ts`; data tests boot PGlite and run the real migrations (`src/db/test-db.ts`).
 - Commit messages: imperative, one line of what and why.
+- **What's new:** every PR with a user-visible change adds an entry to `src/content/changelog.ts` in the same PR (date, title, 1–3 plain sentences, optional link; student-facing only), or says in the PR why not.
