@@ -103,6 +103,6 @@ export function shareCardLines(l: {
     semester: l.semesterLabel,
     facts,
     title: [price, l.semesterLabel, SITE.name].filter(Boolean).join(" · "),
-    description: `${facts}. Sign in with your student email to see the listing.`,
+    description: `${facts}. Sign in to see the listing.`,
   };
 }

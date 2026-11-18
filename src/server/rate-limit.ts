@@ -42,6 +42,16 @@ export const RATE_LIMITS = {
   noticeEventPerIp: { scope: "notice_event_ip", limit: 60, windowSeconds: 600 },
   /** One-off emails from the admin console, sent or failed, per admin: a stuck button or a stolen session, not a person typing. */
   adminMailPerUser: { scope: "admin_mail_user", limit: 30, windowSeconds: 3600 },
+  /** New community accounts (addresses outside the schools) from one IP. Students are never counted: their school's mailbox vouches for them. */
+  communityAccountPerIp: { scope: "community_account_ip", limit: 3, windowSeconds: 86_400 },
+  /** New community accounts across the whole site, subject "all": a ceiling on a sign-up flood. */
+  communityAccountGlobal: { scope: "community_account_all", limit: 20, windowSeconds: 3600 },
+  /** Relay messages one community account sends, to anyone. */
+  posterMessagePerSender: { scope: "poster_message_sender", limit: 5, windowSeconds: 86_400 },
+  /** Relay messages one community account sends about one listing (subject "senderId:listingId"). */
+  posterMessagePerSenderListing: { scope: "poster_message_sender_listing", limit: 1, windowSeconds: 86_400 },
+  /** Relay messages one listing receives from every sender together: the poster's inbox, protected. */
+  posterMessagePerListing: { scope: "poster_message_listing", limit: 10, windowSeconds: 86_400 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export function rateLimitKey(scope: string, subject: string): string {

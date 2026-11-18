@@ -29,6 +29,13 @@ export const SITE = {
    */
   mailDigestDomain: "updates.catamountsublets.com",
   mailFromDigest: "Catamount Sublets <digest@updates.catamountsublets.com>",
+  /**
+   * Messages relayed from community accounts to posters. On the updates
+   * subdomain (sent with its own key, like the digest), never login@: if
+   * people mark relayed mail as spam, the address that sends sign-in codes
+   * keeps its reputation.
+   */
+  mailFromMessages: "Catamount Sublets <messages@updates.catamountsublets.com>",
   /*
    * The digest footer's postal address is not here: it is the MAILING_ADDRESS
    * env var, read only by src/server/digest-config.ts (server-only), because
@@ -38,7 +45,7 @@ export const SITE = {
   instagramUrl: "https://www.instagram.com/catamountsublets/",
   /** Shown in the footer and on the share page. Keep it. */
   disclaimer:
-    "An independent student project, not affiliated with or endorsed by the University of Vermont.",
+    "An independent student project, not affiliated with or endorsed by the University of Vermont or Champlain College.",
   /** Author credit (page metadata, the broadcast sign-off); no university wording. */
   author: "Aaron Perkel",
   authorUrl: "https://aaronperkel.com",
@@ -51,14 +58,45 @@ export const SITE = {
 } as const;
 
 /**
- * Who may sign in. A code is only ever sent to, and an account only ever
- * created for, an address that passes assertEmailAllowed() in src/lib/auth-allow.ts.
- * Add a school by adding its domain here.
+ * The schools whose addresses make a **student** account: full listings
+ * (address, poster, contact) and posting. Any other address that passes
+ * assertEmailAllowed() (src/server/auth/allow.ts) makes a **community**
+ * account, which sees what a signed-out visitor sees and can message posters
+ * through the site. Add a school by adding it here.
+ *
+ * `localPart: "netid"` refuses a dot in the part before the @: UVM mailboxes
+ * answer to netid@ and First.Last@, and accounts are keyed on the NetID form.
+ * Champlain has no NetIDs, so any local part is fine there.
  */
-export const ALLOWED_EMAIL_DOMAINS = ["uvm.edu"] as const;
+export const SCHOOLS = [
+  { key: "uvm", name: "UVM", domains: ["uvm.edu"], localPart: "netid" },
+  { key: "champlain", name: "Champlain", domains: ["mymail.champlain.edu", "champlain.edu"], localPart: "any" },
+] as const satisfies readonly { key: string; name: string; domains: readonly string[]; localPart: "netid" | "any" }[];
 
-/** Who the site is for, in words, for the front page's note. Change with ALLOWED_EMAIL_DOMAINS. */
-export const ACCESS = { audience: "UVM students" } as const;
+export type SchoolKey = (typeof SCHOOLS)[number]["key"];
+
+/** Every school domain, for the allow rule. */
+export const ALLOWED_EMAIL_DOMAINS: readonly string[] = SCHOOLS.flatMap((s) => s.domains);
+
+/** Who the site is for, in words. Change with SCHOOLS. */
+export const ACCESS = {
+  /** Who may post and see everything. */
+  audience: "UVM and Champlain students",
+  /** The schools in a short run of words: "only show to UVM and Champlain students". */
+  schools: "UVM and Champlain",
+  /** How a message from a community account is labelled to the poster. */
+  outside: "outside UVM/Champlain",
+  /** The sign-in field's placeholder. */
+  emailPlaceholder: "netid@uvm.edu",
+  /** The sign-in hint, one line per kind of address. */
+  emailHint: [
+    "UVM: use your NetID email (netid@uvm.edu), not your first.last alias.",
+    "Champlain: use your school email.",
+    "Anyone else: any email works to browse, save searches and message posters.",
+  ],
+  /** The refusal for a UVM First.Last alias. */
+  dottedRefusal: "Use your NetID email (netid@uvm.edu), not your first.last alias.",
+} as const;
 
 /**
  * Exact-address exceptions to the domain rule: the admin's own address(es), from

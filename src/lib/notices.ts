@@ -8,12 +8,12 @@ import { assertIsoDate, easternDate } from "./dates";
  * and the server share the URL and path rules.
  */
 
-/** everyone: signed in or out; signed_in: any account; posters: an account with a listing. */
+/** everyone: signed in or out, any account; signed_in: a student's account (not a community account); posters: an account with a listing. */
 export const NOTICE_AUDIENCES = ["everyone", "signed_in", "posters"] as const;
 export type NoticeAudience = (typeof NOTICE_AUDIENCES)[number];
 export const NOTICE_AUDIENCE_LABELS: Record<NoticeAudience, string> = {
   everyone: "Everyone",
-  signed_in: "Signed-in students",
+  signed_in: "Signed-in students (not community accounts)",
   posters: "Posters (has a listing)",
 };
 
@@ -24,11 +24,12 @@ export type NoticeEventType = (typeof NOTICE_EVENT_TYPES)[number];
 export const NOTICE_LIMITS = { title: 80, body: 4000, ctaLabel: 40, ctaHref: 500 } as const;
 
 /** Who is looking: what the server knows when it decides whether a notice goes out. */
-export type NoticeViewer = { kind: "signed-out" } | { kind: "signed-in"; userId: string; hasListing: boolean };
+export type NoticeViewer = { kind: "signed-out" } | { kind: "signed-in"; userId: string; hasListing: boolean; community: boolean };
 
+/** A community account (an address outside the schools) is in `everyone` only: the student notices are about posting and seeing everything. */
 export function audienceMatches(audience: NoticeAudience, viewer: NoticeViewer): boolean {
   if (audience === "everyone") return true;
-  if (viewer.kind === "signed-out") return false;
+  if (viewer.kind === "signed-out" || viewer.community) return false;
   return audience === "signed_in" || viewer.hasListing;
 }
 

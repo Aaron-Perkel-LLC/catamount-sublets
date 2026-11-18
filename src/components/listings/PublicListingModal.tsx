@@ -5,14 +5,16 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 import type { PublicListing } from "@/server/data/public-listings";
 import { Gallery } from "./Gallery";
+import { MessagePoster, type RelaySender } from "./MessagePoster";
 import { PublicListingDetails } from "./PublicListingDetails";
 
 /**
- * The listing view for a signed-out visitor: photos, the public facts and
- * the sign-in prompt. No address, map link, poster, Email, Call or Share:
- * none of it is in a PublicListing to show.
+ * The listing view for a signed-out visitor or a community account: photos,
+ * the public facts, and the sign-in prompt (signed out) or Message poster (a
+ * community account, `relay`). No address, map link, poster, Email, Call or
+ * Share: none of it is in a PublicListing to show.
  */
-export function PublicListingModal({ listing, onClose }: { listing: PublicListing; onClose: () => void }) {
+export function PublicListingModal({ listing, onClose, relay }: { listing: PublicListing; onClose: () => void; relay?: RelaySender | null }) {
   const dialog = useRef<HTMLDivElement>(null);
   const closeBtn = useRef<HTMLButtonElement>(null);
 
@@ -79,7 +81,7 @@ export function PublicListingModal({ listing, onClose }: { listing: PublicListin
             </button>
           </div>
           <div className="p-4 sm:p-6">
-            <PublicListingDetails listing={listing} />
+            <PublicListingDetails listing={listing} community={Boolean(relay)} cta={relay ? <MessagePoster listingId={listing.id} sender={relay} /> : undefined} />
           </div>
         </div>
       </div>

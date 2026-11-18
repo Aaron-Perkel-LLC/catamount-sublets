@@ -3,25 +3,27 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PublicShell } from "@/components/PublicShell";
 import { getDb } from "@/db";
-import { getSessionUser } from "@/server/auth";
+import { getViewer } from "@/server/viewer";
 import { noticeFor } from "@/server/data/notices";
 import { log } from "@/server/log";
 
 /**
- * Browse, Map and a single listing: open to everyone. With a session they
- * render exactly as before, inside the signed-in frame (and its welcome
- * gate); without one, the pages take PublicListing only (CLAUDE.md rule 9).
+ * Browse, Map and a single listing: open to everyone. With a session (a
+ * student or a community account) they render inside the signed-in frame and
+ * its welcome gate; without one, inside the public frame. What the pages
+ * show is getViewer()'s call, not this layout's: a community account gets
+ * PublicListing only, like a signed-out visitor (CLAUDE.md rule 9).
  * Reading the session makes every render dynamic, and src/proxy.ts marks
  * these routes private and no-store, so no cache can serve one audience's
  * render to the other.
  */
 export async function generateMetadata(): Promise<Metadata> {
   // A signed-in render is never for search engines; the signed-out pages set their own.
-  return (await getSessionUser()) ? { robots: { index: false, follow: false } } : {};
+  return (await getViewer()).user ? { robots: { index: false, follow: false } } : {};
 }
 
 export default async function BoardLayout({ children }: { children: ReactNode }) {
-  const user = await getSessionUser();
+  const { user } = await getViewer();
   if (user) return <AppShell user={user}>{children}</AppShell>;
   const notice = await noticeFor(await getDb(), { kind: "signed-out" }).catch((e: unknown) => {
     log.error("notice.lookup_failed", e); // best effort: a broken popup never takes the board down

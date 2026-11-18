@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
 import { bigint, boolean, char, check, integer, pgTable, primaryKey, serial, text, uniqueIndex, unique, uuid } from "drizzle-orm/pg-core";
 import { NOTICE_AUDIENCES, NOTICE_EVENT_TYPES, NOTICE_LIMITS } from "@/lib/notices";
+import { EVENT_VIEWER_TIERS } from "@/lib/options";
 import { user } from "./auth";
-import { createdAt, inList, nullableTimestamp, num, updatedAt } from "./helpers";
+import { createdAt, inList, inListOrNull, nullableTimestamp, num, updatedAt } from "./helpers";
 
 /**
  * Popup notices (PLAN.md row 30). At most one is active: the partial unique
@@ -68,10 +69,13 @@ export const noticeEvents = pgTable(
     type: text().notNull(),
     actorKey: char({ length: 16 }).notNull(),
     signedOut: boolean().notNull().default(false),
+    /** anonymous, community or student, as in listing_events. Migration 0013 filled older rows from signedOut. */
+    viewerTier: text(),
     createdAt: createdAt(),
   },
   (t) => [
     unique("notice_events_actor_key").on(t.noticeId, t.type, t.actorKey),
     check("notice_events_type_check", inList(t.type, NOTICE_EVENT_TYPES)),
+    check("notice_events_viewer_tier_check", inListOrNull(t.viewerTier, EVENT_VIEWER_TIERS)),
   ],
 );

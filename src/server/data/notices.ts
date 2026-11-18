@@ -36,7 +36,7 @@ export async function noticeFor(db: DbOrTx, viewer: NoticeViewer): Promise<Notic
   return toDto(n);
 }
 
-export type NoticeActor = { kind: "signed-out"; anonKey: string } | { kind: "signed-in"; userId: string; role: "user" | "admin"; hasListing: boolean };
+export type NoticeActor = { kind: "signed-out"; anonKey: string } | { kind: "signed-in"; userId: string; role: "user" | "admin"; hasListing: boolean; community: boolean };
 export type NoticeRecordResult = "stored" | "duplicate" | "excluded" | "invalid";
 
 /**
@@ -47,7 +47,7 @@ export type NoticeRecordResult = "stored" | "duplicate" | "excluded" | "invalid"
 export async function recordNoticeEvent(db: DbOrTx, actor: NoticeActor, noticeId: number, type: string): Promise<NoticeRecordResult> {
   if (!Number.isInteger(noticeId) || noticeId <= 0 || !(NOTICE_EVENT_TYPES as readonly string[]).includes(type)) return "invalid";
   const [n] = await db.select({ audience: siteNotices.audience }).from(siteNotices).where(and(eq(siteNotices.id, noticeId), live())).limit(1);
-  const viewer: NoticeViewer = actor.kind === "signed-out" ? actor : { kind: "signed-in", userId: actor.userId, hasListing: actor.hasListing };
+  const viewer: NoticeViewer = actor.kind === "signed-out" ? actor : { kind: "signed-in", userId: actor.userId, hasListing: actor.hasListing, community: actor.community };
   if (!n || !audienceMatches(n.audience as NoticeAudience, viewer)) return "invalid";
   if (actor.kind === "signed-in" && actor.role === "admin") return "excluded";
   // A signed-out dismissal or click counts only after that visitor's view, so the beacon can't add them on their own.
@@ -66,6 +66,7 @@ export async function recordNoticeEvent(db: DbOrTx, actor: NoticeActor, noticeId
       type: type as NoticeEventType,
       actorKey: actor.kind === "signed-in" ? actorKey(actor.userId) : actor.anonKey,
       signedOut: actor.kind === "signed-out",
+      viewerTier: actor.kind === "signed-out" ? "anonymous" : actor.community ? "community" : "student",
     })
     .onConflictDoNothing()
     .returning({ id: noticeEvents.id });

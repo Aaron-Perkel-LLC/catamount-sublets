@@ -19,7 +19,7 @@ import { log } from "@/server/log";
  * a code is never queued behind a bulk send.
  */
 
-export type MailKind = "login_code" | "admin_notice" | "access_request" | "welcome" | "broadcast" | "broadcast_copy" | "survey_invite" | "admin_message" | "outcome_ask" | "stale_notice" | "digest";
+export type MailKind = "login_code" | "admin_notice" | "access_request" | "welcome" | "broadcast" | "broadcast_copy" | "survey_invite" | "admin_message" | "outcome_ask" | "stale_notice" | "digest" | "poster_message";
 
 /**
  * Print instead of send only on a developer's machine. On Vercel (preview or
@@ -55,25 +55,31 @@ export const sentInTests: { to: string; subject: string; kind: MailKind; text: s
 /**
  * Codes come from the transactional sender, the admin's notices from their
  * own, the notes signed by the author from the author, and the weekly digest
- * from its own subdomain, so bulk mail's reputation stays apart from codes'.
+ * and the message relay from the updates subdomain, so bulk mail's and
+ * strangers' messages' reputation stays apart from codes'.
  */
 export function senderFor(kind: MailKind): string {
   if (kind === "digest") return SITE.mailFromDigest;
+  if (kind === "poster_message") return SITE.mailFromMessages;
   if (kind === "broadcast" || kind === "broadcast_copy" || kind === "welcome" || kind === "survey_invite" || kind === "admin_message" || kind === "outcome_ask" || kind === "stale_notice") return SITE.mailFromPersonal;
   if (kind === "admin_notice" || kind === "access_request") return SITE.mailFromNotices;
   return SITE.mailFrom;
 }
 
 /**
- * The key a message goes out with. The digest's is passed in by its caller
- * (digestResendKey(), server-only, scoped in Resend to the digest's
- * subdomain); everything else uses the root-scoped RESEND_API_KEY. No
- * fallback for the digest: the root key can't send from the subdomain.
- * (This file stays importable by the admin scripts, so it does not read the
- * digest key itself.)
+ * The key a message goes out with. The digest's and the relay's is passed in
+ * by the caller (digestResendKey(), server-only, scoped in Resend to the
+ * updates subdomain); everything else uses the root-scoped RESEND_API_KEY.
+ * No fallback for either: the root key can't send from the subdomain, and
+ * the relay must never go out from the address that sends codes. (This file
+ * stays importable by the admin scripts, so it does not read the key itself.)
  */
-export function apiKeyFor(kind: MailKind, digestKey: string | undefined): { key: string | undefined; name: string } {
-  return kind === "digest" ? { key: digestKey, name: "RESEND_DIGEST_API_KEY" } : { key: process.env.RESEND_API_KEY, name: "RESEND_API_KEY" };
+export function usesUpdatesKey(kind: MailKind): boolean {
+  return kind === "digest" || kind === "poster_message";
+}
+
+export function apiKeyFor(kind: MailKind, updatesKey: string | undefined): { key: string | undefined; name: string } {
+  return usesUpdatesKey(kind) ? { key: updatesKey, name: "RESEND_DIGEST_API_KEY" } : { key: process.env.RESEND_API_KEY, name: "RESEND_API_KEY" };
 }
 
 const clients = new Map<string, Resend>();
@@ -102,7 +108,7 @@ export interface SendMailArgs {
    * List-Unsubscribe-Post, so mail clients can offer one-click unsubscribe.
    */
   oneClickUnsubscribeUrl?: string;
-  /** Kind "digest" only: the digest's own sending key (digestResendKey()). Required there; ignored otherwise. */
+  /** Kinds "digest" and "poster_message" only: the updates subdomain's sending key (digestResendKey()). Required there; ignored otherwise. */
   apiKey?: string;
 }
 

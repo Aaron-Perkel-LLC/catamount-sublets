@@ -127,6 +127,14 @@ export async function adminSetBanned(userId: string, banned: boolean, reason: st
   return r;
 }
 
+/** Student or community, by hand (admin.setTier). */
+export async function adminSetTier(userId: string, tier: "student" | "community"): Promise<admin.Result> {
+  await requireAdmin();
+  const r = await admin.setTier(await getDb(), z.string().uuid().parse(userId), tier);
+  if (r.ok) revalidate();
+  return r;
+}
+
 export async function adminSetNoEmail(userId: string, noEmail: boolean): Promise<admin.Result> {
   await requireAdmin();
   const r = await admin.setNoEmail(await getDb(), z.string().uuid().parse(userId), z.boolean().parse(noEmail));

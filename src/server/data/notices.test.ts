@@ -24,7 +24,7 @@ const ids = { student: "", poster: "", admin: "" };
 const out: NoticeViewer = { kind: "signed-out" };
 let student: NoticeViewer;
 let poster: NoticeViewer;
-const actor = (id: string, hasListing: boolean, role: "user" | "admin" = "user") => ({ kind: "signed-in" as const, userId: id, role, hasListing });
+const actor = (id: string, hasListing: boolean, role: "user" | "admin" = "user") => ({ kind: "signed-in" as const, userId: id, role, hasListing, community: false });
 const anon = (k: string) => ({ kind: "signed-out" as const, anonKey: k.padEnd(16, "0") });
 
 const values = (patch: Partial<NoticeInput> = {}) => noticeInput.parse({ title: "Heads up", bodyMd: "Body", audience: "everyone", ctaLabel: "", ctaHref: "", endsOn: "", ...patch });
@@ -41,8 +41,8 @@ beforeAll(async () => {
   ids.poster = await mk("poster@uvm.edu");
   ids.admin = await mk("admin@example.com", "admin");
   await db.insert(s.listings).values({ userId: ids.poster, price: 900, address: "x", lat: 44.47, lon: -73.2 });
-  student = { kind: "signed-in", userId: ids.student, hasListing: false };
-  poster = { kind: "signed-in", userId: ids.poster, hasListing: true };
+  student = { kind: "signed-in", userId: ids.student, hasListing: false, community: false };
+  poster = { kind: "signed-in", userId: ids.poster, hasListing: true, community: false };
 });
 afterAll(async () => {
   await close();
@@ -191,7 +191,7 @@ describe("recordNoticeEvent", () => {
     const id = await live();
     await recordNoticeEvent(db, actor(ids.student, false), id, "view");
     const cols = (await db.execute(sql`select column_name from information_schema.columns where table_name = 'notice_events' order by ordinal_position`)) as unknown as { rows: { column_name: string }[] };
-    expect(cols.rows.map((c) => c.column_name)).toEqual(["id", "notice_id", "type", "actor_key", "signed_out", "created_at"]);
+    expect(cols.rows.map((c) => c.column_name)).toEqual(["id", "notice_id", "type", "actor_key", "signed_out", "created_at", "viewer_tier"]);
     const [e] = await db.select().from(s.noticeEvents);
     expect(e.actorKey).toMatch(/^[0-9a-f]{16}$/);
     expect(e.actorKey).not.toContain(ids.student.slice(0, 8));

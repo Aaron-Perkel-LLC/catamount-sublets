@@ -8,7 +8,7 @@ import { SITE } from "@/config/site";
 import { getDb } from "@/db";
 import { formatMiles } from "@/lib/distance-format";
 import { formatMoney } from "@/lib/format";
-import { getSessionUser } from "@/server/auth";
+import { getViewer } from "@/server/viewer";
 import { publicListingById, type PublicListing } from "@/server/data/public-listings";
 
 const listingId = (raw: string) => {
@@ -24,7 +24,7 @@ async function publicListing(raw: string): Promise<PublicListing | null> {
 
 /** Built from PublicListing only: no address, poster or contact in the title, description or preview. */
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
-  if (await getSessionUser()) return {};
+  if ((await getViewer()).user) return {};
   const l = await publicListing((await params).id);
   if (!l) return { title: `Listing not found · ${SITE.name}`, robots: { index: false, follow: false } };
   const title = `${l.title} · ${formatMoney(l.price)}/mo · ${l.semesterLabel}`;
@@ -42,8 +42,11 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 /**
- * One listing. Signed in: the board with that listing's view on top, as
- * before (the old /app/index.php?id=N form, admin notices). Signed out: a
+ * One listing. Signed in, any account: the board with that listing's view on
+ * top (the old /app/index.php?id=N form, admin notices); /browse decides by
+ * the viewer level what that view holds, so a community account gets the
+ * public view with Message poster, and a listing kept to students is not on
+ * their board at all. Signed out: a
  * page of its own for search engines and shared links, from PublicListing
  * only; a listing that is not on the signed-out board (kept to signed-in
  * students, paused, taken, gone) is a 404, the same for each so the page is
@@ -51,7 +54,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
  */
 export default async function ListingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (await getSessionUser()) {
+  if ((await getViewer()).user) {
     const n = Number.parseInt(id, 10);
     redirect(Number.isInteger(n) && n > 0 ? `/browse?id=${n}` : "/browse");
   }

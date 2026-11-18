@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ACCESS, ALLOWED_EMAIL_DOMAINS, PUBLIC_AREA, SITE } from "@/config/site";
+import { ACCESS, PUBLIC_AREA, SITE } from "@/config/site";
 import { getDb } from "@/db";
 import { landingBoard, type LandingBoard } from "@/server/data/landing";
 import { log } from "@/server/log";
@@ -45,7 +45,6 @@ export default async function LandingPage({ searchParams }: { searchParams: Prom
   } catch (error) {
     log.error("landing.board_failed", error);
   }
-  const domains = ALLOWED_EMAIL_DOMAINS.map((d) => `@${d}`).join(" or ");
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -70,8 +69,8 @@ export default async function LandingPage({ searchParams }: { searchParams: Prom
           <div className="flex flex-col gap-5">
             <h1 className="text-4xl leading-tight font-bold text-ink sm:text-5xl">Sublets near campus, in one place.</h1>
             <p className="text-lg text-ink-2">
-              Students post the place they&apos;re leaving for a semester; students looking for one browse by price, semester and
-              distance from campus, then email or call. No fees, no ads, no brokers.
+              Students post the place they&apos;re leaving for a semester; anyone looking for one browses by price, semester and
+              distance from campus, then gets in touch. No fees, no ads, no brokers.
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <Link href="/browse" className="btn-primary px-5 py-3">
@@ -82,21 +81,21 @@ export default async function LandingPage({ searchParams }: { searchParams: Prom
               </Link>
             </div>
             <p className="text-sm text-ink-3">
-              Browse without signing in. To see addresses and get in touch, sign in with a code sent to your {domains} address. No
-              password, nothing to install.
+              Browse without signing in. To see addresses and get in touch, sign in with a code sent to your school email. No password,
+              nothing to install.
             </p>
-            {/* Right under the sign-in line, so nobody without the address scrolls past the board to find out. */}
+            {/* Right under the sign-in line, so nobody without a school address scrolls past the board to find out. */}
             <div className="rounded-xl border border-notice-line bg-notice-tint px-4 py-3 text-sm text-ink-2">
               <p>
-                <strong className="text-ink">For {ACCESS.audience} only, for now.</strong> Want {SITE.name} at your school, or have a good
-                reason to be let in, like a recent grad with a room to sublet?
+                <strong className="text-ink">Posting is for {ACCESS.audience}.</strong> Anyone can browse; sign in with any email to save
+                searches and message posters. Want {SITE.name} at your school?
               </p>
               <p className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
                 <Link href="/request?kind=school" className="link">
                   Request your school →
                 </Link>
                 <Link href="/request?kind=access" className="link">
-                  Request access →
+                  Post without a school email →
                 </Link>
               </p>
             </div>
@@ -113,7 +112,7 @@ export default async function LandingPage({ searchParams }: { searchParams: Prom
                 is from campus.
               </li>
               <li>Filter and sort by what matters to you, or see everything on a map.</li>
-              <li>Every poster signed in with a verified student email. Email or call them straight from the listing.</li>
+              <li>Every poster signed in with a verified student email. Students email or call them straight from the listing; anyone else messages them through us.</li>
             </ul>
           </div>
           <div className="rounded-2xl border border-line bg-paper p-6">

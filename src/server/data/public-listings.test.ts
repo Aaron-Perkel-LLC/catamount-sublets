@@ -11,9 +11,9 @@ import { amenityField, utilityField } from "@/lib/listing-input";
 import { parseListingQuery } from "@/lib/listing-filters";
 import { shareToken } from "@/lib/share";
 import { fuzzedArea } from "@/server/geo-fuzz";
-import { browseListings, filterBounds, listingForViewer, newBoardListings } from "./listings";
+import { browseListings, filterBounds, listingForViewer } from "./listings";
 import { createListing, setListingVisibility, updateListing } from "./my-listing";
-import { publicBoardListings, publicListingById, publicSitemapEntries, signedInOnlyCount } from "./public-listings";
+import { newBoardListings, publicBoardListings, publicListingById, publicSitemapEntries, signedInOnlyCount } from "./public-listings";
 import { boardSemesters, emptyActiveSemesters, setListingSemesters } from "./semesters";
 import { coordinateLeaks, leaks, SECRET } from "./public-leak-fixture";
 import { resolveShare } from "./share";
@@ -205,8 +205,8 @@ describe("the signed-out distance filter and sort use the approximate area", () 
     const u = await mkUser("pricey@uvm.edu");
     const id = await addListing(u, { price: 4800, lat: 44.47, lon: -73.21, signedInOnly: true });
     await setListingVisibility(db, id, admin, true);
-    expect((await filterBounds(db)).maxPrice).toBe(4800);
-    expect((await filterBounds(db, "signed-out")).maxPrice).toBeLessThan(4800);
+    expect((await filterBounds(db, "full")).maxPrice).toBe(4800);
+    expect((await filterBounds(db, "public")).maxPrice).toBeLessThan(4800);
     await db.delete(s.listings).where(eq(s.listings.id, id));
   });
 });
@@ -261,15 +261,15 @@ describe("the signed-out semester filter", () => {
     await setListingVisibility(db, id, admin, true);
     try {
       // Signed in: on the board, as before.
-      expect((await boardSemesters(db)).map((x) => x.code)).toContain("summer27");
+      expect((await boardSemesters(db, "full")).map((x) => x.code)).toContain("summer27");
       // Signed out: neither a semester to pick nor "(none yet)" would tell anyone it is there, so it is simply "(none yet)" like any empty one.
-      expect((await boardSemesters(db, "signed-out")).map((x) => x.code)).not.toContain("summer27");
-      expect((await emptyActiveSemesters(db, "signed-out")).map((x) => x.code)).toContain("summer27");
-      expect((await boardSemesters(db, "signed-out")).map((x) => x.code)).toContain("spring27");
+      expect((await boardSemesters(db, "public")).map((x) => x.code)).not.toContain("summer27");
+      expect((await emptyActiveSemesters(db, "public")).map((x) => x.code)).toContain("summer27");
+      expect((await boardSemesters(db, "public")).map((x) => x.code)).toContain("spring27");
       // Switched public, it is named.
       await setListingVisibility(db, id, admin, false);
-      expect((await boardSemesters(db, "signed-out")).map((x) => x.code)).toContain("summer27");
-      expect((await emptyActiveSemesters(db, "signed-out")).map((x) => x.code)).not.toContain("summer27");
+      expect((await boardSemesters(db, "public")).map((x) => x.code)).toContain("summer27");
+      expect((await emptyActiveSemesters(db, "public")).map((x) => x.code)).not.toContain("summer27");
     } finally {
       await db.delete(s.listings).where(eq(s.listings.id, id));
     }
@@ -285,11 +285,30 @@ describe("the sitemap", () => {
   });
 });
 
-describe("the weekly digest is untouched", () => {
-  it("still matches on the signed-in board, including signed-in-only listings", async () => {
+describe("the weekly digest follows the recipient's audience", () => {
+  const window = () => ({ since: new Date(0), until: new Date(Date.now() + 60_000) });
+
+  it("a student's ('full') still includes listings kept to students", async () => {
     await setListingVisibility(db, secretId, admin, true);
-    const found = await newBoardListings(db, parseListingQuery({}), { recipientId: viewerId, since: new Date(0), until: new Date(Date.now() + 60_000) });
+    const found = await newBoardListings(db, parseListingQuery({}), { audience: "full", recipientId: viewerId, ...window() });
     expect(found.map((l) => l.id)).toContain(secretId);
     await setListingVisibility(db, secretId, admin, false);
+  });
+
+  it("a community account's ('public') never does, and holds only share-card fields", async () => {
+    await setListingVisibility(db, secretId, admin, true);
+    expect((await newBoardListings(db, parseListingQuery({}), { audience: "public", recipientId: viewerId, ...window() })).map((l) => l.id)).not.toContain(secretId);
+    await setListingVisibility(db, secretId, admin, false);
+    const [l] = (await newBoardListings(db, parseListingQuery({}), { audience: "public", recipientId: viewerId, ...window() })).filter((x) => x.id === secretId);
+    expect(Object.keys(l).sort()).toEqual(["bathrooms", "bedrooms", "distanceMi", "id", "postedAt", "price", "priceNegotiable", "roommates", "semesterLabel", "shareUrl", "thumb"]);
+    expect(leaks(JSON.stringify(l), [])).toEqual([]);
+  });
+
+  it("measures distance from the approximate area for both, so a forwarded email gives nothing away", async () => {
+    const [full] = (await newBoardListings(db, parseListingQuery({}), { audience: "full", recipientId: viewerId, ...window() })).filter((x) => x.id === secretId);
+    const [pub] = (await newBoardListings(db, parseListingQuery({}), { audience: "public", recipientId: viewerId, ...window() })).filter((x) => x.id === secretId);
+    expect(full.distanceMi).toBe(pub.distanceMi);
+    const dto = (await browseListings(db, parseListingQuery({}), viewerId)).listings.find((x) => x.id === secretId)!;
+    expect(Math.abs(dto.distanceMi - full.distanceMi)).toBeGreaterThan(0);
   });
 });

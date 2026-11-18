@@ -28,7 +28,7 @@ async function poster() {
   n += 1;
   const email = `p${n}@uvm.edu`;
   const [u] = await db.insert(s.user).values({ email, name: `p${n}` }).returning({ id: s.user.id });
-  return { id: u.id, email, role: "user" as const };
+  return { id: u.id, email, role: "user" as const, tier: "student" as const };
 }
 async function listing(userId: string, cols: Partial<typeof s.listings.$inferInsert>) {
   const [row] = await db

@@ -6,8 +6,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-pattern='uvm|\bnetid\b|net id|fellow catamount|catamounts\b|\bcas\b|silk'
-allow='^(src/config/site\.ts|src/lib/auth-allow\.ts|src/app/sign-in/sign-in-form\.tsx|src/emails/welcome\.tsx|scripts/migrate-legacy/.*|scripts/admin/.*|.*\.test\.tsx?)$'
+pattern='uvm|champlain|\bnetid\b|net id|fellow catamount|catamounts\b|\bcas\b|silk'
+allow='^(src/config/site\.ts|src/lib/auth-allow\.ts|src/emails/welcome\.tsx|scripts/migrate-legacy/.*|scripts/admin/.*|.*\.test\.tsx?)$'
 
 hits=$(grep -rniE "$pattern" src scripts --include='*.ts' --include='*.tsx' --include='*.css' --include='*.svg' -l 2>/dev/null | grep -vE "$allow" || true)
 if [ -n "$hits" ]; then

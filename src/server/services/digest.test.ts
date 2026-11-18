@@ -29,7 +29,8 @@ const s = await import("@/db/schema");
 const { and, eq } = await import("drizzle-orm");
 const { SITE, DIGEST } = await import("@/config/site");
 const { parseListingQuery, parseSavedQuery, canonicalFilterQuery } = await import("@/lib/listing-filters");
-const { browseListings, newBoardListings } = await import("@/server/data/listings");
+const { browseListings } = await import("@/server/data/listings");
+const { newBoardListings } = await import("@/server/data/public-listings");
 const { sentInTests, sendMail } = await import("@/server/email/send");
 const { setSetting } = await import("@/server/data/settings");
 const { setDigestEnabled, digestSubscriptionFor, savedSearchesFor } = await import("@/server/data/digest");
@@ -47,9 +48,9 @@ const days = (n: number) => new Date(NOW.getTime() - n * 86_400_000);
 const hours = (n: number) => new Date(NOW.getTime() - n * 3_600_000);
 
 let seq = 0;
-async function person(key: string, opts: { banned?: boolean; noEmail?: boolean; email?: string } = {}): Promise<string> {
+async function person(key: string, opts: { banned?: boolean; noEmail?: boolean; email?: string; tier?: "student" | "community" } = {}): Promise<string> {
   const email = opts.email ?? `${key}@uvm.edu`;
-  const [u] = await db.insert(s.user).values({ email, name: key, firstName: key, lastName: "Doe", banned: opts.banned ?? false, noEmail: opts.noEmail ?? false }).returning({ id: s.user.id });
+  const [u] = await db.insert(s.user).values({ email, name: key, firstName: key, lastName: "Doe", tier: opts.tier ?? "student", banned: opts.banned ?? false, noEmail: opts.noEmail ?? false }).returning({ id: s.user.id });
   return u.id;
 }
 
@@ -156,19 +157,19 @@ describe("matching uses Browse's query", () => {
     const expected = browse.listings
       .filter((l) => new Date(l.postedAt) > since && new Date(l.postedAt) <= NOW && l.id !== ids.mine)
       .map((l) => l.id);
-    const found = (await newBoardListings(db, q, { recipientId: me, since, until: NOW })).map((l) => l.id);
+    const found = (await newBoardListings(db, q, { audience: "full", recipientId: me, since, until: NOW })).map((l) => l.id);
     expect(found).toEqual(expected);
   });
 
   it("never includes the recipient's own listing, though Browse shows it to them", async () => {
     const q = parseListingQuery({});
     expect((await browseListings(db, q, me)).listings.map((l) => l.id)).toContain(ids.mine);
-    expect((await newBoardListings(db, q, { recipientId: me, since: days(7), until: NOW })).map((l) => l.id)).not.toContain(ids.mine);
+    expect((await newBoardListings(db, q, { audience: "full", recipientId: me, since: days(7), until: NOW })).map((l) => l.id)).not.toContain(ids.mine);
   });
 
   it("leaves out what Browse leaves out: paused, taken, expired, photo-less, and a banned poster's listing", async () => {
     const browse = (await browseListings(db, parseListingQuery({}), me)).listings.map((l) => l.id);
-    const found = (await newBoardListings(db, parseListingQuery({}), { recipientId: me, since: days(7), until: NOW })).map((l) => l.id);
+    const found = (await newBoardListings(db, parseListingQuery({}), { audience: "full", recipientId: me, since: days(7), until: NOW })).map((l) => l.id);
     for (const k of ["paused", "taken", "expired", "noPhoto", "banned"]) {
       expect(browse).not.toContain(ids[k]);
       expect(found).not.toContain(ids[k]);

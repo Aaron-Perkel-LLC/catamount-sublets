@@ -1,9 +1,9 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import type { DbOrTx } from "@/db";
 import { listingPhotos, listings } from "@/db/schema";
 import { semesterLabel } from "@/lib/semesters";
 import { boardSemesters } from "./semesters";
-import { publicListingWhere, signedOutAudienceWhere } from "./visibility";
+import { audienceWhere, publicListingWhere } from "./visibility";
 
 export interface LandingBoard {
   /** Cover thumbnails of the newest listings on the signed-out board (a listing kept to signed-in students never shows here). */
@@ -25,7 +25,7 @@ export async function landingBoard(db: DbOrTx): Promise<LandingBoard> {
     db
       .select({ id: listings.id })
       .from(listings)
-      .where(and(publicListingWhere(), signedOutAudienceWhere()))
+      .where(audienceWhere("public"))
       .orderBy(desc(listings.id))
       .limit(12),
   ]);
@@ -40,6 +40,6 @@ export async function landingBoard(db: DbOrTx): Promise<LandingBoard> {
     if (cover?.thumb) thumbs.push(cover.thumb);
   }
   // The semesters of the signed-out board: everyone sees this page, and a semester only signed-in-only listings run for stays unnamed.
-  const sems = await boardSemesters(db, "signed-out");
+  const sems = await boardSemesters(db, "public");
   return { thumbs, count: all.length, semesters: semesterLabel(sems.map((s) => s.name)) };
 }

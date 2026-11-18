@@ -128,20 +128,32 @@ describe("browseListings", () => {
 
 describe("bounds, semesters, contact details", () => {
   it("derives slider bounds from visible listings only", async () => {
-    expect(await filterBounds(db)).toEqual({ minPrice: 700, maxPrice: 1250, maxDistance: 1.5 });
+    expect(await filterBounds(db, "full")).toEqual({ minPrice: 700, maxPrice: 1250, maxDistance: 1.5 });
     expect(await anyListingExists(db)).toBe(true);
   });
 
   it("lists board semesters and the empty active ones", async () => {
-    expect((await boardSemesters(db)).map((x) => x.code)).toEqual(["spring27", "summer27", "fall27"]);
-    expect(await emptyActiveSemesters(db)).toEqual([]);
+    expect((await boardSemesters(db, "full")).map((x) => x.code)).toEqual(["spring27", "summer27", "fall27"]);
+    expect(await emptyActiveSemesters(db, "full")).toEqual([]);
   });
 
   it("gives contact details only for visible listings, falling back to the account email", async () => {
-    expect(await contactDetails(db, ids.near, viewer, false)).toEqual({ email: "poster@uvm.edu", phone: "802-555-0100", posterName: "Pat Poster" });
-    expect(await contactDetails(db, ids.down, viewer, false)).toMatchObject({ email: "me@example.com", phone: null });
-    expect(await contactDetails(db, ids.paused, viewer, false)).toBeNull();
-    expect(await contactDetails(db, ids.paused, viewer, true)).not.toBeNull();
+    const student = { level: "student", userId: viewer } as const;
+    expect(await contactDetails(db, ids.near, student)).toEqual({ email: "poster@uvm.edu", phone: "802-555-0100", posterName: "Pat Poster" });
+    expect(await contactDetails(db, ids.down, student)).toMatchObject({ email: "me@example.com", phone: null });
+    expect(await contactDetails(db, ids.paused, student)).toBeNull();
+    expect(await contactDetails(db, ids.paused, { level: "admin", userId: viewer })).not.toBeNull();
+  });
+
+  it("gives a community account or a signed-out caller nothing, on any listing", async () => {
+    for (const id of [ids.near, ids.down, ids.paused]) {
+      expect(await contactDetails(db, id, { level: "community", userId: viewer })).toBeNull();
+      expect(await contactDetails(db, id, { level: "anonymous", userId: null })).toBeNull();
+    }
+  });
+
+  it("finds no full listing for a viewer nobody vouched for", async () => {
+    expect(await listingForViewer(db, ids.near, null)).toBeNull();
   });
 });
 
@@ -154,7 +166,7 @@ describe("a banned poster's listing", () => {
     try {
       expect((await browseListings(db, q(), viewer)).listings.map((x) => x.id)).not.toContain(l.id);
       expect(await listingForViewer(db, l.id, viewer)).toBeNull();
-      expect(await contactDetails(db, l.id, viewer, false)).toBeNull();
+      expect(await contactDetails(db, l.id, { level: "student", userId: viewer })).toBeNull();
       expect((await listingForViewer(db, l.id, viewer, { anyVisibility: true }))?.id).toBe(l.id);
       await db.update(s.user).set({ banned: false }).where(eq(s.user.id, u.id));
       expect((await browseListings(db, q(), viewer)).listings.map((x) => x.id)).toContain(l.id);

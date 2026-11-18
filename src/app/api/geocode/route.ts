@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CAMPUS, SITE } from "@/config/site";
 import { formatAddress, shortAddressFromDetails } from "@/lib/format";
-import { requireUserOrThrow } from "@/server/auth";
+import { requirePosterOrThrow } from "@/server/viewer";
 import { log } from "@/server/log";
 
 export const runtime = "nodejs";
@@ -31,8 +31,9 @@ export interface GeocodeHit {
 }
 
 export async function GET(request: Request) {
-  const user = await requireUserOrThrow().catch(() => null);
-  if (!user) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+  // Students and the admin only (canPost): a community account has no listing to put a photo or an address on.
+  const user = await requirePosterOrThrow().catch(() => null);
+  if (!user) return NextResponse.json({ error: "Sign in as a student first." }, { status: 401 });
   const url = new URL(request.url);
   const params = Object.fromEntries(url.searchParams.entries());
 

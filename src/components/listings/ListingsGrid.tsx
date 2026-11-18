@@ -1,5 +1,6 @@
 "use client";
 
+import { ACCESS } from "@/config/site";
 import Link from "next/link";
 import { type ReactNode, useEffect, useRef } from "react";
 import type { EventSource } from "@/lib/options";
@@ -20,6 +21,7 @@ export function ListingsGrid({
   anyExists,
   filtered,
   signedOut = false,
+  community = false,
   emptyState,
 }: {
   listings: BoardListing[];
@@ -29,6 +31,8 @@ export function ListingsGrid({
   filtered: boolean;
   /** Signed out, a followed listing may only be missing because it is for signed-in students: say so, without saying which. */
   signedOut?: boolean;
+  /** The public board for a community account: the same rules, and no sign-in suggestion. */
+  community?: boolean;
   /** Shown instead of the usual empty board when there are no listings (signed out with every listing behind sign-in). */
   emptyState?: ReactNode;
 }) {
@@ -55,8 +59,8 @@ export function ListingsGrid({
     <div id="listingsGrid" className="flex flex-col gap-4">
       {missing && (
         <p className="rounded-lg border border-notice-line bg-notice-tint px-3 py-2 text-sm text-notice-ink">
-          {signedOut
-            ? "The listing you followed isn't on the public board: it's for signed-in students, or it isn't up any more. Here is everything that is."
+          {signedOut || community
+            ? `The listing you followed isn't on the public board: it's for ${ACCESS.audience} only, or it isn't up any more. Here is everything that is.`
             : "The listing you followed isn't up any more. Here is everything that is."}
         </p>
       )}

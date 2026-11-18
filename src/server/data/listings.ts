@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, exists, gt, gte, inArray, lte, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, inArray, lte, or, sql, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import type { DbOrTx } from "@/db";
 import { listingPhotos, listings, listingSemesters, user } from "@/db/schema";
@@ -24,7 +24,8 @@ import {
 } from "@/lib/options";
 import { posterColumns, shownName, type PosterColumns } from "./names";
 import { labelFor, listingSemestersByListing } from "./semesters";
-import { type Audience, campusDistanceMiles, publicListingWhere, signedOutAudienceWhere } from "./visibility";
+import { seesFullListings, type ViewerRef } from "@/lib/viewer";
+import { type Audience, audienceWhere, campusDistanceMiles, publicListingWhere } from "./visibility";
 
 /**
  * What a card and the listing view need, for a signed-in viewer only. No
@@ -88,14 +89,16 @@ const AMENITY_COLUMNS: Record<AmenityKey, PgColumn> = {
 };
 
 /**
- * The WHERE for Browse and Map: visibility plus every filter in use. Signed
- * out, only listings their posters show publicly, `distance` must be the
- * area's (campusDistanceMiles("signed-out")), and "Open to" is ignored: it
- * would reveal roommate preferences, which are signed-in only.
+ * The WHERE for Browse, Map and the digest: visibility for the audience plus
+ * every filter in use. For "public" (signed-out visitors and community
+ * accounts), only listings their posters show publicly, the distance filter
+ * runs on the approximate area (the distance is derived from the audience
+ * here, so the two can never disagree), and "Open to" is ignored: it would
+ * reveal roommate preferences, which are for students only.
  */
-export function listingFilterWhere(q: ListingQuery, distance: SQL<number>, audience: Audience = "signed-in"): SQL {
-  const parts: (SQL | undefined)[] = [publicListingWhere()];
-  if (audience === "signed-out") parts.push(signedOutAudienceWhere());
+export function listingFilterWhere(q: ListingQuery, audience: Audience): SQL {
+  const distance = campusDistanceMiles(audience);
+  const parts: (SQL | undefined)[] = [audienceWhere(audience)];
   if (q.minPrice !== undefined && q.maxPrice !== undefined) {
     parts.push(gte(listings.price, q.minPrice), lte(listings.price, q.maxPrice));
   }
@@ -112,7 +115,7 @@ export function listingFilterWhere(q: ListingQuery, distance: SQL<number>, audie
     parts.push(or(...flags.map((f) => eq(AMENITY_COLUMNS[f], true))));
   }
   if (q.negotiable) parts.push(eq(listings.priceNegotiable, true));
-  if (q.openTo && audience === "signed-in") {
+  if (q.openTo && audience === "full") {
     const prefs = OPEN_TO_FILTERS[q.openTo].prefs;
     parts.push(or(eq(listings.roommatePreference, ""), inArray(listings.roommatePreference, [...prefs])));
   }
@@ -151,14 +154,15 @@ export async function browseListings(db: DbOrTx, q: ListingQuery, viewerId: stri
 }
 
 /**
- * The one query behind Browse and the weekly digest: the board's visibility
- * plus the query's filters (listingFilterWhere), in the query's order.
- * `narrow` can only take rows away (it is ANDed on), so anything the digest
- * finds is on Browse with the same filters.
+ * The one full-audience query behind Browse, Map and a student's digest: the
+ * board's visibility plus the query's filters (listingFilterWhere), in the
+ * query's order. Students and the admin only; "public" viewers go through
+ * publicBoardListings(). `narrow` can only take rows away (it is ANDed on),
+ * so anything the digest finds is on Browse with the same filters.
  */
-async function boardListings(db: DbOrTx, q: ListingQuery, opts: { viewerId: string | null; narrow?: SQL }): Promise<ListingDto[]> {
-  const distance = campusDistanceMiles();
-  const where = opts.narrow ? and(listingFilterWhere(q, distance), opts.narrow)! : listingFilterWhere(q, distance);
+export async function boardListings(db: DbOrTx, q: ListingQuery, opts: { viewerId: string | null; narrow?: SQL }): Promise<ListingDto[]> {
+  const distance = campusDistanceMiles("full");
+  const where = opts.narrow ? and(listingFilterWhere(q, "full"), opts.narrow)! : listingFilterWhere(q, "full");
   const rows = await db
     .select({ l: listings, email: user.email, poster: posterColumns, distanceMi: distance })
     .from(listings)
@@ -170,30 +174,14 @@ async function boardListings(db: DbOrTx, q: ListingQuery, opts: { viewerId: stri
 }
 
 /**
- * A saved search's new listings for the weekly digest: exactly Browse's
- * query for those filters, narrowed to listings posted in (since, until]
- * and not the recipient's own.
- */
-export async function newBoardListings(
-  db: DbOrTx,
-  q: ListingQuery,
-  opts: { recipientId: string; since: Date; until: Date },
-): Promise<ListingDto[]> {
-  const narrow = and(gt(listings.postedAt, opts.since), lte(listings.postedAt, opts.until), ne(listings.userId, opts.recipientId))!;
-  return boardListings(db, q, { viewerId: opts.recipientId, narrow });
-}
-
-/**
- * One listing by id if it is on the board (or the viewer's own, any status).
- * `anyVisibility` is for the admin pages only: paused, taken and hidden too.
+ * One listing by id, full view, if it is on the board (or the viewer's own,
+ * any status). `anyVisibility` is for the admin pages only: paused, taken and
+ * hidden too. With neither a viewer nor anyVisibility it finds nothing: a
+ * full listing is never for a viewer nobody vouched for.
  */
 export async function listingForViewer(db: DbOrTx, id: number, viewerId: string | null, opts: { anyVisibility?: boolean } = {}): Promise<ListingDto | null> {
-  const distance = campusDistanceMiles();
-  const visible = opts.anyVisibility
-    ? sql`true`
-    : viewerId
-      ? or(publicListingWhere(), eq(listings.userId, viewerId))!
-      : publicListingWhere();
+  const distance = campusDistanceMiles("full");
+  const visible = opts.anyVisibility ? sql`true` : viewerId ? or(publicListingWhere(), eq(listings.userId, viewerId))! : sql`false`;
   const rows = await db
     .select({ l: listings, email: user.email, poster: posterColumns, distanceMi: distance })
     .from(listings)
@@ -307,7 +295,7 @@ export interface FilterBounds {
  * paused listing cannot stretch a slider. Prices to the nearest $50, distance
  * to the nearest half mile; defaults when the board is empty.
  */
-export async function filterBounds(db: DbOrTx, audience: Audience = "signed-in"): Promise<FilterBounds> {
+export async function filterBounds(db: DbOrTx, audience: Audience): Promise<FilterBounds> {
   const distance = campusDistanceMiles(audience);
   const [row] = await db
     .select({
@@ -316,7 +304,7 @@ export async function filterBounds(db: DbOrTx, audience: Audience = "signed-in")
       dist: sql<number | null>`max(${distance})::float`,
     })
     .from(listings)
-    .where(audience === "signed-out" ? and(publicListingWhere(), signedOutAudienceWhere()) : publicListingWhere());
+    .where(audienceWhere(audience));
   const maxPrice = Math.max(Math.ceil((row?.max ?? 3000) / 50) * 50, 100);
   const minPrice = Math.min(Math.floor((row?.min ?? 0) / 50) * 50, maxPrice - 50);
   const maxDistance = Math.max(Math.ceil((row?.dist ?? 20) * 2) / 2, 1);
@@ -338,11 +326,14 @@ export interface ContactDetails {
 
 /**
  * The poster's contact details, fetched only when the panel opens and only
- * for a listing the viewer may see. The account email is the fallback when
- * the poster left the contact email blank.
+ * for a student or the admin, on a listing they may see. Community accounts
+ * and signed-out visitors get null, whatever the listing: they reach posters
+ * through the relay (src/server/services/poster-message.ts). The account
+ * email is the fallback when the poster left the contact email blank.
  */
-export async function contactDetails(db: DbOrTx, id: number, viewerId: string, isAdmin: boolean): Promise<ContactDetails | null> {
-  const visible = isAdmin ? sql`true` : or(publicListingWhere(), eq(listings.userId, viewerId))!;
+export async function contactDetails(db: DbOrTx, id: number, viewer: ViewerRef): Promise<ContactDetails | null> {
+  if (viewer.userId === null || !seesFullListings(viewer.level)) return null;
+  const visible = viewer.level === "admin" ? sql`true` : or(publicListingWhere(), eq(listings.userId, viewer.userId))!;
   const [row] = await db
     .select({ contactEmail: listings.contactEmail, phone: listings.contactPhone, displayName: listings.displayName, email: user.email, poster: posterColumns })
     .from(listings)

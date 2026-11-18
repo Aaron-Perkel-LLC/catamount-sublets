@@ -21,8 +21,8 @@ const { eq } = await import("drizzle-orm");
 type Db = Awaited<ReturnType<typeof createTestDb>>["db"];
 let db: Db;
 let close: () => Promise<void>;
-const user = { id: "", email: "poster@uvm.edu", role: "user" as const };
-const other = { id: "", email: "other@uvm.edu", role: "user" as const };
+const user = { id: "", email: "poster@uvm.edu", role: "user" as const, tier: "student" as const };
+const other = { id: "", email: "other@uvm.edu", role: "user" as const, tier: "student" as const };
 
 beforeAll(async () => {
   ({ db, close } = await createTestDb());

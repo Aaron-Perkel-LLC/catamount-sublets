@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { listings } from "@/db/schema";
+import { seesFullListings, viewerLevelOf } from "@/lib/viewer";
 import { requireUserOrThrow } from "@/server/auth";
 import { dismissNotice } from "@/server/data/notices";
 
@@ -16,5 +17,5 @@ export async function dismissNoticeAction(noticeId: number, how: "dismiss" | "ct
   const db = await getDb();
   const [mine] = await db.select({ id: listings.id }).from(listings).where(eq(listings.userId, user.id)).limit(1);
   // A notice that's gone is nothing to dismiss; not logged, so nobody can fill the logs with made-up ids.
-  await dismissNotice(db, { kind: "signed-in", userId: user.id, role: user.role, hasListing: Boolean(mine) }, input.noticeId, input.how);
+  await dismissNotice(db, { kind: "signed-in", userId: user.id, role: user.role, hasListing: Boolean(mine), community: !seesFullListings(viewerLevelOf(user)) }, input.noticeId, input.how);
 }

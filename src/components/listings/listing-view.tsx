@@ -6,6 +6,7 @@ import { track } from "@/lib/track";
 import type { ListingDto } from "@/server/data/listings";
 import { type BoardListing, isPublicListing } from "./board-listing";
 import { ListingModal } from "./ListingModal";
+import type { RelaySender } from "./MessagePoster";
 import { PublicListingModal } from "./PublicListingModal";
 
 /**
@@ -35,11 +36,14 @@ const Ctx = createContext<ListingViewApi | null>(null);
 export function ListingViewProvider({
   children,
   viewer,
+  relay = null,
   actions: Actions,
 }: {
   children: ReactNode;
-  /** Null for a signed-out visitor, whose listings are all PublicListing and open in the public view. */
+  /** Null for a signed-out visitor or a community account, whose listings are all PublicListing and open in the public view. */
   viewer: Viewer | null;
+  /** A community account's name and email, for Message poster in the public view; null otherwise. */
+  relay?: RelaySender | null;
   /** Extra controls at the top of the view; the admin page's status, photos and delete. */
   actions?: ComponentType<{ listing: ListingDto; close: () => void }>;
 }) {
@@ -91,7 +95,7 @@ export function ListingViewProvider({
       {children}
       {current &&
         (isPublicListing(current) ? (
-          <PublicListingModal key={current.id} listing={current} onClose={close} />
+          <PublicListingModal key={current.id} listing={current} onClose={close} relay={relay} />
         ) : (
           viewer && <ListingModal key={current.id} listing={current} source={source} viewer={viewer} onClose={close} actions={Actions && <Actions listing={current} close={close} />} />
         ))}

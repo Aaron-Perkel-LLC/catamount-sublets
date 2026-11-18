@@ -11,6 +11,7 @@ import {
   deleteListingFor,
   photoOpFor,
   saveListingFor,
+  setOutsideMessagesFor,
   setStatusFor,
   setVisibilityFor,
   type AttachResult,
@@ -44,6 +45,14 @@ export async function setMyListingVisibility(signedInOnly: boolean): Promise<{ o
   const user = await requireUserOrThrow();
   const result = await setVisibilityFor(await getDb(), user, signedInOnly);
   if (result.ok) revalidate();
+  return result;
+}
+
+/** "Messages from people outside the schools" from My post. */
+export async function setMyOutsideMessages(accepts: boolean): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUserOrThrow();
+  const result = await setOutsideMessagesFor(await getDb(), user, accepts);
+  if (result.ok) revalidatePath("/post");
   return result;
 }
 

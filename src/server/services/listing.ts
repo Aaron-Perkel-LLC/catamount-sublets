@@ -1,5 +1,8 @@
 import { z } from "zod";
+import { ACCESS } from "@/config/site";
 import type { Db } from "@/db";
+import type { AccountTier } from "@/lib/auth-allow";
+import { canPost, viewerLevelOf } from "@/lib/viewer";
 import { formToListingInput, validateListingInput } from "@/lib/listing-input";
 import { type DeleteAnswer, deleteAnswerSchema } from "@/lib/listing-outcome";
 import { LISTING_STATUS_VALUES, type ListingStatus } from "@/lib/options";
@@ -16,6 +19,7 @@ import {
   setCoverPhoto,
   setListingStatus,
   setListingVisibility,
+  setOutsideMessages,
   updateListing,
   type PhotoRow,
 } from "@/server/data/my-listing";
@@ -38,6 +42,14 @@ export interface ServiceUser {
   id: string;
   email: string;
   role: "user" | "admin";
+  tier: AccountTier;
+}
+
+export const POSTING_REFUSED = `Posting is for ${ACCESS.audience}, so every listing comes from a verified student.`;
+
+/** Posting, photos and the listing's settings are for students and the admin (canPost): checked here, whatever the page showed. */
+function mayPost(user: ServiceUser): boolean {
+  return canPost(viewerLevelOf(user));
 }
 
 export interface SaveState {
@@ -61,6 +73,7 @@ export function friendlyError(error: unknown): string {
 
 /** Create or update the person's one listing. Status is never changed by a save. */
 export async function saveListingFor(db: Db, user: ServiceUser, formData: FormData): Promise<SaveState> {
+  if (!mayPost(user)) return { ok: false, error: POSTING_REFUSED };
   try {
     await assertWritable(db);
     const parsed = validateListingInput(formToListingInput(formData));
@@ -96,6 +109,7 @@ export async function saveListingFor(db: Db, user: ServiceUser, formData: FormDa
 }
 
 export async function setStatusFor(db: Db, user: ServiceUser, status: ListingStatus): Promise<{ ok: boolean; error?: string }> {
+  if (!mayPost(user)) return { ok: false, error: POSTING_REFUSED };
   try {
     await assertWritable(db);
     z.enum(LISTING_STATUS_VALUES).parse(status);
@@ -122,6 +136,7 @@ export const VISIBILITY_LOCKED_ERROR = "Listings posted since signed-out browsin
  * admin's own listing (the admin strip is the admin's switch).
  */
 export async function setVisibilityFor(db: Db, user: ServiceUser, signedInOnly: unknown): Promise<{ ok: boolean; error?: string }> {
+  if (!mayPost(user)) return { ok: false, error: POSTING_REFUSED };
   try {
     await assertWritable(db);
     const flag = z.boolean().parse(signedInOnly);
@@ -134,6 +149,25 @@ export async function setVisibilityFor(db: Db, user: ServiceUser, signedInOnly: 
     }
     if (result === "not-found") return { ok: false, error: "You don't have a listing yet." };
     log.info("listing.visibility", { listingId: mine.row.id, signedInOnly: flag, by: "poster" });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: friendlyError(error) };
+  }
+}
+
+/**
+ * The My post switch for messages from community accounts (people outside
+ * the schools, through the site's relay). On by default; the poster's call.
+ */
+export async function setOutsideMessagesFor(db: Db, user: ServiceUser, accepts: unknown): Promise<{ ok: boolean; error?: string }> {
+  if (!mayPost(user)) return { ok: false, error: POSTING_REFUSED };
+  try {
+    await assertWritable(db);
+    const flag = z.boolean().parse(accepts);
+    const mine = await myListing(db, user.id);
+    if (!mine) return { ok: false, error: "You don't have a listing yet." };
+    if (!(await setOutsideMessages(db, mine.row.id, { userId: user.id, isAdmin: false }, flag))) return { ok: false, error: "You don't have a listing yet." };
+    log.info("listing.outside_messages", { listingId: mine.row.id, accepts: flag });
     return { ok: true };
   } catch (error) {
     return { ok: false, error: friendlyError(error) };
@@ -187,6 +221,7 @@ const PROCESS_ERRORS = {
  * written to the public store, recorded. The raw file is deleted whatever happens.
  */
 export async function attachPhotoFor(db: Db, user: ServiceUser, ref: string): Promise<AttachResult> {
+  if (!mayPost(user)) return { ok: false, error: POSTING_REFUSED };
   try {
     await assertWritable(db);
     z.string().min(1).max(500).parse(ref);
@@ -218,6 +253,7 @@ export async function attachPhotoFor(db: Db, user: ServiceUser, ref: string): Pr
 
 /** Move, make cover, or delete one of the person's photos (or any, for the admin). */
 export async function photoOpFor(db: Db, user: ServiceUser, photoId: number, op: PhotoOp): Promise<PhotosResult> {
+  if (!mayPost(user)) return { ok: false, error: POSTING_REFUSED };
   try {
     await assertWritable(db);
     z.number().int().positive().parse(photoId);

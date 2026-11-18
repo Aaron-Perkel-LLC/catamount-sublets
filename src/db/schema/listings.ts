@@ -86,6 +86,12 @@ export const listings = pgTable(
      */
     visibilityChosenAt: nullableTimestamp(),
     /**
+     * Community accounts (addresses outside the schools) may message the
+     * poster through the site's relay (src/server/services/poster-message.ts).
+     * The poster turns it off on My post. Migration 0013; on for every listing.
+     */
+    acceptsOutsideMessages: boolean().notNull().default(true),
+    /**
      * The approximate area's center, a fixed offset of the true point
      * (src/server/geo-fuzz.ts), stored because the signed-out distance
      * filter and sort run on it in SQL and a migration cannot hold the

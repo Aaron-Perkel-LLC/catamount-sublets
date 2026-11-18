@@ -22,6 +22,7 @@ import { noticeFor } from "@/server/data/notices";
 import { log } from "@/server/log";
 import { getSetting } from "@/server/data/settings";
 import { easternGreeting } from "@/lib/dates";
+import { canPost as levelCanPost, seesFullListings, viewerLevelOf } from "@/lib/viewer";
 
 /**
  * The signed-in frame: the welcome-name gate, the header with the person's
@@ -41,7 +42,9 @@ export async function AppShell({ user, children }: { user: SessionUser; children
   // On the server, in Eastern time (src/lib/dates.ts): nothing for the browser to compute differently.
   const greeting = easternGreeting(new Date(), names.first);
   // Only a notice whose audience takes this person in is ever sent (rendered here, on the server).
-  const notice = await noticeFor(db, { kind: "signed-in", userId: user.id, hasListing: Boolean(mine) }).catch((e: unknown) => {
+  const level = viewerLevelOf(user);
+  const canPost = levelCanPost(level);
+  const notice = await noticeFor(db, { kind: "signed-in", userId: user.id, hasListing: Boolean(mine), community: !seesFullListings(level) }).catch((e: unknown) => {
     log.error("notice.lookup_failed", e); // best effort: a broken popup never takes the page down
     return null;
   });
@@ -54,7 +57,7 @@ export async function AppShell({ user, children }: { user: SessionUser; children
             <Mark className="h-8 w-8 md:h-9 md:w-9" /> {SITE.name}
           </Link>
           <Suspense>
-            <NavLinks isAdmin={user.role === "admin"} hasListing={Boolean(mine)} />
+            <NavLinks isAdmin={user.role === "admin"} hasListing={Boolean(mine)} canPost={canPost} />
           </Suspense>
           {/* Desktop: the greeting (plain text, from 1024 px where it fits), Account, Sign out. Phone: the menu (MobileNav), which has Account and Sign out. */}
           <div className="ml-auto hidden min-w-0 items-center gap-3 self-stretch text-sm md:flex">
@@ -71,7 +74,7 @@ export async function AppShell({ user, children }: { user: SessionUser; children
             </form>
           </div>
           <Suspense>
-            <MobileNav isAdmin={user.role === "admin"} hasListing={Boolean(mine)} signOut={signOutAction} />
+            <MobileNav isAdmin={user.role === "admin"} hasListing={Boolean(mine)} canPost={canPost} signOut={signOutAction} />
           </Suspense>
         </nav>
       </header>

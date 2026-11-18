@@ -12,7 +12,14 @@ export async function register() {
   const { log } = await import("./server/log");
   getEnv();
   // Never the value: whether a key is present, and what that means for mail.
-  log.info("boot.mail", { env: process.env.VERCEL_ENV ?? "local", resendKey: Boolean(process.env.RESEND_API_KEY), mode: mailMode() });
+  log.info("boot.mail", {
+    env: process.env.VERCEL_ENV ?? "local",
+    resendKey: Boolean(process.env.RESEND_API_KEY),
+    // The updates subdomain's key: the digest and the message relay refuse to send without it (digestBlockers(), relayBlockers()).
+    updatesKey: Boolean(process.env.RESEND_DIGEST_API_KEY),
+    mode: mailMode(),
+  });
+  if (mailMode() === "resend" && !process.env.RESEND_DIGEST_API_KEY) log.warn("boot.updates_key_missing");
   if (isProductionEnv() && !process.env.RESEND_API_KEY) {
     throw new Error("RESEND_API_KEY is not set in production; refusing to start");
   }

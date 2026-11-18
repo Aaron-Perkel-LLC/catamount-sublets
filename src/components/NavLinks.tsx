@@ -16,7 +16,18 @@ export interface NavItem {
  * so switching view keeps what the person was looking at. Used by the
  * desktop bar (NavLinks) and the phone menu (MobileNav), so both agree.
  */
-export function useNavItems({ isAdmin, hasListing, withAccount = false }: { isAdmin: boolean; hasListing: boolean; withAccount?: boolean }): NavItem[] {
+export function useNavItems({
+  isAdmin,
+  hasListing,
+  canPost = true,
+  withAccount = false,
+}: {
+  isAdmin: boolean;
+  hasListing: boolean;
+  /** False for a community account: no New Post link (the page would only explain why). */
+  canPost?: boolean;
+  withAccount?: boolean;
+}): NavItem[] {
   const pathname = usePathname();
   const params = useSearchParams();
   const onBoard = pathname === "/browse" || pathname === "/map";
@@ -25,7 +36,7 @@ export function useNavItems({ isAdmin, hasListing, withAccount = false }: { isAd
   return [
     item(withQuery("/browse", carry), "Browse"),
     item(withQuery("/map", carry), "Map"),
-    item("/post", hasListing ? "My Post" : "New Post"),
+    ...(canPost || hasListing ? [item("/post", hasListing ? "My Post" : "New Post")] : []),
     ...(withAccount ? [item("/account", "Account")] : []),
     ...(isAdmin ? [item("/admin", "Admin")] : []),
   ];
@@ -38,8 +49,8 @@ const barLink = (current: boolean) =>
   }`;
 
 /** The desktop bar (769 px and up, the legacy breakpoint). */
-export function NavLinks({ isAdmin, hasListing }: { isAdmin: boolean; hasListing: boolean }) {
-  const items = useNavItems({ isAdmin, hasListing });
+export function NavLinks({ isAdmin, hasListing, canPost = true }: { isAdmin: boolean; hasListing: boolean; canPost?: boolean }) {
+  const items = useNavItems({ isAdmin, hasListing, canPost });
   return (
     <div className="hidden self-stretch text-sm font-bold text-ink-2 md:flex">
       {items.map((i) => (

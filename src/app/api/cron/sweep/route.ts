@@ -1,5 +1,7 @@
 import { lt, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { POSTER_MESSAGE_RETENTION_DAYS } from "@/lib/poster-message";
+import { sweepPosterMessages } from "@/server/data/poster-messages";
 import { getDb } from "@/db";
 import { otpSends, rateLimit, rateLimitBuckets, verification } from "@/db/schema";
 import { expiredBucketsBefore } from "@/server/rate-limit";
@@ -34,7 +36,20 @@ export async function GET(request: Request) {
   const interrupted = await failStalePending(db, new Date(Date.now() - 3_600_000));
   const digestInterrupted = await failStaleDigestSends(db, dayAgo);
   const areas = await fillMissingAreas(db);
-  const summary = { raw, codes: codes.length, limits: limits.length, sends: sends.length, buckets: buckets.length, interrupted, digestInterrupted, areas };
+  // Relayed messages: stuck sends fail after an hour; every message goes after 180 days (the privacy page says so).
+  const relay = await sweepPosterMessages(db, new Date(Date.now() - 3_600_000), new Date(Date.now() - POSTER_MESSAGE_RETENTION_DAYS * 86_400_000));
+  const summary = {
+    raw,
+    codes: codes.length,
+    limits: limits.length,
+    sends: sends.length,
+    buckets: buckets.length,
+    interrupted,
+    digestInterrupted,
+    areas,
+    relayInterrupted: relay.failed,
+    relayDeleted: relay.deleted,
+  };
   log.info("cron.sweep", summary);
   return NextResponse.json(summary);
 }

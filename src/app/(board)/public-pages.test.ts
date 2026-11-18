@@ -32,7 +32,7 @@ vi.mock("next/og", () => ({
 
 const { createTestDb } = await import("@/db/test-db");
 const s = await import("@/db/schema");
-const { SITE } = await import("@/config/site");
+const { ACCESS, SITE } = await import("@/config/site");
 const { eq } = await import("drizzle-orm");
 const { setListingSemesters } = await import("@/server/data/semesters");
 const { setListingVisibility } = await import("@/server/data/my-listing");
@@ -46,7 +46,7 @@ const sharePage = await import("@/app/s/[slug]/page");
 const shareCard = await import("@/app/share-card/[slug]/[format]/route");
 
 /** The board's server components with no "use client": RSC runs them on the server, so their output is in the payload. */
-const SERVER_COMPONENTS = new Set(["PublicListingDetails", "PublicCta", "SignedInOnlyNote", "AllSignedInOnly", "UtilitiesAndAmenities"]);
+const SERVER_COMPONENTS = new Set(["PublicListingDetails", "PublicCta", "SignedInOnlyNote", "AllSignedInOnly", "UtilitiesAndAmenities", "SaveSearch"]);
 
 /** Runs server components (async ones, and the sync ones above); for a client component, keeps its props, as the RSC payload would. */
 async function payload(node: unknown): Promise<unknown> {
@@ -76,7 +76,7 @@ beforeAll(async () => {
   await h.db.insert(s.semesters).values({ code: "spring27", name: "Spring 2027", active: true });
   const [poster] = await h.db.insert(s.user).values({ email: SECRET.email, name: "zq", firstName: SECRET.first, lastName: SECRET.last }).returning({ id: s.user.id });
   const [v] = await h.db.insert(s.user).values({ email: "viewer@uvm.edu", name: "viewer", firstName: "Vic", lastName: "Viewer" }).returning({ id: s.user.id });
-  viewer = { id: v.id, email: "viewer@uvm.edu", name: "viewer", role: "user", legacyNetid: null };
+  viewer = { id: v.id, email: "viewer@uvm.edu", name: "viewer", role: "user", tier: "student", legacyNetid: null };
   const [l] = await h.db
     .insert(s.listings)
     .values({
@@ -128,8 +128,8 @@ describe("signed out, nothing locates the place or reaches the poster", () => {
   it("on the listing's own page and its metadata (title, description, Open Graph)", async () => {
     const page = await text(await listing.default(idParams(secretId)));
     const meta = JSON.stringify(await listing.generateMetadata(idParams(secretId)));
-    expect(page).toContain("Sign in to see the exact address and contact the poster.");
-    expect(page).toContain("Sign in to read the description.");
+    expect(page).toContain(`"${ACCESS.schools}"," students: sign in to see the exact address and contact the poster. Anyone else: sign in with any email to message the poster."`);
+    expect(page).toContain(`"${ACCESS.schools}"," students: sign in to read the description."`);
     expect(page).not.toContain(SECRET.descriptionMarker);
     expect(meta).toContain("2BR");
     expect(leaks(page)).toEqual([]);
@@ -198,12 +198,12 @@ describe("a listing kept to signed-in students", () => {
       const page = await text(await browse.default({ searchParams: noParams() }));
       expect(page).not.toContain(`"id":${secretId},`);
       // It is the only listing, so nothing is public: one message, a count and nothing else, not "1 more" beside "No listings up right now".
-      expect(page).toContain('"The 1 listing up is"," visible to signed-in students only right now."');
+      expect(page).toContain(`"The 1 listing up is"," visible to ","${ACCESS.audience}"," only right now."`);
       expect(page).not.toContain("more listing");
       expect(page).not.toContain("No listings up right now.");
       const mapPage = await text(await map.default({ searchParams: noParams() }));
       expect(mapPage).not.toContain(`"id":${secretId},`);
-      expect(mapPage).toContain('"The 1 listing up is"," visible to signed-in students only right now."');
+      expect(mapPage).toContain(`"The 1 listing up is"," visible to ","${ACCESS.audience}"," only right now."`);
       expect(mapPage).not.toContain("more listing");
       expect(JSON.stringify(await sitemap())).not.toContain(`/listing/${secretId}`);
       await expect(listing.default(idParams(secretId))).rejects.toMatchObject({ digest: expect.stringContaining("404") });
@@ -223,14 +223,14 @@ describe("a listing kept to signed-in students", () => {
     await setListingVisibility(h.db, secretId, admin, true);
     try {
       for (const page of [await text(await browse.default({ searchParams: noParams() })), await text(await map.default({ searchParams: noParams() }))]) {
-        expect(page).toContain('[1," more listing"," is"," visible to signed-in students."');
-        expect(page).not.toContain("visible to signed-in students only right now.");
+        expect(page).toContain(`"1 more listing is visible to ${ACCESS.audience} only."`);
+        expect(page).not.toContain("only right now.");
         expect(page).toContain('"price":650');
       }
       // Filtered down to nothing: the usual message, and the note still says what is behind sign-in.
       const none = await text(await browse.default({ searchParams: Promise.resolve({ min_price: "4000", max_price: "5000" }) }));
-      expect(none).toContain('"listings":[],"openSource":"deeplink","anyExists":true,"filtered":true,"signedOut":true}'); // ListingsGrid's own "Nothing matches those filters."
-      expect(none).toContain('[1," more listing"');
+      expect(none).toContain('"listings":[],"openSource":"deeplink","anyExists":true,"filtered":true,"signedOut":true,"community":false}'); // ListingsGrid's own "Nothing matches those filters."
+      expect(none).toContain('"1 more listing is');
     } finally {
       await setListingVisibility(h.db, secretId, admin, false);
       await h.db.delete(s.listings).where(eq(s.listings.id, l.id));
@@ -247,7 +247,8 @@ describe("nothing on the board is cached across sessions", () => {
     const src = readFileSync(path.join(process.cwd(), "src/app/(board)", file), "utf8");
     expect(src).not.toMatch(/export const (revalidate|dynamic|fetchCache)\b/);
     expect(src).not.toMatch(/unstable_cache|"use cache"|generateStaticParams/);
-    expect(src).toMatch(/getSessionUser\(\)/);
+    // Every one asks the viewer level (src/server/viewer.ts), which reads the session.
+    expect(src).toMatch(/getViewer\(\)/);
   });
 });
 
@@ -259,5 +260,91 @@ describe("signed in, nothing changed", () => {
     expect(page).toContain(`"lat":${SECRET.lat}`);
     expect(page).not.toContain('"audience":"public"');
     expect(await browse.generateMetadata()).toEqual({ title: `Browse · ${SITE.name}` });
+  });
+});
+
+/**
+ * A community account (an address outside the schools) is signed in but
+ * sees exactly what a signed-out visitor sees: the same leak checks, the
+ * same hidden-listing rules, no contact details by any route. Only the frame
+ * differs: saved searches and Message poster.
+ */
+describe("a community account sees only the public board", () => {
+  let community: SessionUser;
+  beforeAll(async () => {
+    const [c] = await h.db.insert(s.user).values({ email: "robin@gmail.com", name: "robin", firstName: "Robin", lastName: "Lee", tier: "community" }).returning({ id: s.user.id });
+    community = { id: c.id, email: "robin@gmail.com", name: "robin", role: "user", tier: "community", legacyNetid: null };
+  });
+  beforeEach(() => {
+    h.user = community;
+  });
+
+  it("on Browse and the Map: PublicListing only, nothing that locates the place or reaches the poster", async () => {
+    const page = await text(await browse.default({ searchParams: noParams() }));
+    expect(page).toContain('"audience":"public"');
+    expect(page).not.toContain('"address"');
+    expect(leaks(page)).toEqual([]);
+    // Saved searches and the relay are theirs; the relay carries only their own name and address.
+    expect(page).toContain('"type":"SaveSearchButton"');
+    expect(page).toContain('"relay":{"name":"Robin Lee","email":"robin@gmail.com"}');
+    const mapPage = await text(await map.default({ searchParams: noParams() }));
+    expect(mapPage).toContain('"area":{');
+    expect(mapPage).not.toContain(`"lat":${SECRET.lat}`);
+    expect(leaks(mapPage)).toEqual([]);
+  });
+
+  it("with a share link's ?id=, the same", async () => {
+    expect(leaks(await text(await browse.default({ searchParams: Promise.resolve({ id: String(secretId), via: "share" }) })))).toEqual([]);
+  });
+
+  it("a listing kept to students is not on their board, and the note offers no sign-in", async () => {
+    await setListingVisibility(h.db, secretId, admin, true);
+    try {
+      for (const page of [await text(await browse.default({ searchParams: noParams() })), await text(await map.default({ searchParams: noParams() }))]) {
+        expect(page).not.toContain(`"id":${secretId},`);
+        expect(page).toContain(`"The 1 listing up is"," visible to ","${ACCESS.audience}"," only right now."`);
+        expect(page).not.toContain("/sign-in");
+        expect(leaks(page)).toEqual([]);
+      }
+      const followed = await text(await browse.default({ searchParams: Promise.resolve({ id: String(secretId), via: "share" }) }));
+      // Only the URL's own ?id= echoes back; no listing comes with it.
+      expect(followed).toContain('"listings":[],"openId":');
+      expect(leaks(followed)).toEqual([]);
+    } finally {
+      await setListingVisibility(h.db, secretId, admin, false);
+    }
+  });
+
+  it("gets no contact details from the panel's Server Action, on a public listing or a hidden one", async () => {
+    const { fetchContactDetails } = await import("@/server/actions/listings");
+    expect(await fetchContactDetails(secretId)).toBeNull();
+    await setListingVisibility(h.db, secretId, admin, true);
+    try {
+      expect(await fetchContactDetails(secretId)).toBeNull();
+    } finally {
+      await setListingVisibility(h.db, secretId, admin, false);
+    }
+    h.user = viewer; // positive control: a student does get them
+    expect(await fetchContactDetails(secretId)).toMatchObject({ email: SECRET.contactEmail });
+  });
+
+  it("the listing's URL goes to the board, which decides by viewer level", async () => {
+    await expect(listing.default(idParams(secretId))).rejects.toMatchObject({ digest: expect.stringContaining(`/browse?id=${secretId}`) });
+  });
+
+  it("student, then community, then signed out: nothing carries over", async () => {
+    h.user = viewer;
+    expect(await text(await browse.default({ searchParams: noParams() }))).toContain(SECRET.street);
+    h.user = community;
+    expect(leaks(await text(await browse.default({ searchParams: noParams() })))).toEqual([]);
+    h.user = null;
+    expect(leaks(await text(await browse.default({ searchParams: noParams() })))).toEqual([]);
+  });
+
+  it("an account with no tier on record reads as community (fails closed)", async () => {
+    h.user = { ...community, tier: "bogus" as unknown as "community" };
+    const page = await text(await browse.default({ searchParams: noParams() }));
+    expect(page).toContain('"audience":"public"');
+    expect(leaks(page)).toEqual([]);
   });
 });

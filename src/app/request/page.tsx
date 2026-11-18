@@ -4,7 +4,7 @@ import { RequestForm } from "@/components/RequestForm";
 import { ACCESS, SITE } from "@/config/site";
 import { ACCESS_REQUEST_KINDS, type AccessRequestKind } from "@/lib/access-request";
 
-export const metadata: Metadata = { title: `Request access · ${SITE.name}`, robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: `Ask us · ${SITE.name}`, robots: { index: false, follow: false } };
 
 /** The two front-page asks, one form: add a school, or let one person in. No account needed. */
 export default async function RequestPage({ searchParams }: { searchParams: Promise<{ kind?: string }> }) {
@@ -16,10 +16,11 @@ export default async function RequestPage({ searchParams }: { searchParams: Prom
         ← {SITE.name}
       </Link>
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold">Ask to get in</h1>
+        <h1 className="text-3xl font-bold">Ask us</h1>
         <p className="text-ink-2">
-          {SITE.name} is for {ACCESS.audience} right now. Ask us to add your school, or make the case for an account of your own: a
-          recent grad still subletting, say. A person reads every request and replies by email.
+          Anyone can sign in with any email to browse, save searches and message posters. Posting is for {ACCESS.audience}. Ask us to add
+          your school, or make the case for posting without a school address: a recent grad still subletting, say. A person reads every
+          request and replies by email.
         </p>
       </div>
       <RequestForm initialKind={initial} />

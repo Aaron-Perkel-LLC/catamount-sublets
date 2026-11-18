@@ -39,7 +39,7 @@ describe("shareCardLines", () => {
     expect(lines.price).toBe("$950/mo");
     expect(lines.facts).toBe("2 bd · 1.5 ba · 1 roommate · 0.4 mi from campus");
     expect(lines.title).toBe("$950/mo · Spring 2027 · Catamount Sublets");
-    expect(lines.description).toMatch(/^2 bd .* Sign in with your student email/);
+    expect(lines.description).toMatch(/^2 bd .* Sign in to see the listing\./);
     expect(Object.keys(lines).sort()).toEqual(["description", "facts", "negotiable", "price", "semester", "title"]);
   });
 });

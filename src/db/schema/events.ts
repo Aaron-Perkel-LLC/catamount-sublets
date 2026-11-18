@@ -1,5 +1,5 @@
 import { bigint, boolean, char, check, index, integer, pgTable, text, unique } from "drizzle-orm/pg-core";
-import { EVENT_SOURCES, EVENT_TYPE_VALUES, SHARE_TARGETS } from "@/lib/options";
+import { EVENT_SOURCES, EVENT_TYPE_VALUES, EVENT_VIEWER_TIERS, SHARE_TARGETS } from "@/lib/options";
 import { createdAt, inList, inListOrNull } from "./helpers";
 import { listings } from "./listings";
 
@@ -24,6 +24,8 @@ export const listingEvents = pgTable(
     actorKey: char({ length: 16 }).notNull(),
     /** A signed-out visitor's listing view (the only event a signed-out visitor can record). */
     signedOut: boolean().notNull().default(false),
+    /** anonymous, community or student (EVENT_VIEWER_TIERS). Migration 0013 filled older rows from signedOut. */
+    viewerTier: text(),
     /** The listing's first semester at the time, so archiving can count by semester. */
     semesterCode: text(),
     type: text().notNull(),
@@ -42,5 +44,6 @@ export const listingEvents = pgTable(
     check("listing_events_type_check", inList(t.type, EVENT_TYPE_VALUES)),
     check("listing_events_source_check", inListOrNull(t.source, EVENT_SOURCES)),
     check("listing_events_target_check", inListOrNull(t.target, SHARE_TARGETS)),
+    check("listing_events_viewer_tier_check", inListOrNull(t.viewerTier, EVENT_VIEWER_TIERS)),
   ],
 );

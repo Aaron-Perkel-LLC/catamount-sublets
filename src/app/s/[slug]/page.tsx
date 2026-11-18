@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { SITE } from "@/config/site";
+import { SITE, ACCESS } from "@/config/site";
 import { getDb } from "@/db";
 import { appUrl } from "@/env";
 import { parseShareSlug, shareSlug } from "@/lib/share";
@@ -76,9 +76,12 @@ export default async function SharePage({ params }: { params: Promise<{ slug: st
           {r.state === "open" ? (
             <>
               <h1 className="text-2xl font-bold">Someone shared a sublet with you</h1>
-              <p className="text-ink-2">Sign in to see the address, photos and how to get in touch.</p>
+              <p className="text-ink-2">Sign in to see the photos and how to get in touch.</p>
               <SignInLink href={SIGN_IN(r.id)} />
-              <p className="text-xs text-ink-3">The address and contact details are only shown to signed-in students.</p>
+              <p className="text-xs text-ink-3">
+                The address and contact details are only shown to {ACCESS.audience}. Anyone else can sign in with any email to message the
+                poster, if the listing is public.
+              </p>
             </>
           ) : (
             <>
@@ -109,7 +112,7 @@ export default async function SharePage({ params }: { params: Promise<{ slug: st
 function SignInLink({ href }: { href: string }) {
   return (
     <a href={href} className="btn-primary self-start">
-      Sign in with your student email
+      Sign in to see the listing
     </a>
   );
 }

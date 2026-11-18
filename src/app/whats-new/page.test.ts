@@ -17,7 +17,9 @@ describe("/whats-new", () => {
   it("lists the entries newest first, with dates, titles and links", async () => {
     const html = await render("2026-11-20T15:00:00Z");
     const titles = [...html.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1]);
-    expect(titles[0]).toBe("An Account link and a What's new page");
+    // Newest first: the entries due by the 20th, the 21 Nov one held back.
+    expect(titles.indexOf("An Account link and a What's new page")).toBeLessThan(titles.indexOf("Saved searches and weekly alerts"));
+    expect(titles).not.toContain("Listings are public by default");
     expect(titles.at(-1)).toBe("Map pins open in view");
     expect(html).toContain('<time dateTime="2026-11-17"');
     expect(html).toContain("November 17, 2026");

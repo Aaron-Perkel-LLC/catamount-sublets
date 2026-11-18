@@ -8,10 +8,11 @@ import { dailyActivity, listingActivity, posterStats, recordEvent, shareTargetCo
 let db: Db;
 let close: () => Promise<void>;
 let listingId: number;
-const poster = { id: "", role: "user" as const };
-const viewer = { id: "", role: "user" as const };
-const other = { id: "", role: "user" as const };
-const admin = { id: "", role: "admin" as const };
+const poster = { id: "", role: "user" as const, tier: "student" as const };
+const viewer = { id: "", role: "user" as const, tier: "student" as const };
+const other = { id: "", role: "user" as const, tier: "student" as const };
+const admin = { id: "", role: "admin" as const, tier: "student" as const };
+const community = { id: "", role: "user" as const, tier: "community" as const };
 
 beforeAll(async () => {
   ({ db, close } = await createTestDb());
@@ -22,12 +23,33 @@ beforeAll(async () => {
   viewer.id = await mk("viewer@uvm.edu");
   other.id = await mk("other@uvm.edu");
   admin.id = await mk("admin@example.com", "admin");
+  community.id = await mk("robin@gmail.com");
   const [l] = await db.insert(s.listings).values({ userId: poster.id, price: 900, address: "x", lat: 44.47, lon: -73.2 }).returning({ id: s.listings.id });
   listingId = l.id;
   await db.insert(s.listingSemesters).values({ listingId, semesterCode: "spring27", position: 0 });
 });
 afterAll(async () => {
   await close();
+});
+
+describe("recordEvent: viewer tiers", () => {
+  it("records a community account's view only on a public listing, never a contact event, and tags every row with its tier", async () => {
+    // The listing here has no photo or area, so it is not on the public board: nothing to record, and nothing said about why.
+    expect(await recordEvent(db, community, { listingId, type: "listing_open" })).toBe("invalid");
+    const [pub] = await db.insert(s.listings).values({ userId: other.id, price: 700, address: "y", lat: 44.47, lon: -73.2, areaLat: 44.471, areaLon: -73.201 }).returning({ id: s.listings.id });
+    await db.insert(s.listingSemesters).values({ listingId: pub.id, semesterCode: "spring27", position: 0 });
+    await db.insert(s.listingPhotos).values({ listingId: pub.id, sortOrder: 0, stem: "e".repeat(32), displayUrl: "d", thumbUrl: "t", cardUrl: "c", sha256: "0".repeat(64) });
+    try {
+      expect(await recordEvent(db, community, { listingId: pub.id, type: "listing_open", source: "browse" })).toBe("stored");
+      expect(await recordEvent(db, community, { listingId: pub.id, type: "copy_email" })).toBe("invalid");
+      expect(await recordEvent(db, community, { listingId: pub.id, type: "dial" })).toBe("invalid");
+      expect(await recordEvent(db, viewer, { listingId: pub.id, type: "listing_open" })).toBe("stored");
+      const rows = await db.select({ tier: s.listingEvents.viewerTier }).from(s.listingEvents).where(sql`${s.listingEvents.listingId} = ${pub.id}`);
+      expect(rows.map((r) => r.tier).sort()).toEqual(["community", "student"]);
+    } finally {
+      await db.delete(s.listings).where(sql`${s.listings.id} = ${pub.id}`);
+    }
+  });
 });
 
 describe("recordEvent", () => {

@@ -5,7 +5,10 @@
  * dated in the future stays hidden until that day (Eastern).
  *
  * Every PR with a user-visible change adds an entry here (CLAUDE.md).
+ * School names come from SCHOOLS (CLAUDE.md rule 4).
  */
+import { SCHOOLS } from "@/config/site";
+
 export interface ChangelogEntry {
   /** Eastern calendar date, "YYYY-MM-DD". */
   date: string;
@@ -19,6 +22,12 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     date: "2026-11-21",
     title: "Listings are public by default",
     body: "As we emailed on Nov 17, listings are now visible to signed-out visitors. They see price, semester, size, photos and the rough neighborhood, never your name, contact, address, title or description. Listings kept to signed-in students before today stay that way.",
+  },
+  {
+    date: "2026-11-18",
+    title: `${SCHOOLS[1].name} students, and everyone else`,
+    body: `${SCHOOLS[1].name} students and staff can now sign in with their school email and post, just like at ${SCHOOLS[0].name}. Anyone else can sign in with any email to save searches and message posters through the site, and sees what signed-out visitors see, never your address or contact. To stop their messages, turn them off on My post.`,
+    link: { href: "/post", label: "My post" },
   },
   {
     date: "2026-11-17",

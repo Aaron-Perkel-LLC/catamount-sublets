@@ -8,9 +8,9 @@ import { OTP, SITE } from "@/config/site";
 import type { Db } from "@/db";
 import * as schema from "@/db/schema";
 import { appUrl, isProductionEnv } from "@/env";
-import { checkEmailAllowed, type EmailAllowResult, emailRefusalMessage, normalizeEmail } from "@/lib/auth-allow";
+import { EmailNotAllowedError, normalizeEmail } from "@/lib/auth-allow";
 import OtpCodeEmail from "@/emails/otp-code";
-import { isEmailApproved } from "@/server/data/access-requests";
+import { assertEmailAllowed } from "./allow";
 import { sendMail } from "@/server/email/send";
 import { log } from "@/server/log";
 import { RATE_LIMITS, takeRateLimit } from "@/server/rate-limit";
@@ -19,11 +19,14 @@ import { RATE_LIMITS, takeRateLimit } from "@/server/rate-limit";
  * The better-auth configuration. Built once per process by getAuth() in
  * ./index.ts, and by scripts/auth-cli-config.ts for schema generation.
  *
- * Who may sign in is decided by assertEmailAllowed() in two places: the
- * before-hook on the code endpoints (nothing is mailed to a refused address)
- * and the user-create database hook (no row from any path). Hard rule 5.
- * An address outside the allowed domains passes when the admin approved its
- * access request (src/server/data/access-requests.ts).
+ * Who may sign in, and with which tier, is decided by assertEmailAllowed()
+ * (./allow.ts) in two places: the before-hook on the code endpoints (nothing
+ * is mailed to a refused address) and the user-create database hook (no row
+ * from any path, and the row gets its tier). Hard rule 5.
+ *
+ * A new community account also takes the new-account limits in the create
+ * hook, which runs only after a correct code: a refusal reaches only the
+ * mailbox's owner, and nothing says whether an address has an account.
  */
 
 /** Endpoints that take an email and must pass the allow rule first. */
@@ -39,14 +42,29 @@ export function buildAuth(db: Db) {
   const ipOf = (headers: Headers | undefined) =>
     headers?.get("x-forwarded-for")?.split(",")[0]?.trim() || headers?.get("x-real-ip") || "unknown";
 
-  /** The config rule, then the admin's approvals for an address refused only for its domain. */
-  const allowed = async (raw: string): Promise<EmailAllowResult> => {
-    const result = checkEmailAllowed(raw);
-    if (!result.ok && result.reason === "domain" && (await isEmailApproved(db, result.email))) return { ok: true, email: result.email };
-    return result;
+  /** assertEmailAllowed() with its refusal as the API error the form shows. */
+  const allowed = async (raw: string) => {
+    try {
+      return await assertEmailAllowed(db, raw);
+    } catch (e) {
+      if (e instanceof EmailNotAllowedError) throw new APIError("BAD_REQUEST", { message: e.message });
+      throw e;
+    }
+  };
+
+  /** A new community account: per IP, then across the site. Students never count. */
+  const newCommunityAccount = async (ip: string) => {
+    const perIp = await takeRateLimit(db, RATE_LIMITS.communityAccountPerIp, ip);
+    if (!perIp.allowed) throw tooManyAccounts();
+    const global = await takeRateLimit(db, RATE_LIMITS.communityAccountGlobal, "all");
+    if (!global.allowed) {
+      log.warn("auth.community_cap_reached", { count: global.count });
+      throw tooManyAccounts();
+    }
   };
 
   const tooMany = (message: string) => new APIError("TOO_MANY_REQUESTS", { message });
+  const tooManyAccounts = () => tooMany("Too many new accounts right now. Try again later.");
 
   /** Before a code is sent: the 60 s cooldown per address, then the per-address and per-IP windows. */
   const sendThrottle = async (email: string, ip: string) => {
@@ -89,6 +107,8 @@ export function buildAuth(db: Db) {
         lastLoginAt: { type: "date", required: false, input: false },
         firstName: { type: "string", required: false, input: false },
         lastName: { type: "string", required: false, input: false },
+        /** "student" or "community"; set by the create hook, never by the client. */
+        tier: { type: "string", required: false, input: false, defaultValue: "community" },
       },
     },
 
@@ -126,9 +146,6 @@ export function buildAuth(db: Db) {
           throw new APIError("BAD_REQUEST", { message: "Enter your email address." });
         }
         const result = await allowed(raw);
-        if (!result.ok) {
-          throw new APIError("BAD_REQUEST", { message: emailRefusalMessage(result.reason) });
-        }
         const ip = ipOf(ctx.headers);
         if (ctx.path === "/email-otp/send-verification-otp") await sendThrottle(result.email, ip);
         else await verifyThrottle(result.email, ip);
@@ -139,13 +156,11 @@ export function buildAuth(db: Db) {
     databaseHooks: {
       user: {
         create: {
-          before: async (user) => {
+          before: async (user, ctx) => {
             const result = await allowed(user.email);
-            if (!result.ok) {
-              throw new APIError("BAD_REQUEST", { message: emailRefusalMessage(result.reason) });
-            }
+            if (result.tier === "community") await newCommunityAccount(ipOf(ctx?.headers ?? ctx?.request?.headers));
             const name = typeof user.name === "string" && user.name.trim() ? user.name.trim() : result.email.split("@")[0];
-            return { data: { ...user, email: result.email, name } };
+            return { data: { ...user, email: result.email, name, tier: result.tier } };
           },
         },
       },

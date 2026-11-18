@@ -11,6 +11,12 @@
  * It also signs in as a seeded student (a session row and its signed cookie)
  * and requests the same pages with and then without the cookie, so a cache
  * that served the signed-in render to the signed-out request would show.
+ *
+ * And as a seeded community account (an address outside the schools, phase
+ * 31): every page above gets the same leak checks with its cookie, the
+ * listing kept to students stays off its board, and the contact panel's
+ * Server Action, called over HTTP by its id from the build's manifest,
+ * returns nothing for it (with the student as the positive control).
  * Exits 1 on any leak or failed check.
  */
 import { spawn } from "node:child_process";
@@ -22,7 +28,8 @@ import { PGlite } from "@electric-sql/pglite";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
-import { ALLOWED_EMAIL_DOMAINS } from "@/config/site";
+import { readFileSync } from "node:fs";
+import { ACCESS, ALLOWED_EMAIL_DOMAINS } from "@/config/site";
 import * as s from "@/db/schema";
 import { shareSlug } from "@/lib/share";
 import { leaks, SECRET } from "@/server/data/public-leak-fixture";
@@ -48,11 +55,12 @@ const fail = (what: string) => {
 };
 const check = (ok: boolean, what: string) => (ok ? pass(what) : fail(what));
 
-/** The leak fixture (public), a second listing kept to signed-in students, and a signed-in student with a session. */
+/** The leak fixture (public), a second listing kept to students, a signed-in student and a community account, each with a session. */
 async function seed(): Promise<{
   publicId: number;
   hiddenId: number;
   cookie: string;
+  communityCookie: string;
 }> {
   const client = new PGlite(dataDir);
   const db = drizzle({ client, schema: s, casing: "snake_case" });
@@ -87,7 +95,12 @@ async function seed(): Promise<{
       firstName: "Vic",
       lastName: "Viewer",
       emailVerified: true,
+      tier: "student",
     })
+    .returning({ id: s.user.id });
+  const [community] = await db
+    .insert(s.user)
+    .values({ email: "robin@example.net", name: "robin", firstName: "Robin", lastName: "Lee", emailVerified: true, tier: "community" })
     .returning({ id: s.user.id });
 
   const add = async (
@@ -147,21 +160,32 @@ async function seed(): Promise<{
     active: true,
   });
 
-  const token = randomBytes(24).toString("hex");
-  await db.insert(s.session).values({
-    token,
-    userId: viewer.id,
-    expiresAt: new Date(Date.now() + 3_600_000),
-    updatedAt: new Date(),
-  });
-  await client.close();
-  // better-auth's signed cookie: the token, a dot, and HMAC-SHA256 of the token under its secret, base64.
-  const signature = createHmac("sha256", process.env.BETTER_AUTH_SECRET!).update(token).digest("base64");
-  return {
-    publicId,
-    hiddenId,
-    cookie: `catamount.session_token=${encodeURIComponent(`${token}.${signature}`)}`,
+  const sessionCookie = async (userId: string) => {
+    const token = randomBytes(24).toString("hex");
+    await db.insert(s.session).values({ token, userId, expiresAt: new Date(Date.now() + 3_600_000), updatedAt: new Date() });
+    // better-auth's signed cookie: the token, a dot, and HMAC-SHA256 of the token under its secret, base64.
+    const signature = createHmac("sha256", process.env.BETTER_AUTH_SECRET!).update(token).digest("base64");
+    return `catamount.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
   };
+  const cookie = await sessionCookie(viewer.id);
+  const communityCookie = await sessionCookie(community.id);
+  await client.close();
+  return { publicId, hiddenId, cookie, communityCookie };
+}
+
+/** Calls a Server Action over HTTP the way the browser does, by the id the build gave it. */
+async function callAction(exportedName: string, args: unknown[], cookie: string): Promise<{ status: number; body: string }> {
+  const manifest = JSON.parse(readFileSync(path.join(".next", "server", "server-reference-manifest.json"), "utf8")) as {
+    node: Record<string, { exportedName?: string }>;
+  };
+  const id = Object.entries(manifest.node).find(([, v]) => v.exportedName === exportedName)?.[0];
+  if (!id) throw new Error(`no Server Action ${exportedName} in the build`);
+  const res = await fetch(`${BASE}/browse`, {
+    method: "POST",
+    headers: { "Next-Action": id, "content-type": "text/plain;charset=UTF-8", accept: "text/x-component", origin: BASE, cookie },
+    body: JSON.stringify(args),
+  });
+  return { status: res.status, body: await res.text() };
 }
 
 async function startServer(): Promise<() => void> {
@@ -210,7 +234,7 @@ function noLeaks(what: string, body: string) {
 }
 
 async function main(): Promise<number> {
-  const { publicId, hiddenId, cookie } = await seed();
+  const { publicId, hiddenId, cookie, communityCookie } = await seed();
   console.log(`Seeded ${dataDir}; starting next start on :${PORT}`);
   const stop = await startServer();
   try {
@@ -234,9 +258,10 @@ async function main(): Promise<number> {
     check(/"area":\{"lat":[\d.]+,"lon":-[\d.]+,"radiusM":150\}/.test(mapRsc.body), "/map (RSC): carries its approximate area");
     const page = await get(`/listing/${publicId}`);
     check(/2BR · /.test(page.body) && page.body.includes("$875"), `/listing/${publicId}: shows the public listing`);
-    check(page.body.includes("Sign in to read the description."), `/listing/${publicId}: says to sign in for the description`);
+    const plain = page.body.replace(/<!-- -->/g, "");
+    check(plain.includes(`${ACCESS.schools} students: sign in to read the description.`), `/listing/${publicId}: says to sign in for the description`);
     check(!page.body.includes(SECRET.descriptionMarker), `/listing/${publicId}: none of the description`);
-    check(page.body.includes("Sign in to see the exact address and contact the poster."), `/listing/${publicId}: shows the sign-in prompt`);
+    check(plain.includes(`${ACCESS.schools} students: sign in to see the exact address and contact the poster.`), `/listing/${publicId}: shows the sign-in prompt`);
     check(!/"@type":\s*"(Product|Place|Residence|Accommodation|Offer)"/.test(page.body), `/listing/${publicId}: no listing JSON-LD`);
     check(/<meta name="robots" content="noindex/.test(page.body) === false, `/listing/${publicId}: indexable`);
 
@@ -261,8 +286,8 @@ async function main(): Promise<number> {
     const browseRsc = await get("/browse", { rsc: true });
     check(!browse.body.includes("Hiddenmoor") && !browseRsc.body.includes('"price":990'), "/browse: not listed");
     check(
-      /1 more listing.{0,40}visible to signed-in students/.test(browse.body.replace(/<!-- -->/g, "")),
-      "/browse: says 1 more listing is visible to signed-in students",
+      browse.body.replace(/<!-- -->/g, "").includes(`1 more listing is visible to ${ACCESS.audience} only.`),
+      `/browse: says 1 more listing is visible to ${ACCESS.audience} only`,
     );
     const sems = (body: string) => body.match(/"semesters":\[[^\]]*\]/)?.[0] ?? "";
     check(
@@ -332,6 +357,46 @@ async function main(): Promise<number> {
       redirect.status === 307 && (redirect.headers.get("location") ?? "").includes(`/browse?id=${publicId}`),
       `/listing/${publicId} signed in: redirects to the board as before`,
     );
+
+    console.log("A community account (signed in, outside the schools) sees what a signed-out visitor sees:");
+    for (const p of pages) {
+      for (const rsc of [false, true]) {
+        const r = await get(p, { cookie: communityCookie, rsc });
+        const what = `${p}${rsc ? " (RSC)" : ""} community`;
+        // /listing/<id> sends any signed-in account to the board, which decides by viewer level.
+        check(r.status === 200 || (p.startsWith("/listing/") && r.status === 307), `${what}: ${r.status}`);
+        noLeaks(what, r.body);
+        check(!r.body.includes("Hiddenmoor") && !r.body.includes('"price":990'), `${what}: the listing kept to students is not there`);
+        check(!r.body.includes(NOTICE_MARKER), `${what}: no students' notice`);
+      }
+    }
+    const communityBoard = await get("/browse", { cookie: communityCookie, rsc: true });
+    check(communityBoard.body.includes('"audience":"public"') && communityBoard.body.includes('"price":875'), "/browse (RSC) community: the public listing, as PublicListing (positive control)");
+    check(!communityBoard.body.includes(`"address"`), "/browse (RSC) community: no address field at all");
+    check(
+      (await get("/browse", { cookie: communityCookie })).body.replace(/<!-- -->/g, "").includes(`1 more listing is visible to ${ACCESS.audience} only.`),
+      "/browse community: the count of listings kept to students, and nothing more",
+    );
+    const hiddenFollowed = await get(`/browse?id=${hiddenId}&via=share`, { cookie: communityCookie, rsc: true });
+    check(!hiddenFollowed.body.includes("Hiddenmoor") && !hiddenFollowed.body.includes('"price":990'), "/browse?id=<hidden> community: not on their board");
+
+    console.log("The contact panel's Server Action, over HTTP:");
+    const studentContact = await callAction("fetchContactDetails", [publicId], cookie);
+    check(studentContact.body.includes(SECRET.contactEmail), `fetchContactDetails as a student: the contact email (positive control, ${studentContact.status})`);
+    for (const id of [publicId, hiddenId]) {
+      const r = await callAction("fetchContactDetails", [id], communityCookie);
+      noLeaks(`fetchContactDetails(${id === publicId ? "public" : "hidden"}) as community`, r.body);
+      check(!r.body.includes(SECRET.contactEmail) && !r.body.includes(SECRET.phone) && !r.body.includes("Hilda") && !r.body.includes(`hidden@${ALLOWED_EMAIL_DOMAINS[0]}`), `fetchContactDetails(${id === publicId ? "public" : "hidden"}) as community: no contact details (${r.status})`);
+    }
+    const anonContact = await callAction("fetchContactDetails", [publicId], "");
+    check(!anonContact.body.includes(SECRET.contactEmail), `fetchContactDetails signed out: no contact details (${anonContact.status})`);
+
+    console.log("Community, then student, then signed out (no cache crosses over):");
+    for (const p of ["/browse", "/map"]) {
+      await get(p, { cookie, rsc: true });
+      noLeaks(`${p} (RSC) community after student`, (await get(p, { cookie: communityCookie, rsc: true })).body);
+      noLeaks(`${p} (RSC) signed out after community`, (await get(p, { rsc: true })).body);
+    }
   } finally {
     stop();
     await new Promise((r) => setTimeout(r, 500));

@@ -13,8 +13,8 @@ import { useNavItems } from "./NavLinks";
  * it is open, focus starts inside it and cycles within it, Escape, the
  * backdrop and any navigation close it, and focus returns to the button.
  */
-export function MobileNav({ isAdmin, hasListing, signOut }: { isAdmin: boolean; hasListing: boolean; signOut: () => Promise<void> }) {
-  const items = useNavItems({ isAdmin, hasListing, withAccount: true });
+export function MobileNav({ isAdmin, hasListing, canPost = true, signOut }: { isAdmin: boolean; hasListing: boolean; canPost?: boolean; signOut: () => Promise<void> }) {
+  const items = useNavItems({ isAdmin, hasListing, canPost, withAccount: true });
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const button = useRef<HTMLButtonElement>(null);

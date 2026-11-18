@@ -10,6 +10,7 @@ import { easternClock } from "@/lib/dates";
 import { deleteSearchInput, digestToggleInput, renameSearchInput, saveSearchInput } from "@/lib/digest";
 import { canonicalFilterQuery, describeFilters, parseSavedQuery } from "@/lib/listing-filters";
 import { shareCardLines } from "@/lib/share";
+import { type Audience, audienceFor, viewerLevelOf } from "@/lib/viewer";
 import {
   claimDigestSend,
   type DigestCandidate,
@@ -27,7 +28,7 @@ import {
   setDigestEnabled,
   settleDigestSend,
 } from "@/server/data/digest";
-import { type ListingDto, newBoardListings } from "@/server/data/listings";
+import { type DigestListing, newBoardListings } from "@/server/data/public-listings";
 import { assertWritable, getSetting, ReadOnlyError, setSetting } from "@/server/data/settings";
 import { digestMailingAddress, digestResendKey } from "@/server/digest-config";
 import { signDigestUnsubscribe, verifyDigestUnsubscribe } from "@/server/digest-token";
@@ -160,27 +161,39 @@ export interface BuiltDigest {
 }
 
 /**
+ * What a recipient's digest may hold: their own Browse's audience, read from
+ * their account now ("full" for a student or the admin, "public" for a
+ * community account, and "public" if the account is gone: fails closed).
+ */
+export async function recipientAudience(db: DbOrTx, userId: string): Promise<Audience> {
+  const [row] = await db.select({ role: user.role, tier: user.tier }).from(user).where(eq(user.id, userId)).limit(1);
+  return audienceFor(row ? viewerLevelOf(row) : "anonymous");
+}
+
+/**
  * The digest's contents for one person over a window: each saved search run
- * through Browse's query (newBoardListings: same filters, same visibility,
- * narrowed to the window and to other people's listings), merged, newest
- * first. A listing carries only its share-card lines and its share link.
+ * through Browse's query for their audience (newBoardListings: same filters,
+ * same visibility, narrowed to the window and to other people's listings),
+ * merged, newest first. A listing carries only its share-card lines and its
+ * share link; the distance is from the approximate area for everyone.
  */
 export async function buildDigest(db: DbOrTx, c: { userId: string; searches: { name: string; query: string }[] }, window: { since: Date; until: Date }): Promise<BuiltDigest> {
-  const merged = new Map<number, { dto: ListingDto; matched: string[] }>();
+  const audience = await recipientAudience(db, c.userId);
+  const merged = new Map<number, { l: DigestListing; matched: string[] }>();
   for (const s of c.searches) {
-    const found = await newBoardListings(db, parseSavedQuery(s.query), { recipientId: c.userId, ...window });
-    for (const dto of found) {
-      const m = merged.get(dto.id);
+    const found = await newBoardListings(db, parseSavedQuery(s.query), { audience, recipientId: c.userId, ...window });
+    for (const l of found) {
+      const m = merged.get(l.id);
       if (m) m.matched.push(s.name);
-      else merged.set(dto.id, { dto, matched: [s.name] });
+      else merged.set(l.id, { l, matched: [s.name] });
     }
   }
-  const all = [...merged.values()].sort((a, b) => b.dto.postedAt.localeCompare(a.dto.postedAt) || b.dto.id - a.dto.id);
-  const lines = all.slice(0, DIGEST.maxListingsShown).map(({ dto, matched }) => {
-    const card = shareCardLines(dto);
-    return { id: dto.id, price: card.price, negotiable: card.negotiable, semester: card.semester, facts: card.facts, url: dto.shareUrl, matched };
+  const all = [...merged.values()].sort((a, b) => b.l.postedAt.localeCompare(a.l.postedAt) || b.l.id - a.l.id);
+  const lines = all.slice(0, DIGEST.maxListingsShown).map(({ l, matched }) => {
+    const card = shareCardLines(l);
+    return { id: l.id, price: card.price, negotiable: card.negotiable, semester: card.semester, facts: card.facts, url: l.shareUrl, matched };
   });
-  const firstThumb = DIGEST.firstListingThumbnail ? (all[0]?.dto.photos[0]?.thumb ?? null) : null;
+  const firstThumb = DIGEST.firstListingThumbnail ? (all[0]?.l.thumb ?? null) : null;
   return { total: all.length, lines, firstThumb, searches: c.searches.length };
 }
 

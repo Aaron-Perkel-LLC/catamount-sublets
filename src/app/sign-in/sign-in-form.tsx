@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ALLOWED_EMAIL_DOMAINS, OTP, SITE } from "@/config/site";
+import { ACCESS, OTP, SITE } from "@/config/site";
 import { authClient } from "@/lib/auth-client";
 import { checkEmailAllowed, emailRefusalMessage } from "@/lib/auth-allow";
 
@@ -28,12 +28,10 @@ export function SignInForm({ next }: { next: string }) {
     return () => clearInterval(t);
   }, [step]);
 
-  const example = `netid@${ALLOWED_EMAIL_DOMAINS[0]}`;
-
   async function sendCode(to: string) {
-    // Another domain may still be an approved access request, so only the server can refuse it.
+    // The shared rule here; the server also refuses throwaway domains (src/server/auth/allow.ts).
     const check = checkEmailAllowed(to);
-    if (!check.ok && check.reason !== "domain") {
+    if (!check.ok) {
       setError(emailRefusalMessage(check.reason));
       return false;
     }
@@ -84,20 +82,24 @@ export function SignInForm({ next }: { next: string }) {
           We&apos;ll email you a {OTP.length}-digit code. No password, nothing to remember. First time here? We&apos;ll ask your name once you&apos;re in.
         </p>
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-bold text-ink">Your {ALLOWED_EMAIL_DOMAINS[0]} email</span>
+          <span className="text-sm font-bold text-ink">Your email</span>
           <input
             type="email"
             name="email"
             inputMode="email"
             autoComplete="email"
-            placeholder={example}
+            placeholder={ACCESS.emailPlaceholder}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="field"
             required
             autoFocus
           />
-          <span className="text-xs text-ink-3">Use your NetID email ({example}), not your first.last alias.</span>
+          <span className="flex flex-col gap-0.5 text-xs text-ink-3">
+            {ACCESS.emailHint.map((line) => (
+              <span key={line}>{line}</span>
+            ))}
+          </span>
         </label>
         {error && (
           <p role="alert" className="rounded-lg border border-error-line bg-error-tint px-3 py-2 text-sm text-error-ink">

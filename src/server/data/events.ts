@@ -15,7 +15,8 @@ import {
 } from "@/lib/options";
 import { createHmac } from "node:crypto";
 import { actorKey, appSecret } from "@/lib/share";
-import { publicListingWhere, signedOutAudienceWhere, visibleSemesterWhere } from "./visibility";
+import { eventViewerTier, seesFullListings, viewerLevelOf } from "@/lib/viewer";
+import { audienceWhere, visibleSemesterWhere } from "./visibility";
 
 /**
  * The activity log. No user ids are stored: the actor is a keyed hash, and
@@ -35,9 +36,19 @@ export interface EventInput {
   target?: string | null;
 }
 
-export async function recordEvent(db: DbOrTx, actor: { id: string; role: "user" | "admin" }, input: EventInput): Promise<RecordResult> {
+/**
+ * A signed-in person's event. The viewer level decides what may be recorded:
+ * the admin's events are never stored; a community account's only for a
+ * listing on the public board, and never a contact event (they have no
+ * contact details to copy), so the beacon can't be used to find out whether
+ * a hidden listing exists. The level is stored as viewer_tier for the metrics.
+ */
+export async function recordEvent(db: DbOrTx, actor: { id: string; role: "user" | "admin"; tier: string }, input: EventInput): Promise<RecordResult> {
   if (!Number.isInteger(input.listingId) || input.listingId <= 0 || !(input.type in EVENT_TYPES)) return "invalid";
   const type = input.type as EventType;
+  const level = viewerLevelOf(actor);
+  const full = seesFullListings(level);
+  if (!full && CONTACT_EVENT_TYPES.includes(type)) return "invalid";
   const source = input.source && (EVENT_SOURCES as readonly string[]).includes(input.source) ? (input.source as EventSource) : null;
   let target: ShareTarget | null = null;
   if (type === "share_target") {
@@ -50,11 +61,12 @@ export async function recordEvent(db: DbOrTx, actor: { id: string; role: "user" 
     .select({ userId: listings.userId, semesterCode: listingSemesters.semesterCode })
     .from(listings)
     .leftJoin(listingSemesters, and(eq(listingSemesters.listingId, listings.id), eq(listingSemesters.position, 0)))
-    .where(eq(listings.id, input.listingId))
+    .where(full ? eq(listings.id, input.listingId) : and(eq(listings.id, input.listingId), audienceWhere("public")))
     .limit(1);
   if (!listing) return "invalid";
 
-  if (actor.role === "admin") return "excluded";
+  const viewerTier = eventViewerTier(level);
+  if (viewerTier === null) return "excluded";
   if (actor.id === listing.userId && !SHARE_EVENT_TYPES.includes(type)) return "excluded";
 
   const key = actorKey(actor.id);
@@ -67,7 +79,7 @@ export async function recordEvent(db: DbOrTx, actor: { id: string; role: "user" 
   const dedupeKey = EVENT_TYPES[type].dedupe ? `${type}:${input.listingId}:${key}:${easternDate(new Date())}` : null;
   const inserted = await db
     .insert(listingEvents)
-    .values({ listingId: input.listingId, actorKey: key, semesterCode: listing.semesterCode, type, source, target, dedupeKey })
+    .values({ listingId: input.listingId, actorKey: key, semesterCode: listing.semesterCode, type, source, target, dedupeKey, viewerTier })
     .onConflictDoNothing({ target: listingEvents.dedupeKey })
     .returning({ id: listingEvents.id });
   return inserted.length > 0 ? "stored" : "duplicate";
@@ -96,7 +108,7 @@ export async function recordAnonymousView(db: DbOrTx, input: { listingId: number
     .select({ semesterCode: listingSemesters.semesterCode })
     .from(listings)
     .leftJoin(listingSemesters, and(eq(listingSemesters.listingId, listings.id), eq(listingSemesters.position, 0)))
-    .where(and(eq(listings.id, input.listingId), publicListingWhere(), signedOutAudienceWhere()))
+    .where(and(eq(listings.id, input.listingId), audienceWhere("public")))
     .limit(1);
   if (!listing) return "invalid";
 
@@ -118,6 +130,7 @@ export async function recordAnonymousView(db: DbOrTx, input: { listingId: number
       type,
       source,
       signedOut: true,
+      viewerTier: "anonymous",
       dedupeKey: `${type}:${input.listingId}:${key}:${easternDate(now)}`,
     })
     .onConflictDoNothing({ target: listingEvents.dedupeKey })

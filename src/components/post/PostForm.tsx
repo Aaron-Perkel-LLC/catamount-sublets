@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { preconnect } from "react-dom";
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
-import { LIMITS } from "@/config/site";
+import { LIMITS, ACCESS } from "@/config/site";
 import { amenityField, formToListingInput, utilityField, validateListingInput } from "@/lib/listing-input";
 import { posterMayChooseVisibility, SIGNED_OUT_SEE } from "@/lib/visibility-rollout";
 import {
@@ -282,7 +282,7 @@ export function PostForm({
 
       {/* Who sees it: a new listing, or one posted since the cutoff, is public with no switch; older ones switch on My post. */}
       {(!r || (!posterMayChooseVisibility(new Date(r.postedAt)) && !r.signedInOnly)) && (
-        <p className="text-sm text-ink-2">Anyone can find your listing without signing in. They see the {SIGNED_OUT_SEE}; signed-in students see everything.</p>
+        <p className="text-sm text-ink-2">Anyone can find your listing without signing in. They see the {SIGNED_OUT_SEE}; {ACCESS.audience} see everything.</p>
       )}
 
       <div className="flex flex-wrap items-center gap-3">

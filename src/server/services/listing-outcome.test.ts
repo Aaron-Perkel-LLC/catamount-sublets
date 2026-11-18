@@ -29,7 +29,7 @@ async function poster(email: string, firstName: string | null = null) {
   const [u] = await db.insert(s.user).values({ email, name: email.split("@")[0], firstName, lastName: firstName ? "Lee" : null }).returning({ id: s.user.id });
   const [l] = await db.insert(s.listings).values({ userId: u.id, price: 650, address: "52 North Willard Street, Burlington, Vermont", lat: 44.48, lon: -73.2 }).returning({ id: s.listings.id });
   await db.insert(s.listingSemesters).values({ listingId: l.id, semesterCode: "spring27", position: 0 });
-  return { user: { id: u.id, email, role: "user" as const }, listingId: l.id };
+  return { user: { id: u.id, email, role: "user" as const, tier: "student" as const }, listingId: l.id };
 }
 
 async function listingRow(id: number) {
@@ -91,7 +91,7 @@ describe("the question on delete", () => {
       const [u] = await broken.insert(s.user).values({ email: "poster@uvm.edu", name: "poster" }).returning({ id: s.user.id });
       await broken.insert(s.listings).values({ userId: u.id, price: 650, address: "1 Main St", lat: 44.48, lon: -73.2 });
       await broken.execute(sql`drop table listing_outcomes`);
-      expect(await deleteListingFor(broken, { id: u.id, email: "poster@uvm.edu", role: "user" }, "through_site")).toEqual({ ok: true });
+      expect(await deleteListingFor(broken, { id: u.id, email: "poster@uvm.edu", role: "user", tier: "student" }, "through_site")).toEqual({ ok: true });
       expect(await broken.select().from(s.listings)).toHaveLength(0);
     } finally {
       await closeBroken();

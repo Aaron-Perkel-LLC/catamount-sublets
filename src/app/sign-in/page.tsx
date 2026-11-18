@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Mark } from "@/components/Mark";
-import { ALLOWED_EMAIL_DOMAINS, SITE } from "@/config/site";
+import { ACCESS, SITE } from "@/config/site";
 import { safeNext } from "@/lib/safe-next";
 import { getSessionUser } from "@/server/auth";
 import { SignInForm } from "./sign-in-form";
@@ -21,10 +21,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
       </Link>
       <SignInForm next={target} />
       <p className="mt-6 text-sm text-ink-2">
-        No {ALLOWED_EMAIL_DOMAINS.map((d) => `@${d}`).join(" or ")} address?{" "}
-        <Link href="/request?kind=access" className="link">
-          Request access
-        </Link>
+        Posting, addresses and contact details are for {ACCESS.audience}. With any other email you can browse, save searches and message posters.
       </p>
       <p className="mt-10 text-xs leading-5 text-ink-3">{SITE.disclaimer}</p>
     </main>

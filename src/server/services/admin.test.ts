@@ -22,7 +22,7 @@ const { parseListingQuery } = await import("@/lib/listing-filters");
 type Db = Awaited<ReturnType<typeof createTestDb>>["db"];
 let db: Db;
 let close: () => Promise<void>;
-const people: Record<string, { id: string; email: string; role: "user" | "admin" }> = {};
+const people: Record<string, { id: string; email: string; role: "user" | "admin"; tier: "student" | "community" }> = {};
 
 beforeAll(async () => {
   ({ db, close } = await createTestDb());
@@ -38,7 +38,7 @@ beforeAll(async () => {
     ["viewer", "v@uvm.edu", "user"],
   ] as const) {
     const [u] = await db.insert(s.user).values({ email, name: key, role }).returning({ id: s.user.id });
-    people[key] = { id: u.id, email, role };
+    people[key] = { id: u.id, email, role, tier: "student" };
   }
   const mk = async (who: string, sems: string[], extra: Partial<typeof s.listings.$inferInsert> = {}) => {
     const [l] = await db.insert(s.listings).values({ userId: people[who].id, price: 800, address: `${who} st, Burlington, Vermont`, lat: 44.47, lon: -73.2, ...extra }).returning({ id: s.listings.id });

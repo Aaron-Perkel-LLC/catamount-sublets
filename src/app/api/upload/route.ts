@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { LIMITS } from "@/config/site";
 import { sameOrigin } from "@/server/http";
-import { requireUserOrThrow } from "@/server/auth";
+import { requirePosterOrThrow } from "@/server/viewer";
 import { saveRawUploadLocal, storageMode } from "@/server/storage";
 
 export const runtime = "nodejs";
@@ -23,8 +23,9 @@ const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/he
  */
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return NextResponse.json({ error: "Cross-site request blocked." }, { status: 403 });
-  const user = await requireUserOrThrow().catch(() => null);
-  if (!user) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+  // Students and the admin only (canPost): a community account has no listing to put a photo or an address on.
+  const user = await requirePosterOrThrow().catch(() => null);
+  if (!user) return NextResponse.json({ error: "Sign in as a student first." }, { status: 401 });
 
   if (storageMode() === "local") {
     const form = await request.formData();

@@ -12,6 +12,7 @@ import { DigestTab } from "./DigestTab";
 import { ImagesTab, type StorageUsage } from "./ImagesTab";
 import type { AdminMessageDto } from "./MailComposer";
 import { MailTab } from "./MailTab";
+import { MessagesTab, type RelayAdminDto } from "./MessagesTab";
 import { PeopleTab } from "./PeopleTab";
 import { RequestsTab, type RequestsDto } from "./RequestsTab";
 import { AdminPostActions } from "./AdminPostActions";
@@ -58,6 +59,7 @@ export interface PersonDto {
   /** Their shown name; null when there is none, and the email stands in. */
   name: string | null;
   role: string;
+  tier: "student" | "community";
   banned: boolean;
   banReason: string | null;
   noEmail: boolean;
@@ -75,9 +77,20 @@ export interface ActivityDto {
   outcomes: OutcomeSummary;
 }
 
-export const TABS = ["people", "requests", "mail", "digest", "activity", "survey", "semesters", "images", "announce"] as const;
+export const TABS = ["people", "requests", "messages", "mail", "digest", "activity", "survey", "semesters", "images", "announce"] as const;
 export type Tab = (typeof TABS)[number];
-const LABELS: Record<Tab, string> = { semesters: "Semesters", announce: "Announce", images: "Images", people: "People", requests: "Requests", mail: "Mail", digest: "Digest", activity: "Activity", survey: "Survey" };
+const LABELS: Record<Tab, string> = {
+  semesters: "Semesters",
+  announce: "Announce",
+  images: "Images",
+  people: "People",
+  requests: "Requests",
+  messages: "Messages",
+  mail: "Mail",
+  digest: "Digest",
+  activity: "Activity",
+  survey: "Survey",
+};
 /** Hashes from before a section moved, so old links (and already-sent notices) still land. #email is the broadcast's old home; the one-off Mail section is #mail. */
 const ALIASES: Record<string, Tab> = { posts: "people", announcement: "announce", email: "announce" };
 
@@ -92,6 +105,7 @@ type Props = {
   readOnly: ReadOnly;
   requests: RequestsDto;
   mail: { history: AdminMessageDto[] };
+  relay: RelayAdminDto;
   people: PersonDto[];
   /** The search in the URL (?q=) and the ids it matched on the server; null ids for no search. */
   peopleSearch: { q: string; ids: string[] | null };
@@ -160,6 +174,7 @@ function AdminSections(props: Props) {
   const summary: Record<Tab, string> = {
     people: `${stats.people} ${stats.people === 1 ? "person" : "people"} · ${stats.posts} post${stats.posts === 1 ? "" : "s"} · ${stats.hidden} hidden · ${stats.taken} taken`,
     requests: `${waiting === 0 ? "Nothing" : waiting} waiting · ${props.requests.approved.length} approved address${props.requests.approved.length === 1 ? "" : "es"}`,
+    messages: `${props.relay.counts.find((c) => c.days === 7)?.sent ?? 0} sent this week · relayed from community accounts to posters, kept 180 days.`,
     mail: "One email to one address, from you, previewed before it goes.",
     digest: "The weekly saved-search email: its switch, who would get it, and a test to yourself.",
     activity: "Views, contacts and shares, counted without names.",
@@ -218,6 +233,7 @@ function AdminSections(props: Props) {
           {tab === "images" && <ImagesTab focusListingId={imagesFocus} semesters={props.semesters} storage={props.stats.storage} />}
           {tab === "people" && <PeopleTab people={props.people} initialSearch={props.peopleSearch} meId={props.me.id} focus={personFocus} onOpenPost={openPost} />}
           {tab === "requests" && <RequestsTab requests={props.requests} />}
+          {tab === "messages" && <MessagesTab relay={props.relay} onOpenPost={openPost} />}
           {tab === "mail" && <MailTab history={props.mail.history} />}
           {tab === "digest" && <DigestTab />}
           {tab === "activity" && <ActivityTab activity={props.activity} onOpenPost={openPost} />}

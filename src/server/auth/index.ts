@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
+import type { AccountTier } from "@/lib/auth-allow";
 import { type Auth, buildAuth } from "./config";
 
 let auth: Auth | undefined;
@@ -19,6 +20,8 @@ export interface SessionUser {
   email: string;
   name: string;
   role: "user" | "admin";
+  /** "student" or "community"; anything else reads as community (fails closed). What a viewer may see is getViewer()'s call (src/server/viewer.ts). */
+  tier: AccountTier;
   legacyNetid: string | null;
 }
 
@@ -29,12 +32,13 @@ export const getSessionUser = cache(async function getSessionUser(): Promise<Ses
   const a = await getAuth();
   const session = await a.api.getSession({ headers: requestHeaders });
   if (!session) return null;
-  const u = session.user as typeof session.user & { role?: string; legacyNetid?: string | null };
+  const u = session.user as typeof session.user & { role?: string; tier?: string; legacyNetid?: string | null };
   return {
     id: u.id,
     email: u.email,
     name: u.name,
     role: u.role === "admin" ? "admin" : "user",
+    tier: u.tier === "student" ? "student" : "community",
     legacyNetid: u.legacyNetid ?? null,
   };
 });

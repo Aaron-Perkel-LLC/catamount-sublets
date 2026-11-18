@@ -159,6 +159,14 @@ export type EventSource = (typeof EVENT_SOURCES)[number];
 export const SHARE_TARGETS = ["native", "instagram", "snapchat", "text", "email", "x", "copy"] as const;
 export type ShareTarget = (typeof SHARE_TARGETS)[number];
 
+/**
+ * Who recorded an event, for splitting the metrics: a signed-out visitor, a
+ * community account, or a student. Admins' events are never stored. Null on
+ * rows from before migration 0013 that it could not tell apart.
+ */
+export const EVENT_VIEWER_TIERS = ["anonymous", "community", "student"] as const;
+export type EventViewerTier = (typeof EVENT_VIEWER_TIERS)[number];
+
 /** Stored events per person per minute before the beacon answers 429. */
 export const EVENTS_PER_MINUTE = 60;
 

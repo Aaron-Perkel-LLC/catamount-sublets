@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createTestDb } from "@/db/test-db";
-import { accessRequests, rateLimitBuckets, siteSettings, user } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { accessRequests, otpSends, rateLimitBuckets, session, siteSettings, user } from "@/db/schema";
+import { RATE_LIMITS, takeRateLimit } from "@/server/rate-limit";
 import { buildAuth } from "@/server/auth/config";
 import { sentInTests } from "@/server/email/send";
 import {
@@ -58,20 +60,63 @@ describe("access request approvals", () => {
   });
 });
 
-describe("sign-in with an approval", () => {
-  it("sends a code to an approved address and creates its account; still refuses an unapproved one", async () => {
+describe("sign-in through better-auth: tiers, approvals and the new-account limits", () => {
+  let n = 0;
+  /** A fresh IP per call unless given, so the per-IP code limits never get in the way. */
+  const from = (ip = `198.51.100.${++n}`) => new Headers({ "x-forwarded-for": ip });
+  const signIn = async (auth: ReturnType<typeof buildAuth>, email: string, ip?: string) => {
+    const headers = from(ip);
+    await auth.api.sendVerificationOTP({ body: { email, type: "sign-in" }, headers });
+    const code = String(sentInTests.at(-1)!.subject).split(" ")[0];
+    await auth.api.signInEmailOTP({ body: { email, otp: code }, headers });
+    const [row] = await db.select({ tier: user.tier }).from(user).where(eq(user.email, email.toLowerCase()));
+    return row?.tier;
+  };
+
+  it("makes school addresses students and any other address a community account", async () => {
     const auth = buildAuth(db);
-    await expect(auth.api.sendVerificationOTP({ body: { email: "sam@example.org", type: "sign-in" } })).rejects.toThrow(/limited to/);
+    expect(await signIn(auth, "jdoe@uvm.edu")).toBe("student");
+    expect(await signIn(auth, "Jane.Smith@mymail.champlain.edu")).toBe("student");
+    expect(await signIn(auth, "prof.x@champlain.edu")).toBe("student");
+    expect(await signIn(auth, "robin@gmail.com")).toBe("community");
+  });
+
+  it("refuses throwaway domains and the UVM alias before any code is sent", async () => {
+    const auth = buildAuth(db);
+    await expect(auth.api.sendVerificationOTP({ body: { email: "x@mailinator.com", type: "sign-in" }, headers: from() })).rejects.toThrow(/throwaway/);
+    await expect(auth.api.sendVerificationOTP({ body: { email: "jane.smith@uvm.edu", type: "sign-in" }, headers: from() })).rejects.toThrow(/NetID/);
     expect(sentInTests).toHaveLength(0);
+  });
 
+  it("an approved address signs in as a student; approving an existing community account promotes it and signs it out", async () => {
+    const auth = buildAuth(db);
     await approveAccessRequest(db, await request("sam@example.org"), adminId);
-    await auth.api.sendVerificationOTP({ body: { email: "Sam@Example.org", type: "sign-in" } });
-    expect(sentInTests).toHaveLength(1);
-    const code = String(sentInTests[0].subject).split(" ")[0];
-    await auth.api.signInEmailOTP({ body: { email: "sam@example.org", otp: code } });
-    const rows = await db.select({ email: user.email }).from(user);
-    expect(rows.map((r) => r.email)).toContain("sam@example.org");
+    expect(await signIn(auth, "Sam@Example.org")).toBe("student");
 
-    await expect(auth.api.sendVerificationOTP({ body: { email: "lee@example.org", type: "sign-in" } })).rejects.toThrow(/limited to/);
+    expect(await signIn(auth, "lee@example.org")).toBe("community");
+    const [lee] = await db.select({ id: user.id }).from(user).where(eq(user.email, "lee@example.org"));
+    expect(await db.select().from(session).where(eq(session.userId, lee.id))).toHaveLength(1);
+    await approveAccessRequest(db, await request("lee@example.org"), adminId);
+    expect((await db.select({ tier: user.tier }).from(user).where(eq(user.id, lee.id)))[0].tier).toBe("student");
+    expect(await db.select().from(session).where(eq(session.userId, lee.id))).toHaveLength(0);
+  });
+
+  it("caps new community accounts per IP (students never count), only after a correct code", async () => {
+    const auth = buildAuth(db);
+    const ip = "203.0.113.7";
+    for (let i = 0; i < RATE_LIMITS.communityAccountPerIp.limit; i++) expect(await signIn(auth, `c${i}@gmail.com`, ip)).toBe("community");
+    await expect(signIn(auth, "one-too-many@gmail.com", ip)).rejects.toThrow(/Too many new accounts/);
+    expect(await db.select().from(user).where(eq(user.email, "one-too-many@gmail.com"))).toHaveLength(0);
+    // A student from the same network, and an existing community account signing in again, are not new community accounts.
+    expect(await signIn(auth, "newkid@uvm.edu", ip)).toBe("student");
+    await db.delete(otpSends); // past the 60 s resend cooldown
+    expect(await signIn(auth, "c0@gmail.com", ip)).toBe("community");
+  });
+
+  it("caps new community accounts across the site per hour", async () => {
+    const auth = buildAuth(db);
+    for (let i = 0; i < RATE_LIMITS.communityAccountGlobal.limit; i++) await takeRateLimit(db, RATE_LIMITS.communityAccountGlobal, "all");
+    await expect(signIn(auth, "late@gmail.com")).rejects.toThrow(/Too many new accounts/);
+    expect(await signIn(auth, "still-fine@mymail.champlain.edu")).toBe("student");
   });
 });

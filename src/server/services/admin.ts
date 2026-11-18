@@ -2,11 +2,13 @@ import { and, asc, count, desc, eq, inArray, ne, or, sql, type SQL } from "drizz
 import { z } from "zod";
 import type { Db } from "@/db";
 import { listingEvents, listingPhotos, listings, listingSemesters, semesterArchives, semesters, session, user } from "@/db/schema";
+import { ACCOUNT_TIERS, type AccountTier } from "@/lib/auth-allow";
 import { LISTING_STATUS_VALUES, type ListingStatus } from "@/lib/options";
 import { escapeLike } from "@/lib/people-search";
 import { posterFirstName } from "@/lib/person-name";
 import { orderSemesterCodes, sortSemesters } from "@/lib/semesters";
 import { countAdminMessagesTo, deleteAdminMessagesTo } from "@/server/data/admin-messages";
+import { countPosterMessagesFor } from "@/server/data/poster-messages";
 import { listingActivity } from "@/server/data/events";
 import { deleteListing, listingFileUrls, photoFileUrls, setListingStatus, setListingVisibility } from "@/server/data/my-listing";
 import { posterColumns, shownName } from "@/server/data/names";
@@ -265,6 +267,8 @@ export interface Person {
   /** Their shown name (shownName in src/server/data/names.ts), null when there is none. */
   name: string | null;
   role: string;
+  /** "student" or "community" (src/lib/viewer.ts). */
+  tier: AccountTier;
   banned: boolean;
   banReason: string | null;
   /** They asked to stop getting mail; no broadcast reaches them. */
@@ -316,6 +320,7 @@ export async function listPeople(db: Db): Promise<Person[]> {
     email: u.email,
     name: shownName({ displayName }, u, u.email),
     role: u.role ?? "user",
+    tier: u.tier === "student" ? "student" : "community",
     banned: Boolean(u.banned),
     banReason: u.banReason ?? null,
     noEmail: u.noEmail,
@@ -337,6 +342,29 @@ export async function setBanned(db: Db, userId: string, banned: boolean, reason:
   return ok(undefined);
 }
 
+/**
+ * Student or community, by hand: for an address the rule got wrong (a
+ * school's other domain, a recent grad). The admin is always full; an account
+ * with a listing stays a student until the listing is gone, so no community
+ * account ever owns one. Sessions end, so the cached session can't keep the
+ * old tier for its five minutes.
+ */
+export async function setTier(db: Db, userId: string, tier: unknown): Promise<Result> {
+  const parsed = z.enum(ACCOUNT_TIERS).safeParse(tier);
+  if (!parsed.success) return fail("Pick student or community.");
+  const [u] = await db.select({ role: user.role }).from(user).where(eq(user.id, userId));
+  if (!u) return fail("No such person.");
+  if (u.role === "admin") return fail("The admin sees everything whatever the tier.");
+  if (parsed.data === "community") {
+    const [l] = await db.select({ id: listings.id }).from(listings).where(eq(listings.userId, userId));
+    if (l) return fail("They have a listing. Delete it first: community accounts can't post.");
+  }
+  await db.update(user).set({ tier: parsed.data }).where(eq(user.id, userId));
+  await db.delete(session).where(eq(session.userId, userId));
+  log.info("admin.tier", { userId, tier: parsed.data });
+  return ok(undefined);
+}
+
 export interface DeletionReport {
   email: string;
   listingId: number | null;
@@ -346,6 +374,8 @@ export interface DeletionReport {
   sessions: number;
   /** One-off emails the admin sent to this address (admin_messages); deleted with the account. */
   messages: number;
+  /** Relayed messages they sent or received (poster_messages); they cascade with the account. */
+  relayMessages: number;
 }
 
 /**
@@ -363,7 +393,17 @@ export async function deletePerson(db: Db, userId: string, actingAdminId: string
   const [{ events }] = l ? await db.select({ events: count() }).from(listingEvents).where(eq(listingEvents.listingId, l.id)) : [{ events: 0 }];
   const [{ sessions }] = await db.select({ sessions: count() }).from(session).where(eq(session.userId, userId));
   const messages = await countAdminMessagesTo(db, u.email);
-  const report: DeletionReport = { email: u.email, listingId: l?.id ?? null, photos: urls.length / 3, files: urls.length, events: Number(events), sessions: Number(sessions), messages };
+  const relayMessages = await countPosterMessagesFor(db, userId);
+  const report: DeletionReport = {
+    email: u.email,
+    listingId: l?.id ?? null,
+    photos: urls.length / 3,
+    files: urls.length,
+    events: Number(events),
+    sessions: Number(sessions),
+    messages,
+    relayMessages,
+  };
   if (dryRun) return ok(report);
   await deleteAdminMessagesTo(db, u.email);
   await db.delete(user).where(eq(user.id, userId));

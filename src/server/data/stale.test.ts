@@ -69,9 +69,9 @@ beforeAll(async () => {
   // Photos and events on the stale listing, to see them go with it.
   const [u] = await db.select({ id: s.user.id, email: s.user.email, role: s.user.role }).from(s.user).where(eq(s.user.id, ids.stale));
   const ref = await saveRawUploadLocal(await sharp({ create: { width: 800, height: 600, channels: 3, background: "#1D4F73" } }).jpeg().toBuffer());
-  const photo = await attachPhotoFor(db, { id: u.id, email: u.email, role: "user" }, ref);
+  const photo = await attachPhotoFor(db, { id: u.id, email: u.email, role: "user", tier: "student" }, ref);
   if (!photo.ok) throw new Error(photo.error);
-  await recordEvent(db, { id: ids.viewer, role: "user" }, { listingId: listingIds.stale, type: "listing_open" });
+  await recordEvent(db, { id: ids.viewer, role: "user", tier: "student" }, { listingId: listingIds.stale, type: "listing_open" });
 });
 
 afterAll(async () => {

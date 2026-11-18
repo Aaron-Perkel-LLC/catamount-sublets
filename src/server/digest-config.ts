@@ -13,9 +13,10 @@ export function digestMailingAddress(): string {
 }
 
 /**
- * The Resend sending key scoped to SITE.mailDigestDomain. The digest sends with
- * this one only, never the root-scoped RESEND_API_KEY, which Resend would
- * refuse from the subdomain.
+ * The Resend sending key scoped to SITE.mailDigestDomain (the updates
+ * subdomain). The digest and the message relay send with this one only,
+ * never the root-scoped RESEND_API_KEY, which Resend would refuse from the
+ * subdomain.
  */
 export function digestResendKey(): string | undefined {
   return process.env.RESEND_DIGEST_API_KEY || undefined;

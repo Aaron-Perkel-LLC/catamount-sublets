@@ -3,14 +3,21 @@ import { easternDate } from "./dates";
 import { audienceMatches, noticeInput, noticeShownOn, safeBodyHref, safeCtaHref } from "./notices";
 
 const out = { kind: "signed-out" } as const;
-const student = { kind: "signed-in", userId: "u", hasListing: false } as const;
-const poster = { kind: "signed-in", userId: "u", hasListing: true } as const;
+const student = { kind: "signed-in", userId: "u", hasListing: false, community: false } as const;
+const community = { kind: "signed-in", userId: "u", hasListing: false, community: true } as const;
+const poster = { kind: "signed-in", userId: "u", hasListing: true, community: false } as const;
 
 describe("audienceMatches", () => {
   it("everyone takes in everyone; signed_in any account; posters only an account with a listing", () => {
     expect([out, student, poster].map((v) => audienceMatches("everyone", v))).toEqual([true, true, true]);
     expect([out, student, poster].map((v) => audienceMatches("signed_in", v))).toEqual([false, true, true]);
     expect([out, student, poster].map((v) => audienceMatches("posters", v))).toEqual([false, false, true]);
+  });
+
+  it("a community account is in everyone only, like a signed-out visitor", () => {
+    expect(audienceMatches("everyone", community)).toBe(true);
+    expect(audienceMatches("signed_in", community)).toBe(false);
+    expect(audienceMatches("posters", { ...community, hasListing: true })).toBe(false);
   });
 });
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getDb } from "@/db";
+import { seesFullListings, viewerLevelOf } from "@/lib/viewer";
 import { getSessionUser } from "@/server/auth";
 import { isBot } from "@/lib/bots";
 import { eq } from "drizzle-orm";
@@ -78,6 +79,6 @@ async function noticeEvent(request: Request, user: Awaited<ReturnType<typeof get
   }
   if (type !== "view") return new Response(null, { status: 204 });
   const [mine] = await db.select({ id: listings.id }).from(listings).where(eq(listings.userId, user.id)).limit(1);
-  await recordNoticeEvent(db, { kind: "signed-in", userId: user.id, role: user.role, hasListing: Boolean(mine) }, noticeId, type);
+  await recordNoticeEvent(db, { kind: "signed-in", userId: user.id, role: user.role, hasListing: Boolean(mine), community: !seesFullListings(viewerLevelOf(user)) }, noticeId, type);
   return new Response(null, { status: 204 });
 }

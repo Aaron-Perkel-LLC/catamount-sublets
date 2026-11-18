@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import type { DbOrTx } from "@/db";
-import { accessRequests } from "@/db/schema";
+import { accessRequests, session, user } from "@/db/schema";
 import type { AccessRequestInput } from "@/lib/access-request";
 import { normalizeEmail } from "@/lib/auth-allow";
 import { getSetting, setSetting } from "./settings";
@@ -66,13 +66,25 @@ async function closeRequest(db: DbOrTx, id: number): Promise<string | null> {
   return row ? normalizeEmail(row.email) : null;
 }
 
-/** Approve: the request is closed and its address may sign in from now on. Null when it was already handled or is gone. */
+/**
+ * Approve: the request is closed and its address is a student from now on
+ * (assertEmailAllowed gives an approved address the student tier). An
+ * account that already exists with that address as a community account is
+ * made a student now, and signed out so no cached session keeps the old
+ * tier. Null when it was already handled or is gone.
+ */
 export async function approveAccessRequest(db: DbOrTx, id: number, adminId: string): Promise<string | null> {
   return db.transaction(async (tx) => {
     const email = await closeRequest(tx, id);
     if (!email) return null;
     const list = await approvedEmails(tx);
     if (!list.includes(email)) await setSetting(tx, "approved_emails", { emails: [...list, email] }, adminId);
+    const promoted = await tx
+      .update(user)
+      .set({ tier: "student" })
+      .where(and(eq(user.email, email), eq(user.tier, "community")))
+      .returning({ id: user.id });
+    for (const p of promoted) await tx.delete(session).where(eq(session.userId, p.id));
     return email;
   });
 }

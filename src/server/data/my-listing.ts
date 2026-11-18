@@ -161,6 +161,12 @@ export async function setListingVisibility(
   return rows.length > 0 ? "ok" : "not-found";
 }
 
+/** Whether community accounts may message the poster through the relay. False when it is not the actor's listing. */
+export async function setOutsideMessages(db: DbOrTx, listingId: number, actor: Actor, accepts: boolean): Promise<boolean> {
+  const rows = await db.update(listings).set({ acceptsOutsideMessages: accepts }).where(owned(listingId, actor)).returning({ id: listings.id });
+  return rows.length > 0;
+}
+
 /**
  * Work out the approximate area for listings that have none: every listing
  * 0010 made signed-in only, and anything written by code from before it. The

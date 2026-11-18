@@ -83,15 +83,15 @@ export function replyBody(r: RequestForReply, starter: ReplyStarter): string {
   if (starter === "approved") {
     return [
       hi,
-      `Thanks for writing. I've approved ${r.email}, so you can sign in now at ${SITE.url}/sign-in: enter that address and a six-digit code is emailed to you. The first time in, it asks for your name.`,
+      `Thanks for writing. I've approved ${r.email} for posting, so you can sign in at ${SITE.url}/sign-in and post: enter that address and a six-digit code is emailed to you. The first time in, it asks for your name. (If you already have an account with that address, I've switched it over.)`,
       "If the code doesn't arrive within a minute, check Junk and mark it as not junk so the next one lands in your inbox.",
       "Any questions, just reply to this email.",
     ].join("\n\n");
   }
   const reason =
     r.kind === "school" && r.school
-      ? `For now ${SITE.name} is only open to ${ACCESS.audience}, and I'm not able to add ${r.school} yet.`
-      : `For now ${SITE.name} is only open to ${ACCESS.audience}, so I'm not able to open an account for ${r.email}.`;
+      ? `For now posting on ${SITE.name} is only open to ${ACCESS.audience}, and I'm not able to add ${r.school} yet. You can still sign in with any email to browse and message posters.`
+      : `For now posting on ${SITE.name} is only open to ${ACCESS.audience}, so I'm not able to let ${r.email} post. You can still sign in with it to browse, save searches and message posters.`;
   return [hi, `Thanks for asking, and sorry for the wait. ${reason}`, "If that changes I'll let you know. If I've got your situation wrong, reply and tell me more."].join("\n\n");
 }
 

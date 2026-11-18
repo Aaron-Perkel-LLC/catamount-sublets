@@ -13,6 +13,7 @@ import { labelFor, listingSemestersByListing } from "@/server/data/semesters";
 import { posterColumns, shownName } from "@/server/data/names";
 import { getSetting } from "@/server/data/settings";
 import { listSurveyText, surveyAudience, surveySummary } from "@/server/data/survey";
+import { posterMessageCounts, recentPosterMessages } from "@/server/data/poster-messages";
 import { approvedEmails, listPendingAccessRequests } from "@/server/data/access-requests";
 import { adminMessagesForRequests, type AdminMessageRow, recentAdminMessages } from "@/server/data/admin-messages";
 import { outcomeSummary } from "@/server/data/listing-outcomes";
@@ -79,6 +80,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     outcomeSummary(db),
     listNoticesForAdmin(db),
   ]);
+  const [relayMessages, relayCounts] = await Promise.all([recentPosterMessages(db), posterMessageCounts(db)]);
   const replies = await adminMessagesForRequests(db, pendingRequests.map((r) => r.id));
   const messageDto = (m: AdminMessageRow) => ({ ...m, createdAt: m.createdAt.toISOString() });
 
@@ -96,6 +98,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         readOnly={readOnly}
         requests={{ pending: pendingRequests.map((r) => ({ ...r, createdAt: r.createdAt.toISOString(), messages: (replies.get(r.id) ?? []).map(messageDto) })), approved }}
         mail={{ history: mailHistory.map(messageDto) }}
+        relay={{ messages: relayMessages.map((m) => ({ ...m, createdAt: m.createdAt.toISOString() })), counts: relayCounts }}
         peopleSearch={{ q: peopleQ, ids: peopleMatches }}
         people={people.map(({ listingId, ...p }) => {
           const post = listingId ? postById.get(listingId) : undefined;

@@ -12,6 +12,8 @@ import {
   index,
   check,
 } from "drizzle-orm/pg-core";
+import { ACCOUNT_TIERS } from "@/lib/auth-allow";
+import { inList } from "./helpers";
 
 export const user = pgTable(
   "user",
@@ -39,8 +41,20 @@ export const user = pgTable(
     lastName: text("last_name"),
     /** They asked to stop getting mail: left out of every broadcast. Sign-in codes, which they ask for, still go. */
     noEmail: boolean("no_email").default(false).notNull(),
+    /**
+     * "student" (a school address in SCHOOLS, the admin's own, or an approved
+     * access request: full listings and posting) or "community" (any other
+     * address: the signed-out view, saved searches, the message relay). Set
+     * from assertEmailAllowed() when the account is created; the admin can
+     * change it. The default is the lesser tier, so a path that forgets to
+     * set it fails closed. Migration 0013 made every account before it a student.
+     */
+    tier: text("tier").default("community").notNull(),
   },
-  (table) => [check("user_email_lowercase_check", sql`${table.email} = lower(${table.email})`)],
+  (table) => [
+    check("user_email_lowercase_check", sql`${table.email} = lower(${table.email})`),
+    check("user_tier_check", inList(table.tier, ACCOUNT_TIERS)),
+  ],
 );
 
 export const session = pgTable(

@@ -7,7 +7,7 @@ import { shortDate } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import { LISTING_STATUSES, type ListingStatus } from "@/lib/options";
 import { highlightParts, PEOPLE_QUERY_MAX } from "@/lib/people-search";
-import { adminDeletePerson, adminSearchPeople, adminSetBanned, adminSetNoEmail } from "@/server/actions/admin";
+import { adminDeletePerson, adminSearchPeople, adminSetBanned, adminSetNoEmail, adminSetTier } from "@/server/actions/admin";
 import type { PersonDto } from "./AdminTabs";
 import { SortHeader, useSort } from "./SortHeader";
 import type { SortDir } from "./sort";
@@ -61,6 +61,14 @@ export function PeopleTab({
     });
   };
 
+  const tier = (p: PersonDto) =>
+    start(async () => {
+      const next = p.tier === "student" ? "community" : "student";
+      const r = await adminSetTier(p.id, next);
+      setNote(r.ok ? `${p.name ?? p.email} is a ${next} account now, and signed out so it takes effect.` : r.error);
+      if (r.ok) router.refresh();
+    });
+
   const mail = (p: PersonDto) =>
     start(async () => {
       const r = await adminSetNoEmail(p.id, !p.noEmail);
@@ -74,7 +82,7 @@ export function PeopleTab({
       if (!dry.ok) return setNote(dry.error);
       const d = dry.data;
       const who = p.name ? `${p.name} (${d.email})` : d.email;
-      if (!confirm(`Delete ${who}? Their account, ${d.listingId ? `listing #${d.listingId} with ${d.photos} photo(s) and ${d.events} activity events` : "no listing"}, ${d.sessions} session(s)${d.messages ? `, and the ${d.messages} email(s) you sent them` : ""}. This cannot be undone.`)) return;
+      if (!confirm(`Delete ${who}? Their account, ${d.listingId ? `listing #${d.listingId} with ${d.photos} photo(s) and ${d.events} activity events` : "no listing"}, ${d.sessions} session(s)${d.messages ? `, the ${d.messages} email(s) you sent them` : ""}${d.relayMessages ? `, ${d.relayMessages} relayed message(s)` : ""}. This cannot be undone.`)) return;
       const r = await adminDeletePerson(p.id, false);
       setNote(r.ok ? `Deleted ${p.name ?? r.data.email}.` : r.error);
       if (r.ok) router.refresh();
@@ -169,6 +177,11 @@ export function PeopleTab({
                     <span className={p.name ? "font-bold" : "break-all text-ink-2"}>{mark(p.name ?? p.email)}</span>
                     {p.role === "admin" && <Chip tone="notice">admin</Chip>}
                     {p.legacyNetid && <Chip tone="plain">migrated</Chip>}
+                    {p.role !== "admin" && p.tier === "community" && (
+                      <Chip tone="tenant" title="Signed in with an address outside the schools: sees the public board, can message posters, can't post">
+                        community
+                      </Chip>
+                    )}
                     {p.banned && (
                       <Chip tone="error" title={p.banReason ?? ""}>
                         banned
@@ -229,6 +242,17 @@ export function PeopleTab({
                           }}
                         >
                           {p.noEmail ? "Allow email" : "Stop email"}
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded px-3 py-2 text-left text-sm hover:bg-line-light"
+                          disabled={pending}
+                          onClick={(e) => {
+                            e.currentTarget.closest("details")?.removeAttribute("open");
+                            tier(p);
+                          }}
+                        >
+                          {p.tier === "student" ? "Make community" : "Make student"}
                         </button>
                         <button
                           type="button"

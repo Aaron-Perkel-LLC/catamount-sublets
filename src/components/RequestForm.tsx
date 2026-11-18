@@ -7,7 +7,7 @@ import { type AccessRequestState, requestAccessAction } from "@/server/actions/a
 
 const KINDS: { value: AccessRequestKind; label: string; hint: string }[] = [
   { value: "school", label: "Request your school", hint: "Tell us which school and we'll look at opening it up." },
-  { value: "access", label: "Request access", hint: "For people without a student address who still have a good reason." },
+  { value: "access", label: "Ask to post", hint: "Anyone can sign in to browse and message posters. This is for posting without a school address, like a recent grad with a room to sublet." },
 ];
 
 /** Front-page request: which kind, who, a reply address, and a few words. */
@@ -94,7 +94,7 @@ export function RequestForm({ initialKind }: { initialKind: AccessRequestKind })
           aria-invalid={err.school ? true : undefined}
           maxLength={ACCESS_REQUEST_LIMITS.school}
           className="field"
-          placeholder={kind === "school" ? "e.g. Champlain College" : "e.g. class of 2025"}
+          placeholder={kind === "school" ? "e.g. Saint Michael's College" : "e.g. class of 2025"}
           required={kind === "school"}
         />
       </Field>

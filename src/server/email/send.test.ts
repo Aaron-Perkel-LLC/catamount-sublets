@@ -25,12 +25,17 @@ describe("senderFor", () => {
 });
 
 describe("apiKeyFor", () => {
-  it("sends the digest, and only the digest, with the key scoped to its subdomain, never falling back to the root key", () => {
+  it("sends the digest and the relay, and only those, with the key scoped to its subdomain, never falling back to the root key", () => {
     vi.stubEnv("RESEND_API_KEY", "re_root");
     try {
       expect(senderFor("digest")).toBe(SITE.mailFromDigest);
       expect(apiKeyFor("digest", "re_updates")).toEqual({ key: "re_updates", name: "RESEND_DIGEST_API_KEY" });
       expect(apiKeyFor("digest", undefined)).toEqual({ key: undefined, name: "RESEND_DIGEST_API_KEY" });
+      // The message relay too: from the updates subdomain, never the address that sends sign-in codes.
+      expect(senderFor("poster_message")).toBe(SITE.mailFromMessages);
+      expect(SITE.mailFromMessages).toContain(`@${SITE.mailDigestDomain}>`);
+      expect(apiKeyFor("poster_message", "re_updates")).toEqual({ key: "re_updates", name: "RESEND_DIGEST_API_KEY" });
+      expect(apiKeyFor("poster_message", undefined)).toEqual({ key: undefined, name: "RESEND_DIGEST_API_KEY" });
       for (const kind of ["login_code", "admin_notice", "access_request", "welcome", "broadcast", "broadcast_copy", "survey_invite", "admin_message", "outcome_ask", "stale_notice"] as const)
         expect(apiKeyFor(kind, "re_updates"), kind).toEqual({ key: "re_root", name: "RESEND_API_KEY" });
     } finally {

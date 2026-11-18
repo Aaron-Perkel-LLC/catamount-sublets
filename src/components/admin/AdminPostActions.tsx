@@ -75,7 +75,7 @@ export function AdminPostActions({ listing, close }: { listing: ListingDto; clos
           }}
         >
           <option value="everyone">Everyone</option>
-          <option value="signed-in">Signed-in only</option>
+          <option value="signed-in">Students only</option>
         </select>
       </label>
       <button type="button" className="link text-sm" onClick={() => leave(() => (window.location.hash = `images:${listing.id}`))}>

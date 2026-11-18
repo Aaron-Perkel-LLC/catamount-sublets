@@ -1,4 +1,4 @@
-import { and, count, eq, not, sql } from "drizzle-orm";
+import { and, count, eq, gt, lte, ne, not, type SQL, sql } from "drizzle-orm";
 import { PUBLIC_AREA } from "@/config/site";
 import type { DbOrTx } from "@/db";
 import { listings } from "@/db/schema";
@@ -10,9 +10,11 @@ import { filterCount, type ListingQuery } from "@/lib/listing-filters";
 import { neighborhoodAt } from "@/lib/neighborhood";
 import { sizeSummary, UTILITY_KINDS, type UtilityKind, type UtilityPayer } from "@/lib/options";
 import { publicTitle } from "@/lib/public-title";
-import { BROWSE_LIMIT, listingFilterWhere, orderFor, photosByListing } from "./listings";
+import { shareUrl } from "@/lib/share";
+import { fuzzedArea } from "@/server/geo-fuzz";
+import { boardListings, BROWSE_LIMIT, listingFilterWhere, orderFor, photosByListing } from "./listings";
 import { labelFor, listingSemestersByListing } from "./semesters";
-import { campusDistanceMiles, publicListingWhere, signedOutAudienceWhere } from "./visibility";
+import { type Audience, audienceWhere, campusDistanceMiles, publicAudienceWhere, publicListingWhere } from "./visibility";
 
 /**
  * The public surface (CLAUDE.md rule 9): everything a signed-out visitor
@@ -154,20 +156,88 @@ export interface PublicBrowseResult {
 }
 
 /**
- * The signed-out board: Browse's own filter path (listingFilterWhere) with
- * the signed-out audience, so the distance filter and "Closest" sort run on
- * the approximate area, never the true point.
+ * The public board (signed-out visitors and community accounts): Browse's own
+ * filter path (listingFilterWhere) with the "public" audience, so the
+ * distance filter and "Closest" sort run on the approximate area, never the
+ * true point. `narrow` only takes rows away (the digest's window).
  */
-export async function publicBoardListings(db: DbOrTx, q: ListingQuery): Promise<PublicBrowseResult> {
+async function publicBoardRows(db: DbOrTx, q: ListingQuery, narrow?: SQL): Promise<PublicRow[]> {
   const query = { ...q, openTo: undefined };
-  const distance = campusDistanceMiles("signed-out");
-  const rows = await db
-    .select(PUBLIC_COLUMNS)
-    .from(listings)
-    .where(listingFilterWhere(query, distance, "signed-out"))
-    .orderBy(...orderFor(query.sort, distance))
-    .limit(BROWSE_LIMIT);
-  return { listings: await project(db, rows), filterCount: filterCount(query) };
+  const distance = campusDistanceMiles("public");
+  const where = narrow ? and(listingFilterWhere(query, "public"), narrow)! : listingFilterWhere(query, "public");
+  return db.select(PUBLIC_COLUMNS).from(listings).where(where).orderBy(...orderFor(query.sort, distance)).limit(BROWSE_LIMIT);
+}
+
+export async function publicBoardListings(db: DbOrTx, q: ListingQuery): Promise<PublicBrowseResult> {
+  return { listings: await project(db, await publicBoardRows(db, q)), filterCount: filterCount({ ...q, openTo: undefined }) };
+}
+
+/**
+ * One listing in the weekly digest: the share card's fields (shareCardLines,
+ * which must not grow), its share link, and when it was posted. The same
+ * shape for every audience; the distance is always from the approximate
+ * area, as on the share card, because an email can be forwarded.
+ */
+export interface DigestListing {
+  id: number;
+  postedAt: string;
+  price: number;
+  priceNegotiable: boolean;
+  semesterLabel: string;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  roommates: number | null;
+  distanceMi: number;
+  shareUrl: string;
+  thumb: string | null;
+}
+
+/**
+ * A saved search's new listings for the weekly digest: exactly Browse's
+ * query for the recipient's audience and those filters ("full" for a student,
+ * "public" for a community account, so they get what their own Browse
+ * shows), narrowed to listings posted in (since, until] and not the
+ * recipient's own.
+ */
+export async function newBoardListings(
+  db: DbOrTx,
+  q: ListingQuery,
+  opts: { audience: Audience; recipientId: string; since: Date; until: Date },
+): Promise<DigestListing[]> {
+  const narrow = and(gt(listings.postedAt, opts.since), lte(listings.postedAt, opts.until), ne(listings.userId, opts.recipientId))!;
+  if (opts.audience === "full") {
+    return (await boardListings(db, q, { viewerId: opts.recipientId, narrow })).map((d) => {
+      const area = fuzzedArea(d.lat, d.lon);
+      return {
+        id: d.id,
+        postedAt: d.postedAt,
+        price: d.price,
+        priceNegotiable: d.priceNegotiable,
+        semesterLabel: d.semesterLabel,
+        bedrooms: d.bedrooms,
+        bathrooms: d.bathrooms,
+        roommates: d.roommates,
+        distanceMi: Math.round(milesFromCampus(area.lat, area.lon) * 10) / 10,
+        shareUrl: d.shareUrl,
+        thumb: d.photos[0]?.thumb ?? null,
+      };
+    });
+  }
+  const rows = await publicBoardRows(db, q, narrow);
+  const posted = new Map(rows.map((r) => [r.id, r.postedAt]));
+  return (await project(db, rows)).map((l) => ({
+    id: l.id,
+    postedAt: posted.get(l.id)!.toISOString(),
+    price: l.price,
+    priceNegotiable: l.priceNegotiable,
+    semesterLabel: l.semesterLabel,
+    bedrooms: l.bedrooms,
+    bathrooms: l.bathrooms,
+    roommates: l.roommates,
+    distanceMi: l.distanceMi,
+    shareUrl: shareUrl(l.id),
+    thumb: l.photos[0]?.thumb ?? null,
+  }));
 }
 
 /** One listing for a signed-out visitor, or null when it is not on the signed-out board (the page 404s). */
@@ -176,7 +246,7 @@ export async function publicListingById(db: DbOrTx, id: number): Promise<PublicL
   const rows = await db
     .select(PUBLIC_COLUMNS)
     .from(listings)
-    .where(and(eq(listings.id, id), publicListingWhere(), signedOutAudienceWhere()))
+    .where(and(eq(listings.id, id), audienceWhere("public")))
     .limit(1);
   const [l] = await project(db, rows);
   return l ?? null;
@@ -187,7 +257,7 @@ export async function publicBoardCount(db: DbOrTx): Promise<number> {
   const [row] = await db
     .select({ n: count() })
     .from(listings)
-    .where(and(publicListingWhere(), signedOutAudienceWhere()));
+    .where(audienceWhere("public"));
   return row?.n ?? 0;
 }
 
@@ -196,7 +266,7 @@ export async function signedInOnlyCount(db: DbOrTx): Promise<number> {
   const [row] = await db
     .select({ n: count() })
     .from(listings)
-    .where(and(publicListingWhere(), not(signedOutAudienceWhere())));
+    .where(and(publicListingWhere(), not(publicAudienceWhere())));
   return row?.n ?? 0;
 }
 
@@ -205,7 +275,7 @@ export async function publicSitemapEntries(db: DbOrTx): Promise<{ id: number; la
   const rows = await db
     .select({ id: listings.id, updatedAt: sql<Date>`greatest(${listings.updatedAt}, ${listings.postedAt})`.mapWith(listings.updatedAt) })
     .from(listings)
-    .where(and(publicListingWhere(), signedOutAudienceWhere()))
+    .where(audienceWhere("public"))
     .orderBy(listings.id);
   return rows.map((r) => ({ id: r.id, lastModified: easternDate(r.updatedAt) }));
 }

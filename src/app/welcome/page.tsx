@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { NameForm } from "@/components/account/NameForm";
 import { Mark } from "@/components/Mark";
 import { SITE } from "@/config/site";
+import { seesFullListings, viewerLevelOf } from "@/lib/viewer";
 import { getDb } from "@/db";
 import { safeNext } from "@/lib/safe-next";
 import { signOutAction } from "@/server/actions/auth";
@@ -32,7 +33,9 @@ export default async function WelcomePage({ searchParams }: { searchParams: Prom
         <p className="text-ink-2">
           {migrated
             ? `Your listing came over from the old site. Before you carry on, tell us your name; ${SITE.name} now asks everyone.`
-            : "Tell us your name. It shows on your listing if you post one; the admin sees it with your email."}
+            : seesFullListings(viewerLevelOf(user))
+              ? "Tell us your name. It shows on your listing if you post one; the admin sees it with your email."
+              : "Tell us your name. Posters see it, with your email, when you message them; the admin sees it too."}
         </p>
       </div>
       <NameForm initial={names.prefill} next={next} submitLabel="Continue" />

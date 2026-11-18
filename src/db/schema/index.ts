@@ -12,3 +12,4 @@ export * from "./admin-messages";
 export * from "./listing-outcomes";
 export * from "./digest";
 export * from "./notices";
+export * from "./poster-messages";

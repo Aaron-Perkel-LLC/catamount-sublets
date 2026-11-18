@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { ACCESS } from "@/config/site";
 import { GO_PUBLIC_DAY_WORDS, SIGNED_OUT_SEE, type VisibilityControl } from "@/lib/visibility-rollout";
 import { setMyListingVisibility } from "@/server/actions/post";
 
@@ -10,8 +11,9 @@ import { setMyListingVisibility } from "@/server/actions/post";
  * the listing. `control` comes from visibilityControl() on the server:
  * - "pending": 0010 made it signed-in only and its poster never chose, so it
  *   goes public on the go-public day. Not shown as switched on; two buttons,
- *   either of which records the choice. The keep button is worded as the
- *   17 Nov email named the setting: "Only show to signed-in students".
+ *   either of which records the choice. Since phase 31 the keep option
+ *   reads "Only show to <ACCESS.audience>" (the schools in SCHOOLS):
+ *   community accounts, signed in or not, see what signed-out visitors see.
  * - "switch": the one-click switch, either way.
  * - "none": posted after the cutoff, so there is no switch, just who sees it.
  */
@@ -37,7 +39,7 @@ export function VisibilityNotice({ control, signedInOnly }: { control: Visibilit
         </p>
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn-secondary px-3 py-2 text-sm" disabled={pending} onClick={() => set(true)}>
-            {pending ? "Working…" : "Only show to signed-in students"}
+            {pending ? "Working…" : `Only show to ${ACCESS.audience}`}
           </button>
           <button type="button" className="btn-primary px-3 py-2 text-sm" disabled={pending} onClick={() => set(false)}>
             {pending ? "Working…" : "Make it public now"}
@@ -53,7 +55,7 @@ export function VisibilityNotice({ control, signedInOnly }: { control: Visibilit
       <div className={box}>
         <p className="text-ink-2">
           {signedInOnly
-            ? "Only signed-in students see this."
+            ? `Only ${ACCESS.audience} see this.`
             : `Anyone can find this without signing in. They see the ${SIGNED_OUT_SEE}.`}
         </p>
       </div>
@@ -65,7 +67,7 @@ export function VisibilityNotice({ control, signedInOnly }: { control: Visibilit
       {signedInOnly ? (
         <>
           <p className="text-ink">
-            <strong>Only signed-in students see this.</strong> Show it publicly? Signed-out visitors would see the {SIGNED_OUT_SEE}.
+            <strong>Only {ACCESS.audience} see this.</strong> Show it publicly? Signed-out visitors would see the {SIGNED_OUT_SEE}.
           </p>
           <button type="button" className="btn-primary shrink-0 px-3 py-2 text-sm" disabled={pending} onClick={() => set(false)}>
             {pending ? "Working…" : "Show it publicly"}
@@ -75,7 +77,7 @@ export function VisibilityNotice({ control, signedInOnly }: { control: Visibilit
         <>
           <p className="text-ink-2">Anyone can find this without signing in. They see the {SIGNED_OUT_SEE}.</p>
           <button type="button" className="btn-secondary shrink-0 px-3 py-2 text-sm" disabled={pending} onClick={() => set(true)}>
-            {pending ? "Working…" : "Only signed-in students"}
+            {pending ? "Working…" : `Only show to ${ACCESS.audience}`}
           </button>
         </>
       )}

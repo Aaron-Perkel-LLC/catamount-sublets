@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ALLOWED_EMAIL_DOMAINS, SITE } from "@/config/site";
+import { ACCESS, SITE } from "@/config/site";
 import { SITE_TIME_ZONE } from "@/lib/dates";
 
 export const metadata: Metadata = { title: `Privacy · ${SITE.name}`, alternates: { canonical: "/privacy" } };
 
 /** Bump whenever this page changes what it says. */
-const LAST_UPDATED = "2026-11-16";
+const LAST_UPDATED = "2026-11-18";
 
 /** What the site keeps, who sees it, and how to get rid of it. Plain words, no legalese. */
 export default function PrivacyPage() {
-  const domains = ALLOWED_EMAIL_DOMAINS.map((d) => `@${d}`).join(" or ");
   // Noon UTC is the same calendar day in Eastern time.
   const lastUpdated = new Date(`${LAST_UPDATED}T12:00:00Z`).toLocaleDateString("en-US", {
     timeZone: SITE_TIME_ZONE,
@@ -43,7 +42,15 @@ export default function PrivacyPage() {
       </section>
       <section className="flex flex-col gap-3 text-ink-2">
         <h2 className="text-lg font-bold text-ink">What we keep</h2>
-        <p>Your {domains} email address, used to sign you in with a one-time code. No password is ever stored.</p>
+        <p>
+          Your email address, used to sign you in with a one-time code. No password is ever stored. A school address ({ACCESS.audience})
+          can post and see every listing in full; any other address sees what signed-out visitors see and can message posters.
+        </p>
+        <p>
+          If you message a poster through the site: your message, your name and email, which listing it was about, and when. The poster
+          gets your name and email with the message so they can reply to you directly. We keep messages for 180 days to deal with abuse,
+          then delete them; they also go when either account is deleted.
+        </p>
         <p>
           {SITE.operator} may occasionally email you about this site, such as a feedback survey, or about another product it makes. Reply
           &quot;unsubscribe&quot; to stop.
@@ -57,7 +64,7 @@ export default function PrivacyPage() {
           name or email, so no page can say who looked at what. Posters and the admin see totals only.
         </p>
         <p>
-          If you ask us to add your school or to let you in: the name, email address and message you send, and our reply. Both are kept
+          If you ask us to add your school or to let you post: the name, email address and message you send, and our reply. Both are kept
           as a record of the conversation and used for nothing else. Anyone can ask for them to be deleted: email{" "}
           <a href={`mailto:${SITE.supportEmail}`} className="link">
             {SITE.supportEmail}

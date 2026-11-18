@@ -1,6 +1,7 @@
 import { and, eq, exists, sql, type SQL } from "drizzle-orm";
 import { CAMPUS } from "@/config/site";
 import { listingPhotos, listings, listingSemesters, semesters, user } from "@/db/schema";
+import type { Audience } from "@/lib/viewer";
 
 /**
  * A listing is on the board when its semester is visible, its poster has
@@ -39,11 +40,12 @@ export function posterNotBannedWhere(): SQL {
 }
 
 /**
- * On the signed-out board too: the poster has not kept it to signed-in
- * students, and its approximate area has been worked out. A missing area
- * keeps it off (fails closed). Always ANDed onto publicListingWhere().
+ * On the public board too (signed-out visitors and community accounts): the
+ * poster has not kept it to students, and its approximate area has been
+ * worked out. A missing area keeps it off (fails closed). Always ANDed onto
+ * publicListingWhere(); audienceWhere() does both.
  */
-export function signedOutAudienceWhere(): SQL {
+export function publicAudienceWhere(): SQL {
   // Parenthesised: drizzle's not() and friends splice a raw fragment in as is.
   return sql`(not ${listings.signedInOnly} and ${listings.areaLat} is not null and ${listings.areaLon} is not null)`;
 }
@@ -52,18 +54,29 @@ export function publicListingWhere(): SQL {
   return and(visibleSemesterWhere(), eq(listings.status, "open"), hasPhotoWhere(), posterNotBannedWhere())!;
 }
 
-/** Which point a query measures from: the true one (signed in) or the approximate area's center (signed out). */
-export type Audience = "signed-in" | "signed-out";
+/**
+ * What a query may show. "full": students and the admin (every board
+ * listing, the true point). "public": signed-out visitors and community
+ * accounts (public listings only, measured from the approximate area,
+ * returned as PublicListing). Pages get it from viewerAudience(getViewer())
+ * (src/server/viewer.ts), never from "is there a session".
+ */
+export type { Audience };
+
+/** The board for an audience: publicListingWhere(), plus publicAudienceWhere() for "public". */
+export function audienceWhere(audience: Audience): SQL {
+  return audience === "public" ? and(publicListingWhere(), publicAudienceWhere())! : publicListingWhere();
+}
 
 /**
  * Miles from campus, as the legacy computed it in SQL: the spherical law of
  * cosines with a LEAST(1, …) guard so acos never sees 1.0000001 and returns
- * NULL. Double precision in, so no casts per row. Signed out, it measures
+ * NULL. Double precision in, so no casts per row. For "public", it measures
  * from the area's center, so neither the filter nor the sort can be used to
  * close in on the true point.
  */
-export function campusDistanceMiles(audience: Audience = "signed-in"): SQL<number> {
-  const [pLat, pLon] = audience === "signed-out" ? [listings.areaLat, listings.areaLon] : [listings.lat, listings.lon];
+export function campusDistanceMiles(audience: Audience): SQL<number> {
+  const [pLat, pLon] = audience === "public" ? [listings.areaLat, listings.areaLon] : [listings.lat, listings.lon];
   const lat = sql`radians(${CAMPUS.lat})`;
   const lon = sql`radians(${CAMPUS.lon})`;
   return sql<number>`3959 * acos(least(1::double precision,
