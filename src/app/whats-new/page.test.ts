@@ -9,7 +9,7 @@ const { default: WhatsNewPage } = await import("./page");
 const render = async (iso: string) => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(iso));
-  return renderToStaticMarkup(await WhatsNewPage());
+  return renderToStaticMarkup(await WhatsNewPage()).replaceAll("&#x27;", "'");
 };
 afterEach(() => vi.useRealTimers());
 
@@ -17,7 +17,7 @@ describe("/whats-new", () => {
   it("lists the entries newest first, with dates, titles and links", async () => {
     const html = await render("2026-11-20T15:00:00Z");
     const titles = [...html.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1]);
-    expect(titles[0]).toBe("An Account link, and this page");
+    expect(titles[0]).toBe("An Account link and a What's new page");
     expect(titles.at(-1)).toBe("Map pins open in view");
     expect(html).toContain('<time dateTime="2026-11-17"');
     expect(html).toContain("November 17, 2026");
@@ -27,6 +27,6 @@ describe("/whats-new", () => {
   it("keeps the 21 Nov entry back until midnight Eastern", async () => {
     expect(await render("2026-11-21T04:59:00Z")).not.toContain("Listings are public by default"); // 23:59 on the 20th
     const html = await render("2026-11-21T05:00:00Z"); // 00:00 on the 21st
-    expect(html.indexOf("Listings are public by default")).toBeLessThan(html.indexOf("An Account link"));
+    expect(html.indexOf("Listings are public by default")).toBeLessThan(html.indexOf("An Account link and"));
   });
 });

@@ -8,7 +8,8 @@ import type { NoticeDto } from "@/lib/notices";
  * The popup in a browser (jsdom): it waits for the page, skips /admin, keeps
  * focus inside, and Escape, the backdrop, Got it and the CTA each dismiss it
  * once: signed out into localStorage (or, if storage throws, for this page
- * session only), signed in through the Server Action.
+ * session only), signed in through the Server Action. So does a link in the
+ * body; a navigation it didn't start closes it without dismissing.
  */
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -24,12 +25,12 @@ let root: Root;
 let host: HTMLElement;
 let trigger: HTMLButtonElement;
 
-async function mount(n: NoticeDto, signedIn = false) {
+async function mount(n: NoticeDto, signedIn = false, body: ReactNode = createElement("p", null, "Body text")) {
   const { NoticePopup } = await import("./NoticeDialog");
   // children as createElement's third argument (react/no-children-prop), which its typings can't see as the required prop
   const Popup = NoticePopup as (props: { notice: NoticeDto; signedIn: boolean; children?: ReactNode }) => ReactNode;
   await act(async () => {
-    root.render(createElement(Popup, { notice: n, signedIn }, createElement("p", null, "Body text")));
+    root.render(createElement(Popup, { notice: n, signedIn }, body));
   });
 }
 const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
@@ -188,5 +189,64 @@ describe("NoticePopup", () => {
     expect(dialog()).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
-});
 
+  const bodyWith = (href: string, external = false) =>
+    createElement("p", null, "See ", createElement("a", { href, ...(external ? { target: "_blank", rel: "noopener noreferrer" } : {}) }, "the map"));
+  const clickBodyLink = async () => {
+    await act(async () => {
+      dialog()!.querySelector<HTMLAnchorElement>("p a")!.click();
+    });
+  };
+
+  it("signed out, a link in the body dismisses it like Got it (stored, counted as a dismissal) and goes there", async () => {
+    const n = notice();
+    await mount(n, false, bodyWith("/map"));
+    await wait();
+    await clickBodyLink();
+    expect(dialog()).toBeNull();
+    expect(localStorage.getItem(`notice:dismissed:${n.id}`)).not.toBeNull();
+    expect(h.track).toHaveBeenCalledWith("dismiss", n.id);
+    expect(h.track).not.toHaveBeenCalledWith("cta", n.id);
+    expect(h.push).toHaveBeenCalledWith("/map");
+  });
+
+  it("signed in, a link in the body records the dismissal before navigating", async () => {
+    const n = notice();
+    await mount(n, true, bodyWith("/map"));
+    await wait();
+    await clickBodyLink();
+    expect(h.dismiss).toHaveBeenCalledExactlyOnceWith(n.id, "dismiss");
+    expect(h.push).toHaveBeenCalledWith("/map");
+    expect(dialog()).toBeNull();
+  });
+
+  it("an external link in the body opens as it would (new tab) and dismisses", async () => {
+    const n = notice();
+    await mount(n, true, bodyWith("https://example.com/", true));
+    await wait();
+    const clicks: Event[] = [];
+    document.addEventListener("click", (e) => clicks.push(e), { once: true });
+    await clickBodyLink();
+    expect(clicks[0]?.defaultPrevented).toBe(false);
+    expect(h.dismiss).toHaveBeenCalledExactlyOnceWith(n.id, "dismiss");
+    expect(h.push).not.toHaveBeenCalled();
+    expect(dialog()).toBeNull();
+  });
+
+  it("a navigation while it's open closes it without dismissing, and it stays closed for the page session", async () => {
+    const n = notice();
+    await mount(n);
+    await wait();
+    expect(dialog()).not.toBeNull();
+    h.pathname = "/map";
+    await mount(n); // the same popup re-rendered at the new path, as the persistent frame is
+    expect(dialog()).toBeNull();
+    expect(localStorage.getItem(`notice:dismissed:${n.id}`)).toBeNull();
+    expect(h.track).not.toHaveBeenCalledWith("dismiss", n.id);
+    await wait();
+    h.pathname = "/browse";
+    await mount(n);
+    await wait();
+    expect(dialog()).toBeNull();
+  });
+});

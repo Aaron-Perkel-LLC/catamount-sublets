@@ -80,8 +80,9 @@ export function NoticeCard({
  * audience (and, signed in, hasn't dismissed it); here it waits until the
  * page has painted, skips the pages notices never open on, and for a
  * signed-out visitor checks localStorage. A dialog: labelled by its title,
- * focus moves in and stays in, Escape and the backdrop dismiss, and focus
- * goes back where it was.
+ * focus moves in and stays in, Escape, the backdrop and any link in the body
+ * dismiss, and focus goes back where it was. A navigation while it is open
+ * (the frame outlives client-side navigation) closes it without dismissing.
  */
 export function NoticePopup({ notice, signedIn, children }: { notice: NoticeDto; signedIn: boolean; children: ReactNode }) {
   const pathname = usePathname();
@@ -91,6 +92,13 @@ export function NoticePopup({ notice, signedIn, children }: { notice: NoticeDto;
   const dialog = useRef<HTMLDivElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
   const visible = open && noticeShownOn(pathname);
+
+  // A navigation it didn't start closes it, not dismissed: it shows again after a reload (state adjusted during render, the React way).
+  const [seenPath, setSeenPath] = useState(pathname);
+  if (seenPath !== pathname) {
+    setSeenPath(pathname);
+    if (open) setOpen(false);
+  }
 
   /** Closes it for good: the dismissal row (signed in) or localStorage (signed out), and its count. */
   function dismiss(how: "dismiss" | "cta"): Promise<unknown> {
@@ -162,6 +170,31 @@ export function NoticePopup({ notice, signedIn, children }: { notice: NoticeDto;
     else if (new URL(href).protocol === "https:") window.location.assign(href);
   }
 
+  /** Leaves for a path here once the dismissal has landed (briefly; navigating matters more). */
+  async function leaveFor(href: string) {
+    await Promise.race([dismiss("dismiss"), new Promise((r) => setTimeout(r, 1500))]);
+    router.push(href);
+  }
+
+  /**
+   * A link in the body dismisses it, as Got it does (counted as a dismissal,
+   * not a CTA click). A plain click on a path here goes through the router
+   * after the dismissal; anything else (a new tab, an external page, mailto)
+   * is left to the browser.
+   */
+  function onBodyClick(e: MouseEvent<HTMLDivElement>) {
+    const a = e.target instanceof Element ? e.target.closest("a[href]") : null;
+    if (!(a instanceof HTMLAnchorElement) || !e.currentTarget.contains(a)) return;
+    const href = a.getAttribute("href") ?? "";
+    const plain = e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && a.target !== "_blank";
+    if (plain && isRelativePath(href)) {
+      e.preventDefault();
+      void leaveFor(href);
+    } else {
+      void dismiss("dismiss");
+    }
+  }
+
   if (!visible) return null;
   return (
     <div
@@ -171,7 +204,7 @@ export function NoticePopup({ notice, signedIn, children }: { notice: NoticeDto;
       }}
     >
       <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className="w-full max-w-md outline-none">
-        <NoticeCard notice={notice} body={children} titleId={titleId} onGotIt={() => void dismiss("dismiss")} onCta={() => void cta()} />
+        <NoticeCard notice={notice} body={<div onClick={onBodyClick}>{children}</div>} titleId={titleId} onGotIt={() => void dismiss("dismiss")} onCta={() => void cta()} />
       </div>
     </div>
   );

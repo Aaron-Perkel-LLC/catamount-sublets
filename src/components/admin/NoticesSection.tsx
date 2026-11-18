@@ -229,7 +229,12 @@ function NoticeForm({ id, initial, live, onDone, onCancel }: { id: number | null
           <div className="w-full max-w-md">
             <NoticeCard
               notice={{ title: v.title || "Title", ctaLabel: ctaLabel && ctaHref ? ctaLabel : null, ctaHref: ctaLabel && ctaHref ? ctaHref : null }}
-              body={<NoticeMarkdown markdown={v.bodyMd} />}
+              body={
+                // Links in the preview go nowhere, so a click can't lose the unsaved draft.
+                <div onClickCapture={(e) => e.target instanceof Element && e.target.closest("a") && e.preventDefault()}>
+                  <NoticeMarkdown markdown={v.bodyMd} />
+                </div>
+              }
             />
           </div>
         </div>
