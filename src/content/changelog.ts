@@ -21,7 +21,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     body: "As we emailed on Nov 17, listings are now visible to signed-out visitors. They see price, semester, size, photos and the rough neighborhood, never your name, contact, address, title or description. Listings kept to signed-in students before today stay that way.",
   },
   {
-    date: "2026-11-18", // the day this merges
+    date: "2026-11-17",
     title: "An Account link and a What's new page",
     body: "Account now has its own link at the top right, next to Sign out (in the menu on a phone). This page lists what's changed, and a dot next to What's new at the bottom of the page means there's something you haven't seen.",
   },
