@@ -6,7 +6,7 @@ import { SITE_TIME_ZONE } from "@/lib/dates";
 export const metadata: Metadata = { title: `Privacy · ${SITE.name}`, alternates: { canonical: "/privacy" } };
 
 /** Bump whenever this page changes what it says. */
-const LAST_UPDATED = "2026-11-18";
+const LAST_UPDATED = "2026-11-19";
 
 /** What the site keeps, who sees it, and how to get rid of it. Plain words, no legalese. */
 export default function PrivacyPage() {
@@ -85,12 +85,32 @@ export default function PrivacyPage() {
       </section>
       <section className="flex flex-col gap-3 text-ink-2">
         <h2 className="text-lg font-bold text-ink">Who sees it</h2>
+        <p>Signed-in students see listings in full.</p>
         <p>
-          Signed-in students see listings in full. Anyone can browse a listing whose poster has not kept it to signed-in students, without
-          signing in: its photos, price, semester, size, utilities and amenities, how long ago it was posted, and a circle of about 150 m
-          that contains the place, with the neighborhood it falls in. Never the address, the exact spot, the description, the
-          poster&apos;s name or how to reach them. The public share link and its preview
-          show the price, semester, size and distance from campus, nothing else.
+          Anyone can see a listing without signing in, unless it is kept to signed-in students. They see its photos, the rent and whether
+          it is negotiable, the semesters, its size (bedrooms, bathrooms and how many roommates), who pays for which utilities and the
+          estimated monthly cost if the poster gave one, its amenities, how long ago it was posted, and a circle of about 150 m that
+          contains the place, with the neighborhood the circle falls in and its distance from campus. Never the address, the exact spot,
+          the description, the poster&apos;s name or how to reach them: those are shown only to signed-in students.
+        </p>
+        <p>
+          Search engines can list those public listings. Each one is in the site&apos;s sitemap and may turn up in search results, showing
+          only what is listed above. A listing that is paused, taken, deleted or kept to signed-in students leaves the sitemap at once; a
+          search engine&apos;s own copy can take longer to go.
+        </p>
+        <p>
+          A listing posted since November 17, 2026 is public in this way, and its poster has no switch to change that: only the
+          site&apos;s admin can keep one to signed-in students, so email{" "}
+          <a href={`mailto:${SITE.supportEmail}`} className="link">
+            {SITE.supportEmail}
+          </a>{" "}
+          to ask. A listing posted before then has a switch on its post page, &quot;Only show to signed-in students&quot;, which its poster
+          can turn on or off at any time. From November 21, 2026 those older listings are public too unless that switch is on; their
+          posters were emailed about it on November 17.
+        </p>
+        <p>
+          A share link and its preview show the listing&apos;s first photo, the price and whether it is negotiable, the semester, size and
+          distance from campus, nothing else. That is true of any listing that is up, including one kept to signed-in students.
         </p>
         <p>The site&apos;s admin can see every listing and the email addresses of people who signed in, to run the site. Nothing is sold or shared with anyone.</p>
       </section>
