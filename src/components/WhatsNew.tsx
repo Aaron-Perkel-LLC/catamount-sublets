@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useSyncExternalStore } from "react";
+import { withFrom } from "@/lib/back-link";
 import { isNewer, showNewDot, WHATS_NEW_SEEN_KEY } from "@/lib/whats-new";
 
 /** Set by /whats-new in this page session, whether or not storage took it: the dot stays off until a reload. */
@@ -21,6 +23,22 @@ function subscribe(onChange: () => void) {
   return () => window.removeEventListener("storage", onChange);
 }
 
+/** A footer link to `href` that carries the current page, so the page it opens links back here (src/lib/back-link.ts). */
+function useBackTo(href: string): string {
+  const pathname = usePathname();
+  const params = useSearchParams();
+  return withFrom(href, pathname, params.toString());
+}
+
+/** The footer's Privacy link. */
+export function PrivacyLink({ className }: { className: string }) {
+  return (
+    <Link href={useBackTo("/privacy")} className={className}>
+      Privacy
+    </Link>
+  );
+}
+
 /**
  * The footer's What's new link, with a small dot when there's an entry this
  * browser hasn't seen. `latest` and `today` come from the server render
@@ -38,8 +56,9 @@ export function WhatsNewLink({ latest, today, className }: { latest: string | nu
     },
     () => false,
   );
+  const href = useBackTo("/whats-new");
   return (
-    <Link href="/whats-new" className={`${className} inline-flex items-center gap-1`}>
+    <Link href={href} className={`${className} inline-flex items-center gap-1`}>
       What&apos;s new
       {dot && (
         <>

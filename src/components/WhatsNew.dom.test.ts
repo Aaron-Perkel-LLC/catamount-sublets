@@ -4,7 +4,13 @@ import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WHATS_NEW_SEEN_KEY } from "@/lib/whats-new";
-import { MarkWhatsNewSeen, WhatsNewLink } from "./WhatsNew";
+import { MarkWhatsNewSeen, PrivacyLink, WhatsNewLink } from "./WhatsNew";
+
+// The footer links read the current page to carry it as ?from= (src/lib/back-link.ts).
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/map",
+  useSearchParams: () => new URLSearchParams("semester=spring-2027"),
+}));
 
 /**
  * The footer's dot in a browser (jsdom): none in the server render, so
@@ -34,6 +40,13 @@ afterEach(() => {
 });
 
 describe("WhatsNewLink", () => {
+  it("carries the page it's on, as Privacy does, so the page it opens links back", async () => {
+    await mount();
+    expect(host.querySelector("a")?.getAttribute("href")).toBe("/whats-new?from=%2Fmap%3Fsemester%3Dspring-2027");
+    act(() => root!.render(createElement(PrivacyLink, { className: "link" })));
+    expect(host.querySelector("a")?.getAttribute("href")).toBe("/privacy?from=%2Fmap%3Fsemester%3Dspring-2027");
+  });
+
   it("renders no dot on the server, hydrates without a mismatch, then shows it for a first visit", async () => {
     const html = renderToString(link());
     expect(html).not.toContain("(new)");
@@ -44,7 +57,7 @@ describe("WhatsNewLink", () => {
     });
     expect(errors).not.toHaveBeenCalled();
     expect(hasDot()).toBe(true);
-    expect(host.querySelector("a")?.getAttribute("href")).toBe("/whats-new");
+    expect(host.querySelector("a")?.getAttribute("href")).toBe("/whats-new?from=%2Fmap%3Fsemester%3Dspring-2027");
   });
 
   it("no dot once the newest entry has been seen; a dot again for a newer one", async () => {
