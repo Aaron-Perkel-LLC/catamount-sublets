@@ -1,11 +1,11 @@
+import { Card } from "@/components/admin/Card";
 import { CsvButton } from "@/components/admin/CsvButton";
+import { DataTable, Num } from "@/components/admin/DataTable";
 import { ListingsTable } from "@/components/admin/ListingsTable";
 import { OutcomesCard } from "@/components/admin/OutcomesCard";
-import { Panel, ScrollTable } from "@/components/admin/Panel";
-import { RangePicker } from "@/components/admin/RangePicker";
 import { getDb } from "@/db";
 import { semesters } from "@/db/schema";
-import { type AdminSearchParams, param, rangeDto } from "@/lib/admin-page";
+import { type AdminSearchParams, param } from "@/lib/admin-page";
 import { resolveRange } from "@/lib/admin-range";
 import { sortSemesters } from "@/lib/semesters";
 import { requireAdminPage } from "@/server/auth";
@@ -39,66 +39,51 @@ export default async function AdminListings({ searchParams }: { searchParams: Ad
   });
 
   return (
-    <div className="flex flex-col gap-5">
-      <RangePicker range={rangeDto(r)} />
-      <Panel title="Listings" hint="Views are people-days in the range; contacts, people who got in touch. A deleted listing with activity in the range shows as Deleted #id.">
+    <div className="flex flex-col gap-4">
+      <Card flush title="Listings" tip="Views are people-days in the range; contacts, people who got in touch. A deleted listing with activity in the range shows as Deleted #id.">
         <ListingsTable rows={rows} initialAttention={param(sp, "view") === "attention"} />
-      </Panel>
+      </Card>
 
-      <Panel
-        title="Supply and demand"
-        hint="Per semester students can post for, by each listing's first semester: listings on the board now against views and contacts in the range."
-        actions={
-          <CsvButton
-            name="supply-demand"
-            columns={[
-              { key: "name", label: "semester" },
-              { key: "onBoard", label: "on_board" },
-              { key: "views", label: "views" },
-              { key: "contacts", label: "contacts" },
-              { key: "viewsPer", label: "views_per_listing" },
-              { key: "contactsPer", label: "contacts_per_listing" },
-              { key: "contacted", label: "listings_contacted" },
-            ]}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <Card
+          flush
+          title="Supply and demand"
+          tip="Per semester students can post for, by each listing's first semester: listings on the board now against views and contacts in the range."
+          actions={
+            <CsvButton
+              name="supply-demand"
+              columns={[
+                { key: "name", label: "semester" },
+                { key: "onBoard", label: "on_board" },
+                { key: "views", label: "views" },
+                { key: "contacts", label: "contacts" },
+                { key: "viewsPer", label: "views_per_listing" },
+                { key: "contactsPer", label: "contacts_per_listing" },
+                { key: "contacted", label: "listings_contacted" },
+              ]}
+              rows={supply}
+            />
+          }
+        >
+          <DataTable
+            label="Supply and demand by semester"
             rows={supply}
+            rowKey={(s) => s.code}
+            empty="No active semesters."
+            columns={[
+              { key: "name", header: "Semester", primary: true, cell: (s) => <span className="font-bold">{s.name}</span> },
+              { key: "onBoard", header: "On the board", numeric: true, cell: (s) => <Num n={s.onBoard} /> },
+              { key: "views", header: "Views", numeric: true, cell: (s) => <Num n={s.views} /> },
+              { key: "viewsPer", header: "Per listing", numeric: true, cell: (s) => s.viewsPer ?? "—" },
+              { key: "contacts", header: "Contacts", numeric: true, cell: (s) => <Num n={s.contacts} /> },
+              { key: "contactsPer", header: "Per listing", numeric: true, cell: (s) => s.contactsPer ?? "—" },
+              { key: "contacted", header: "Listings contacted", numeric: true, cell: (s) => <Num n={s.contacted} /> },
+            ]}
           />
-        }
-      >
-        {supply.length === 0 ? (
-          <p className="text-sm text-ink-3">No active semesters.</p>
-        ) : (
-          <ScrollTable>
-            <table className="w-full min-w-[32rem] text-sm">
-              <thead className="text-left text-xs text-ink-3">
-                <tr>
-                  <th className="py-1 pr-3 font-normal">Semester</th>
-                  <th className="pr-3 font-normal">On the board</th>
-                  <th className="pr-3 font-normal">Views</th>
-                  <th className="pr-3 font-normal">Per listing</th>
-                  <th className="pr-3 font-normal">Contacts</th>
-                  <th className="pr-3 font-normal">Per listing</th>
-                  <th className="font-normal">Listings contacted</th>
-                </tr>
-              </thead>
-              <tbody className="tabular-nums">
-                {supply.map((s) => (
-                  <tr key={s.code} className="border-t border-line-light">
-                    <td className="py-1.5 pr-3">{s.name}</td>
-                    <td className="pr-3">{s.onBoard}</td>
-                    <td className="pr-3">{s.views}</td>
-                    <td className="pr-3">{s.viewsPer ?? "—"}</td>
-                    <td className="pr-3">{s.contacts}</td>
-                    <td className="pr-3">{s.contactsPer ?? "—"}</td>
-                    <td>{s.contacted}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </ScrollTable>
-        )}
-      </Panel>
+        </Card>
 
-      <OutcomesCard outcomes={outcomes} />
+        <OutcomesCard outcomes={outcomes} />
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { Download } from "lucide-react";
 import { type CsvValue, toCsv } from "@/lib/csv";
 import { easternDate } from "@/lib/dates";
+import { BTN } from "./ui";
 
 export interface CsvColumn {
   key: string;
@@ -28,13 +29,8 @@ export function CsvButton({ name, columns, rows }: { name: string; columns: CsvC
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return (
-    <button
-      type="button"
-      onClick={download}
-      disabled={rows.length === 0}
-      className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-paper px-3 text-sm text-ink-2 hover:text-lake disabled:opacity-50"
-    >
-      <Download className="h-4 w-4" aria-hidden />
+    <button type="button" onClick={download} disabled={rows.length === 0} aria-label={`Download ${name} as CSV`} className={`${BTN} px-2.5 font-normal text-ink-2`}>
+      <Download className="h-3.5 w-3.5" aria-hidden />
       CSV
     </button>
   );

@@ -8,14 +8,26 @@ import { suggestedCode } from "@/lib/semesters";
 import { adminAddSemester, adminArchiveCommit, adminArchivePreview, adminDeleteSemester, adminOutcomeAskPreview, adminSendOutcomeAsks, adminSendOutcomeAskTest, adminToggleSemester } from "@/server/actions/admin";
 import type { ArchivePlan } from "@/server/services/admin";
 import type { AskPreview } from "@/server/services/listing-outcome";
+import { Card, Empty } from "./Card";
+import { type Column, DataTable, Num } from "./DataTable";
+import { Pill } from "./Pill";
 import type { ArchiveRowDto, SemesterRowDto } from "./types";
+import { BTN, BTN_DANGER, BTN_PRIMARY, CARD_TITLE, DIALOG, FIELD, FIELD_LABEL, MUTED, SELECT } from "./ui";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
+/** A dialog's frame: the quick-jump box's (QuickJump.tsx), so the admin's dialogs match. */
+/** A fold inside a dialog ("The 3 listings going"): a link-weight line, 44 px to tap on a phone. */
+const FOLD = "cursor-pointer py-3 text-[13px] leading-5 font-bold text-lake md:py-0";
+/** Rows carry 32 px buttons, so the other cells sit on their middle. */
+const MID = "md:align-middle";
+
 /**
- * Semesters in two groups, what is on the board and what is hidden, each
- * with the one action it usually needs. Adding is behind a button, the
- * archive preview is a dialog, and past archives stay folded.
+ * Semesters as one table, what is on the board first and then what is
+ * hidden, each row with the actions it can take; adding is behind the
+ * card's button. Beside it, the "still available?" email for one semester.
+ * Below, the totals row each archived semester left. The archive and the
+ * email are both a preview in a dialog, with the code typed back.
  */
 export function SemestersTab({ semesters, archives }: { semesters: SemesterRowDto[]; archives: ArchiveRowDto[] }) {
   const router = useRouter();
@@ -24,6 +36,8 @@ export function SemestersTab({ semesters, archives }: { semesters: SemesterRowDt
   const [result, setResult] = useState<string | null>(null);
   const [plan, setPlan] = useState<ArchivePlan | null>(null);
   const [ask, setAsk] = useState<AskPreview | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [askCode, setAskCode] = useState("");
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
     start(async () => {
@@ -34,96 +48,138 @@ export function SemestersTab({ semesters, archives }: { semesters: SemesterRowDt
     });
 
   const live = semesters.filter((s) => !s.archivedAt);
-  const row = (s: SemesterRowDto) => (
-    <li key={s.code} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line-light py-2.5 first:border-t-0">
-      <span className="font-bold" title={`Code: ${s.code}`}>
-        {s.name}
-      </span>
-      <span className="text-sm text-ink-3">{plural(s.postCount, "listing")}</span>
-      <span className="ml-auto flex flex-wrap gap-1">
-        {s.postCount > 0 && (
-          <button type="button" className="btn-secondary px-2 py-1 text-xs" disabled={pending} title="Email its posters “Is your sublet still available?”" onClick={() => start(async () => setAsk(await adminOutcomeAskPreview(s.code)))}>
-            Ask posters…
+  const rows = [...live.filter((s) => s.active), ...live.filter((s) => !s.active)];
+  // Who can be asked: any semester with listings. A hidden one is the usual
+  // target (it is over, and about to be archived), so it is offered first.
+  const askable = live.filter((s) => s.postCount > 0);
+  const asking = askable.find((s) => s.code === askCode) ?? askable.find((s) => !s.active) ?? askable[0];
+
+  const columns: Column<SemesterRowDto>[] = [
+    {
+      key: "name",
+      header: "Semester",
+      primary: true,
+      className: MID,
+      cell: (s) => (
+        <span className="font-bold" title={`Code: ${s.code}`}>
+          {s.name}
+        </span>
+      ),
+    },
+    { key: "status", header: "Status", className: MID, cell: (s) => (s.active ? <Pill tone="good">On the board</Pill> : <Pill>Hidden</Pill>) },
+    { key: "listings", header: "Listings", numeric: true, className: MID, cell: (s) => <Num n={s.postCount} /> },
+    {
+      key: "actions",
+      header: "",
+      bare: true,
+      cell: (s) => (
+        <span className="flex flex-wrap gap-2 md:justify-end">
+          {!s.active && (
+            <button type="button" className={BTN} disabled={pending} onClick={() => start(async () => setPlan(await adminArchivePreview(s.code)))}>
+              Archive…
+            </button>
+          )}
+          {s.postCount === 0 && (
+            <button type="button" className={BTN_DANGER} disabled={pending} onClick={() => confirm(`Delete ${s.name}?`) && run(() => adminDeleteSemester(s.code))}>
+              Delete
+            </button>
+          )}
+          <button
+            type="button"
+            className={BTN}
+            disabled={pending}
+            onClick={() => {
+              if (s.active && s.postCount > 0 && !confirm(`Hide ${s.name}? ${plural(s.postCount, "listing")} that run only for it leave Browse and Map. Nothing is deleted; showing it again brings them back.`)) return;
+              run(() => adminToggleSemester(s.code));
+            }}
+          >
+            {s.active ? "Hide" : "Show"}
           </button>
-        )}
-        {!s.active && (
-          <button type="button" className="btn-secondary px-2 py-1 text-xs" disabled={pending} onClick={() => start(async () => setPlan(await adminArchivePreview(s.code)))}>
-            Archive…
-          </button>
-        )}
-        {s.postCount === 0 && (
-          <button type="button" className="btn-secondary px-2 py-1 text-xs text-error-ink" disabled={pending} onClick={() => confirm(`Delete ${s.name}?`) && run(() => adminDeleteSemester(s.code))}>
-            Delete
-          </button>
-        )}
-        <button
-          type="button"
-          className="btn-secondary px-2 py-1 text-xs"
-          disabled={pending}
-          onClick={() => {
-            if (s.active && s.postCount > 0 && !confirm(`Hide ${s.name}? ${plural(s.postCount, "listing")} that run only for it leave Browse and Map. Nothing is deleted; showing it again brings them back.`)) return;
-            run(() => adminToggleSemester(s.code));
-          }}
-        >
-          {s.active ? "Hide" : "Show"}
-        </button>
-      </span>
-    </li>
-  );
+        </span>
+      ),
+    },
+  ];
 
   return (
-    <div className="flex max-w-2xl flex-col gap-5">
-      <AddSemester pending={pending} run={run} />
-      {error && (
-        <p role="alert" className="text-sm text-error-ink">
-          {error}
-        </p>
-      )}
-      {result && (
-        <p role="status" className="text-sm text-ink-2">
-          {result}
-        </p>
-      )}
+    <div className="flex flex-col gap-4">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <Card
+          flush
+          title="Semesters"
+          tip="Students can post for a semester that is on the board, and its listings show. Listings that run only for hidden semesters are off the board. Archive a hidden one when it is over."
+          actions={
+            !adding && (
+              <button type="button" className={BTN} onClick={() => setAdding(true)}>
+                Add semester
+              </button>
+            )
+          }
+        >
+          {adding && (
+            <div className="px-4">
+              <AddSemester pending={pending} run={run} onClose={() => setAdding(false)} />
+            </div>
+          )}
+          {error && (
+            <p role="alert" className="px-4 text-[13px] text-error-ink">
+              {error}
+            </p>
+          )}
+          {result && (
+            <p role="status" className="px-4 text-[13px] text-ink-2">
+              {result}
+            </p>
+          )}
+          <DataTable label="Semesters" columns={columns} rows={rows} rowKey={(s) => s.code} empty="No semesters yet." />
+        </Card>
 
-      <Group title="On the board" hint="Students can post for these, and their listings show.">
-        {live.filter((s) => s.active).map(row)}
-      </Group>
-      <Group title="Hidden" hint="Listings that run only for these are off the board. Archive one when it is over.">
-        {live.filter((s) => !s.active).map(row)}
-      </Group>
+        <Card
+          title="Ask posters"
+          tip="Emails “Is your sublet still available?” with four one-tap answers to one semester's posters: the listings archiving would remove, less anyone already asked or answered, banned, or marked Stop email."
+        >
+          {asking ? (
+            <>
+              <label className={FIELD_LABEL}>
+                Semester
+                <select className={SELECT} value={asking.code} onChange={(e) => setAskCode(e.target.value)}>
+                  {askable.map((s) => (
+                    <option key={s.code} value={s.code}>
+                      {s.name} ({plural(s.postCount, "listing")})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className={`${BTN} self-start`} disabled={pending} onClick={() => start(async () => setAsk(await adminOutcomeAskPreview(asking.code)))}>
+                Ask posters…
+              </button>
+              <p className={MUTED}>Shows who it would go to first. Nothing is sent until you confirm there.</p>
+            </>
+          ) : (
+            <Empty>No semester has listings to ask about.</Empty>
+          )}
+        </Card>
+      </div>
 
       {archives.length > 0 && (
-        <details className="rounded-xl border border-line bg-paper p-4 [&_summary::-webkit-details-marker]:hidden">
-          <summary className="flex cursor-pointer list-none items-center justify-between font-bold">
-            Archived <span className="text-sm font-normal text-ink-3">{plural(archives.length, "semester")}</span>
-          </summary>
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-ink-3">
-                <tr>
-                  <th className="py-1 pr-3 font-normal">Semester</th>
-                  <th className="pr-3 font-normal">Archived</th>
-                  <th className="pr-3 font-normal">Listings</th>
-                  <th className="pr-3 font-normal">Taken</th>
-                  <th className="pr-3 font-normal">Median</th>
-                  <th className="font-normal">Viewed</th>
-                </tr>
-              </thead>
-              <tbody>
-                {archives.map((a) => (
-                  <tr key={a.semesterCode} className="border-t border-line-light" title={`${a.contacts} got in touch · ${a.shares} share taps · ${a.photos} photos (${formatBytes(a.bytes)})`}>
-                    <td className="py-1.5 pr-3 font-bold whitespace-nowrap">{a.semesterName}</td>
-                    <td className="pr-3 whitespace-nowrap">{shortDate(new Date(a.archivedAt))}</td>
-                    <td className="pr-3">{a.listings}</td>
-                    <td className="pr-3">{a.taken}</td>
-                    <td className="pr-3">{a.priceMedian === null ? "—" : formatMoney(a.priceMedian)}</td>
-                    <td>{a.views}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
+        <Card flush title="Archived" tip="The totals kept when a semester was archived; its listings and their photos were removed for good. Median is the median price.">
+          <DataTable
+            label="Archived semesters"
+            rows={archives}
+            rowKey={(a) => a.semesterCode}
+            columns={[
+              { key: "name", header: "Semester", primary: true, cell: (a) => <span className="font-bold whitespace-nowrap">{a.semesterName}</span> },
+              { key: "archived", header: "Archived", cell: (a) => <span className="whitespace-nowrap tabular-nums">{shortDate(new Date(a.archivedAt))}</span> },
+              { key: "listings", header: "Listings", numeric: true, cell: (a) => <Num n={a.listings} /> },
+              { key: "taken", header: "Taken", numeric: true, cell: (a) => <Num n={a.taken} /> },
+              { key: "median", header: "Median", numeric: true, cell: (a) => (a.priceMedian === null ? "—" : formatMoney(a.priceMedian)) },
+              { key: "views", header: "Viewed", numeric: true, cell: (a) => <Num n={a.views} /> },
+              { key: "contacts", header: "Got in touch", numeric: true, cell: (a) => <Num n={a.contacts} /> },
+              { key: "shares", header: "Share taps", numeric: true, wide: true, cell: (a) => <Num n={a.shares} /> },
+              { key: "photos", header: "Photos", numeric: true, wide: true, cell: (a) => <Num n={a.photos} /> },
+              { key: "bytes", header: "Size", numeric: true, wide: true, cell: (a) => formatBytes(a.bytes) },
+            ]}
+          />
+        </Card>
       )}
 
       <AskDialog
@@ -149,32 +205,15 @@ export function SemestersTab({ semesters, archives }: { semesters: SemesterRowDt
   );
 }
 
-function Group({ title, hint, children }: { title: string; hint: string; children: React.ReactNode[] }) {
-  return (
-    <section className="rounded-xl border border-line bg-paper p-4">
-      <h3 className="font-bold">{title}</h3>
-      <p className="text-sm text-ink-3">{hint}</p>
-      {children.length > 0 ? <ul className="mt-2">{children}</ul> : <p className="mt-2 text-sm text-ink-3">None.</p>}
-    </section>
-  );
-}
-
 /** One name; the code fills itself in from it ("Fall 2028" → fall28) until it is edited. */
-function AddSemester({ pending, run }: { pending: boolean; run: (fn: () => Promise<{ ok: boolean; error?: string }>) => void }) {
-  const [open, setOpen] = useState(false);
+function AddSemester({ pending, run, onClose }: { pending: boolean; run: (fn: () => Promise<{ ok: boolean; error?: string }>) => void; onClose: () => void }) {
   const [name, setName] = useState("");
   const [typedCode, setTypedCode] = useState<string | null>(null);
   const code = typedCode ?? suggestedCode(name);
 
-  if (!open)
-    return (
-      <button type="button" className="btn-secondary self-start py-2" onClick={() => setOpen(true)}>
-        Add semester
-      </button>
-    );
   return (
     <form
-      className="flex flex-wrap items-end gap-2 rounded-xl border border-line bg-paper p-4"
+      className="flex flex-wrap items-end gap-2"
       onSubmit={(e) => {
         e.preventDefault();
         run(async () => {
@@ -182,24 +221,24 @@ function AddSemester({ pending, run }: { pending: boolean; run: (fn: () => Promi
           if (r.ok) {
             setName("");
             setTypedCode(null);
-            setOpen(false);
+            onClose();
           }
           return r;
         });
       }}
     >
-      <label className="flex flex-col gap-1 text-sm">
+      <label className={`${FIELD_LABEL} w-full md:w-48`}>
         Name
-        <input className="field w-48" value={name} onChange={(e) => setName(e.target.value)} placeholder="Fall 2028" autoFocus />
+        <input className={FIELD} value={name} onChange={(e) => setName(e.target.value)} placeholder="Fall 2028" autoFocus />
       </label>
-      <label className="flex flex-col gap-1 text-xs text-ink-3">
+      <label className={`${FIELD_LABEL} w-full md:w-28`}>
         Code
-        <input className="field w-28 py-2 text-sm" value={code} onChange={(e) => setTypedCode(e.target.value)} placeholder="fall28" />
+        <input className={FIELD} value={code} onChange={(e) => setTypedCode(e.target.value)} placeholder="fall28" />
       </label>
-      <button type="submit" className="btn-primary py-2" disabled={pending || !name.trim() || !code}>
+      <button type="submit" className={`${BTN_PRIMARY} md:mb-0.5`} disabled={pending || !name.trim() || !code}>
         Add
       </button>
-      <button type="button" className="link text-sm" onClick={() => setOpen(false)}>
+      <button type="button" className={`${BTN} md:mb-0.5`} onClick={onClose}>
         Cancel
       </button>
     </form>
@@ -228,13 +267,13 @@ function ArchiveDialog({ plan, onClose, onArchived }: { plan: ArchivePlan | null
         setError(null);
         onClose();
       }}
-      className="m-auto w-[min(36rem,calc(100vw-2rem))] rounded-xl border border-line bg-paper p-0 text-ink backdrop:bg-ink/60"
+      className={DIALOG}
     >
       {plan && t && (
-        <div className="flex max-h-[85dvh] flex-col gap-3 overflow-y-auto p-5">
-          <h2 className="text-lg font-bold">Archive {plan.name}</h2>
+        <div className="flex max-h-[85dvh] flex-col gap-3 overflow-y-auto p-4">
+          <h2 className={CARD_TITLE}>Archive {plan.name}</h2>
           {plan.blocking.length > 0 ? (
-            <ul className="text-sm text-error-ink">
+            <ul className="text-[13px] text-error-ink">
               {plan.blocking.map((b) => (
                 <li key={b}>{b}</li>
               ))}
@@ -242,17 +281,17 @@ function ArchiveDialog({ plan, onClose, onArchived }: { plan: ArchivePlan | null
           ) : (
             <>
               {t.listings === 0 ? (
-                <p className="text-sm text-ink-2">No listing runs only for it, so nothing is removed; it moves to Archived.</p>
+                <p className={MUTED}>No listing runs only for it, so nothing is removed; it moves to Archived.</p>
               ) : (
-                <p className="text-sm text-ink-2">
+                <p className={MUTED}>
                   Removes {plural(t.listings, "listing")} for good ({t.taken} taken) with {plural(t.photos, "photo")} ({formatBytes(t.bytes)}). A totals row is kept: median{" "}
                   {t.priceMedian === null ? "—" : formatMoney(t.priceMedian)}, {t.views} viewed, {t.contacts} got in touch.
                 </p>
               )}
               {plan.going.length > 0 && (
-                <details className="text-sm">
-                  <summary className="cursor-pointer text-lake">The {plural(plan.going.length, "listing")} going</summary>
-                  <ul className="mt-1 flex flex-col gap-0.5 text-ink-2">
+                <details>
+                  <summary className={FOLD}>The {plural(plan.going.length, "listing")} going</summary>
+                  <ul className="mt-1 flex flex-col gap-0.5 text-[13px] text-ink-2">
                     {plan.going.map((g) => (
                       <li key={g.id} title={g.ownerEmail}>
                         {g.ownerName ?? g.ownerEmail} · {g.address.split(",")[0]} · {formatMoney(g.price)}
@@ -263,16 +302,16 @@ function ArchiveDialog({ plan, onClose, onArchived }: { plan: ArchivePlan | null
                 </details>
               )}
               {plan.staying.length > 0 && (
-                <p className="text-sm text-ink-2">
+                <p className={MUTED}>
                   Staying, because they run on into a later semester: {plan.staying.map((s) => `${s.ownerName ?? s.ownerEmail} → ${s.nextSemester}`).join("; ")}.
                 </p>
               )}
-              <label className="flex flex-col gap-1 text-sm">
+              <label className={FIELD_LABEL}>
                 Type {plan.code} to confirm
-                <input className="field w-40" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+                <input className={`${FIELD} md:w-40`} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
               </label>
               {error && (
-                <p role="alert" className="text-sm text-error-ink">
+                <p role="alert" className="text-[13px] text-error-ink">
                   {error}
                 </p>
               )}
@@ -282,7 +321,7 @@ function ArchiveDialog({ plan, onClose, onArchived }: { plan: ArchivePlan | null
             {plan.blocking.length === 0 && (
               <button
                 type="button"
-                className="rounded-lg bg-error-ink px-4 py-2.5 font-bold text-paper disabled:opacity-50"
+                className={BTN_DANGER}
                 disabled={pending || typed !== plan.code}
                 onClick={() =>
                   start(async () => {
@@ -296,7 +335,7 @@ function ArchiveDialog({ plan, onClose, onArchived }: { plan: ArchivePlan | null
                 Archive for good
               </button>
             )}
-            <button type="button" className="btn-secondary" onClick={() => ref.current?.close()}>
+            <button type="button" className={BTN} onClick={() => ref.current?.close()}>
               {plan.blocking.length > 0 ? "Close" : "Cancel"}
             </button>
           </div>
@@ -333,29 +372,29 @@ function AskDialog({ preview, onClose, onSent }: { preview: AskPreview | null; o
         setError(null);
         onClose();
       }}
-      className="m-auto w-[min(36rem,calc(100vw-2rem))] rounded-xl border border-line bg-paper p-0 text-ink backdrop:bg-ink/60"
+      className={DIALOG}
     >
       {preview && (
-        <div className="flex max-h-[85dvh] flex-col gap-3 overflow-y-auto p-5">
-          <h2 className="text-lg font-bold">Ask {preview.name} posters</h2>
-          <p className="text-sm text-ink-2">
+        <div className="flex max-h-[85dvh] flex-col gap-3 overflow-y-auto p-4">
+          <h2 className={CARD_TITLE}>Ask {preview.name} posters</h2>
+          <p className={MUTED}>
             Emails “Is your sublet still available?” with four one-tap answers (no sign-in; the links work after the listing is gone). Goes to
             the listings archiving would remove, less anyone already asked or answered, banned, or marked Stop email.
             {preview.alreadyAsked > 0 ? ` Already sent for this semester: ${plural(preview.alreadyAsked, "listing")}.` : ""}
           </p>
           {preview.blocking.length > 0 ? (
-            <ul className="text-sm text-error-ink">
+            <ul className="text-[13px] text-error-ink">
               {preview.blocking.map((b) => (
                 <li key={b}>{b}</li>
               ))}
             </ul>
           ) : n === 0 ? (
-            <p className="text-sm text-ink-2">Nobody to ask right now.</p>
+            <p className={MUTED}>Nobody to ask right now.</p>
           ) : (
             <>
-              <details className="text-sm">
-                <summary className="cursor-pointer text-lake">Goes to {plural(n, "poster")}</summary>
-                <ul className="mt-1 flex flex-col gap-0.5 text-ink-2">
+              <details>
+                <summary className={FOLD}>Goes to {plural(n, "poster")}</summary>
+                <ul className="mt-1 flex flex-col gap-0.5 text-[13px] text-ink-2">
                   {preview.recipients.map((r) => (
                     <li key={r.listingId} title={r.email}>
                       {r.name ?? r.email} · {r.place}
@@ -364,12 +403,12 @@ function AskDialog({ preview, onClose, onSent }: { preview: AskPreview | null; o
                   ))}
                 </ul>
               </details>
-              <label className="flex flex-col gap-1 text-sm">
+              <label className={FIELD_LABEL}>
                 Type {preview.code} to send
-                <input className="field w-40" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+                <input className={`${FIELD} md:w-40`} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
               </label>
               {error && (
-                <p role="alert" className="text-sm text-error-ink">
+                <p role="alert" className="text-[13px] text-error-ink">
                   {error}
                 </p>
               )}
@@ -380,7 +419,7 @@ function AskDialog({ preview, onClose, onSent }: { preview: AskPreview | null; o
             {preview.blocking.length === 0 && n > 0 && (
               <button
                 type="button"
-                className="btn-primary"
+                className={BTN_PRIMARY}
                 disabled={pending || typed !== preview.code}
                 onClick={() =>
                   start(async () => {
@@ -395,7 +434,7 @@ function AskDialog({ preview, onClose, onSent }: { preview: AskPreview | null; o
                 {pending ? "Sending…" : `Send to ${plural(n, "poster")}`}
               </button>
             )}
-            <button type="button" className="btn-secondary" onClick={() => ref.current?.close()}>
+            <button type="button" className={BTN} onClick={() => ref.current?.close()}>
               {preview.blocking.length > 0 || n === 0 ? "Close" : "Cancel"}
             </button>
           </div>
@@ -415,16 +454,16 @@ function AskTest({ preview }: { preview: AskPreview }) {
   const [listingId, setListingId] = useState(preview.testListings[0].listingId);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   return (
-    <details className="rounded-lg border border-line-light p-3 text-sm">
-      <summary className="cursor-pointer text-lake">Send test to me</summary>
-      <div className="mt-2 flex flex-col gap-2">
-        <p className="text-ink-3">
+    <details className="border-t border-line-light pt-1 md:pt-3">
+      <summary className={FOLD}>Send test to me</summary>
+      <div className="mt-2 flex flex-col gap-3">
+        <p className={MUTED}>
           The email for one listing, with that listing&apos;s real links, sent only to your own address. No ask is recorded, so the real send
           still goes to its poster. The links are live: Filled marks that listing taken and Still available stamps it.
         </p>
-        <label className="flex flex-col gap-1">
+        <label className={FIELD_LABEL}>
           Listing
-          <select className="field" value={listingId} onChange={(e) => setListingId(Number(e.target.value))}>
+          <select className={SELECT} value={listingId} onChange={(e) => setListingId(Number(e.target.value))}>
             {preview.testListings.map((l) => (
               <option key={l.listingId} value={l.listingId}>
                 {l.label}
@@ -435,7 +474,7 @@ function AskTest({ preview }: { preview: AskPreview }) {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            className="btn-secondary"
+            className={BTN}
             disabled={pending}
             onClick={() =>
               start(async () => {
@@ -448,7 +487,7 @@ function AskTest({ preview }: { preview: AskPreview }) {
             {pending ? "Sending…" : "Send test to me"}
           </button>
           {note && (
-            <span role={note.ok ? "status" : "alert"} className={note.ok ? "text-ink-2" : "text-error-ink"}>
+            <span role={note.ok ? "status" : "alert"} className={`text-[13px] ${note.ok ? "text-ink-2" : "text-error-ink"}`}>
               {note.text}
             </span>
           )}

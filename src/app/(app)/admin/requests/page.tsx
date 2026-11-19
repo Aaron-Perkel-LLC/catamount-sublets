@@ -11,12 +11,5 @@ export default async function AdminRequests() {
   const [pending, approved] = await Promise.all([listPendingAccessRequests(db), approvedEmails(db)]);
   const replies = await adminMessagesForRequests(db, pending.map((r) => r.id));
   const messageDto = (m: AdminMessageRow) => ({ ...m, createdAt: m.createdAt.toISOString() });
-  return (
-    <div className="flex flex-col gap-4">
-      <p className="text-sm text-ink-3">
-        {pending.length === 0 ? "Nothing" : pending.length} waiting · {approved.length} approved address{approved.length === 1 ? "" : "es"}
-      </p>
-      <RequestsTab requests={{ pending: pending.map((r) => ({ ...r, createdAt: r.createdAt.toISOString(), messages: (replies.get(r.id) ?? []).map(messageDto) })), approved }} />
-    </div>
-  );
+  return <RequestsTab requests={{ pending: pending.map((r) => ({ ...r, createdAt: r.createdAt.toISOString(), messages: (replies.get(r.id) ?? []).map(messageDto) })), approved }} />;
 }

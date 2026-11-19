@@ -1,16 +1,26 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 import { adminBroadcastCount, adminSendBroadcast, adminSetAnnouncement, adminSetReadOnly } from "@/server/actions/admin";
 import type { Announcement, ReadOnly } from "@/server/data/settings";
 import type { Audience } from "@/server/services/admin";
 import { AnnouncementBanner } from "../AnnouncementBanner";
 import type { NoticeAdminRow } from "@/server/data/notices";
-import type { PersonDto, SemesterRowDto } from "./types";
+import { Card } from "./Card";
 import { NoticesSection } from "./NoticesSection";
+import { Pill } from "./Pill";
+import { Tip } from "./Tip";
+import type { PersonDto, SemesterRowDto } from "./types";
+import { BTN, BTN_PRIMARY, CHOICE, FIELD, FIELD_LABEL, MUTED, SELECT, TEXTAREA } from "./ui";
 
-/** Telling people things: the banner on every signed-in page, a popup and an email. (The read-only switch lives in System.) */
+/** A radio or checkbox with its words: a 44 px row on a phone. */
+
+/**
+ * Telling people things: the banner on every signed-in page and the popups
+ * in one column, the broadcast email in the other (one column on a phone).
+ * (The read-only switch lives in System.)
+ */
 export function AnnounceTab({
   announcement,
   semesters,
@@ -23,33 +33,19 @@ export function AnnounceTab({
   notices: NoticeAdminRow[];
 }) {
   return (
-    <div className="flex max-w-2xl flex-col gap-5">
-      <Card title="Banner" hint="Shown across the top of every signed-in page until you clear it.">
-        <BannerForm announcement={announcement} />
-      </Card>
-      <Card title="Popup" hint="Opens once for each person in its audience until they dismiss it; never on sign-in, the front page or admin. One live at a time.">
+    <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="flex min-w-0 flex-col gap-4">
+        <BannerCard announcement={announcement} />
         <NoticesSection notices={notices} />
-      </Card>
-      <Card title="Email" hint="Sent from the site's address; replies come to you.">
+      </div>
+      <Card title="Email" tip="A broadcast, sent from the site's address; replies come to you.">
         <EmailForm semesters={semesters} people={people} />
       </Card>
     </div>
   );
 }
 
-function Card({ title, hint, children }: { title: string; hint: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-3 rounded-xl border border-line bg-paper p-4">
-      <div>
-        <h3 className="font-bold">{title}</h3>
-        <p className="text-sm text-ink-3">{hint}</p>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function BannerForm({ announcement }: { announcement: Announcement }) {
+function BannerCard({ announcement }: { announcement: Announcement }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [draft, setDraft] = useState<Announcement>(announcement);
@@ -63,45 +59,47 @@ function BannerForm({ announcement }: { announcement: Announcement }) {
     });
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-sm">
+    <Card title="Banner" tip="Shown across the top of every signed-in page until you clear it." actions={<Pill tone={announcement.active ? "good" : "muted"}>{announcement.active ? "Live" : "Off"}</Pill>}>
+      <div className="grid items-start gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
+        <label className={FIELD_LABEL}>
+          Message
+          <textarea className={TEXTAREA} rows={3} value={draft.message} onChange={(e) => setDraft({ ...draft, message: e.target.value })} placeholder="Spring listings open Monday…" />
+        </label>
+        <label className={FIELD_LABEL}>
           Style
-          <select className="field w-36" value={draft.style} onChange={(e) => setDraft({ ...draft, style: e.target.value as Announcement["style"] })}>
+          <select className={SELECT} value={draft.style} onChange={(e) => setDraft({ ...draft, style: e.target.value as Announcement["style"] })}>
             <option value="info">Info</option>
             <option value="warning">Warning</option>
             <option value="success">Success</option>
           </select>
         </label>
-        <p className="pb-2 text-sm text-ink-2">{announcement.active ? "A banner is up now." : "No banner is up."}</p>
       </div>
-      <label className="flex flex-col gap-1 text-sm">
-        Message
-        <textarea className="field" rows={3} value={draft.message} onChange={(e) => setDraft({ ...draft, message: e.target.value })} placeholder="Spring listings open Monday…" />
-      </label>
       {draft.message && (
         <div className="overflow-hidden rounded-lg border border-line">
           <AnnouncementBanner key={draft.message + draft.style} announcement={{ ...draft, active: true }} />
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className="btn-primary" disabled={pending || !draft.message.trim()} onClick={() => save({ ...draft, active: true })}>
+        <button type="button" className={BTN_PRIMARY} disabled={pending || !draft.message.trim()} onClick={() => save({ ...draft, active: true })}>
           Publish
         </button>
-        <button type="button" className="btn-secondary" disabled={pending || !announcement.active} onClick={() => confirm("Clear the banner?") && save({ active: false, message: "", style: "info" })}>
+        <button type="button" className={BTN} disabled={pending || !announcement.active} onClick={() => confirm("Clear the banner?") && save({ active: false, message: "", style: "info" })}>
           Clear
         </button>
         {note && (
-          <span role="status" className="text-sm text-ink-2">
+          <span role="status" className={MUTED}>
             {note}
           </span>
         )}
       </div>
-    </div>
+    </Card>
   );
 }
 
-/** The read-only switch, for a migration or an outage: out of the way, but open by itself while it is on. */
+/**
+ * The read-only switch, for a migration or an outage: its state as a pill,
+ * the message students get, and the switch itself.
+ */
 export function Maintenance({ readOnly }: { readOnly: ReadOnly }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -109,46 +107,44 @@ export function Maintenance({ readOnly }: { readOnly: ReadOnly }) {
   const [note, setNote] = useState<string | null>(null);
 
   return (
-    <details open={readOnly.active} className="rounded-xl border border-line bg-paper p-4 [&_summary::-webkit-details-marker]:hidden">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-bold">
-        Maintenance
-        <span className={`text-sm font-normal ${readOnly.active ? "rounded-full bg-error-tint px-2 text-error-ink" : "text-ink-3"}`}>{readOnly.active ? "Read-only is on" : "Read-only switch"}</span>
-      </summary>
-      <div className="mt-3 flex flex-col gap-3">
-        <p className="text-sm text-ink-2">While on, every write (posting, editing, photos, status, account deletion) is refused with this message. Reading and signing in keep working.</p>
-        <label className="flex items-center gap-2 text-sm">
+    <Card title="Read-only mode" tip="For a migration or an outage." actions={<Pill tone={readOnly.active ? "bad" : "muted"}>{readOnly.active ? "On" : "Off"}</Pill>}>
+      <p className={MUTED}>While on, every write (posting, editing, photos, status, account deletion) is refused with this message. Reading and signing in keep working.</p>
+      <label className={FIELD_LABEL}>
+        Message
+        <input className={FIELD} placeholder="The site is read-only while it moves." value={ro.message} onChange={(e) => setRo({ ...ro, message: e.target.value })} />
+      </label>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <label className={CHOICE}>
           <input type="checkbox" className="h-4 w-4" checked={ro.active} onChange={(e) => setRo({ ...ro, active: e.target.checked })} />
           Site is read-only
         </label>
-        <input className="field" placeholder="The site is read-only while it moves." value={ro.message} onChange={(e) => setRo({ ...ro, message: e.target.value })} />
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="btn-secondary"
-            disabled={pending}
-            onClick={() =>
-              start(async () => {
-                const r = await adminSetReadOnly(ro.active, ro.message);
-                setNote(r.ok ? (ro.active ? "Read-only is on." : "Read-only is off.") : r.error);
-                if (r.ok) router.refresh();
-              })
-            }
-          >
-            Save switch
-          </button>
-          {note && (
-            <span role="status" className="text-sm text-ink-2">
-              {note}
-            </span>
-          )}
-        </div>
+        <button
+          type="button"
+          className={BTN}
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              const r = await adminSetReadOnly(ro.active, ro.message);
+              setNote(r.ok ? (ro.active ? "Read-only is on." : "Read-only is off.") : r.error);
+              if (r.ok) router.refresh();
+            })
+          }
+        >
+          Save switch
+        </button>
+        {note && (
+          <span role="status" className={MUTED}>
+            {note}
+          </span>
+        )}
       </div>
-    </details>
+    </Card>
   );
 }
 
 /** A broadcast: to posters on the board, every account, posters in a semester, people yet to answer the survey, or named people. */
 function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people: PersonDto[] }) {
+  const bodyId = useId();
   const [kind, setKind] = useState<Audience["kind"]>("all");
   const [code, setCode] = useState(semesters.find((s) => s.active)?.code ?? "");
   const [ids, setIds] = useState<Set<string>>(new Set());
@@ -170,7 +166,7 @@ function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people:
 
   return (
     <form
-      className="flex flex-col gap-4"
+      className="flex flex-col gap-3"
       onSubmit={(e) => {
         e.preventDefault();
         if (!confirm(`Send to ${count ?? "?"} people?`)) return;
@@ -184,18 +180,20 @@ function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people:
         });
       }}
     >
-      <fieldset className="flex flex-col gap-2 text-sm">
-        <legend className="font-bold">To</legend>
-        <label className="flex items-center gap-2">
+      <fieldset className="flex flex-col">
+        <legend className="pb-1 text-xs text-ink-3">To</legend>
+        <label className={CHOICE}>
           <input type="radio" name="kind" checked={kind === "all"} onChange={() => setKind("all")} /> Everyone with a listing on the board
         </label>
-        <label className="flex items-center gap-2">
+        <label className={CHOICE}>
           <input type="radio" name="kind" checked={kind === "accounts"} onChange={() => setKind("accounts")} /> Every account, with or without a listing
         </label>
-        <label className="flex items-center gap-2">
-          <input type="radio" name="kind" checked={kind === "semester"} onChange={() => setKind("semester")} /> Every poster in a semester
+        <div className="flex flex-wrap items-center gap-x-3">
+          <label className={CHOICE}>
+            <input type="radio" name="kind" checked={kind === "semester"} onChange={() => setKind("semester")} /> Every poster in a semester
+          </label>
           {kind === "semester" && (
-            <select className="field w-44 py-1" value={code} onChange={(e) => setCode(e.target.value)}>
+            <select aria-label="Semester" className={`${SELECT} sm:w-44`} value={code} onChange={(e) => setCode(e.target.value)}>
               {semesters.map((s) => (
                 <option key={s.code} value={s.code}>
                   {s.name}
@@ -203,19 +201,20 @@ function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people:
               ))}
             </select>
           )}
-        </label>
-        <label className="flex items-center gap-2">
+        </div>
+        <label className={CHOICE}>
           <input type="radio" name="kind" checked={kind === "survey"} onChange={() => setKind("survey")} /> Everyone who hasn&apos;t answered the survey
         </label>
-        <label className="flex items-center gap-2">
+        <label className={CHOICE}>
           <input type="radio" name="kind" checked={kind === "individual"} onChange={() => setKind("individual")} /> Named people
         </label>
         {kind === "individual" && (
-          <div className="grid max-h-48 grid-cols-1 gap-1 overflow-y-auto rounded-lg border border-line bg-paper p-2 sm:grid-cols-2">
+          <div className="grid max-h-56 grid-cols-1 gap-x-3 overflow-y-auto rounded-lg border border-line bg-paper px-3 py-1 sm:grid-cols-2">
             {people.map((p) => (
-              <label key={p.id} className="flex items-center gap-2 text-xs">
+              <label key={p.id} className={`${CHOICE} min-w-0`}>
                 <input
                   type="checkbox"
+                  className="shrink-0"
                   checked={ids.has(p.id)}
                   onChange={(e) => {
                     const next = new Set(ids);
@@ -224,25 +223,35 @@ function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people:
                     setIds(next);
                   }}
                 />
-                {p.name ? `${p.name} · ${p.email}` : p.email}
+                <span className="truncate">{p.name ? `${p.name} · ${p.email}` : p.email}</span>
               </label>
             ))}
           </div>
         )}
-        <p className="text-xs text-ink-3">{count === null ? "Counting…" : `${count} recipient${count === 1 ? "" : "s"}. Banned people and anyone marked "no email" are never included.`}</p>
+        <p className={`${MUTED} pt-2`}>
+          {count === null ? (
+            "Counting…"
+          ) : (
+            <>
+              <span className="font-bold text-ink tabular-nums">{count}</span> recipient{count === 1 ? "" : "s"}. Banned people and anyone marked &quot;no email&quot; are never included.
+            </>
+          )}
+        </p>
       </fieldset>
-      <label className="flex flex-col gap-1 text-sm">
+      <label className={FIELD_LABEL}>
         Subject
-        <input className="field" value={subject} onChange={(e) => setSubject(e.target.value)} required maxLength={150} />
+        <input className={FIELD} value={subject} onChange={(e) => setSubject(e.target.value)} required maxLength={150} />
       </label>
-      <label className="flex flex-col gap-1 text-sm">
-        Message <span className="text-xs text-ink-3">{"{name}"} is the person&apos;s name; without it a greeting is added. {"{survey}"} is their own survey link. Blank lines separate paragraphs. The sign-off is added for you.</span>
-        <textarea className="field" rows={8} value={body} onChange={(e) => setBody(e.target.value)} required maxLength={10000} />
-      </label>
-      <button type="submit" className="btn-primary self-start" disabled={pending || !subject.trim() || !body.trim() || !count}>
+      <div className={FIELD_LABEL}>
+        <Tip label="About this field" text="{name} is the person's name; without it a greeting is added. {survey} is their own survey link. Blank lines separate paragraphs. The sign-off is added for you." className="self-start">
+          <label htmlFor={bodyId}>Message</label>
+        </Tip>
+        <textarea id={bodyId} className={TEXTAREA} rows={8} value={body} onChange={(e) => setBody(e.target.value)} required maxLength={10000} />
+      </div>
+      <button type="submit" className={`${BTN_PRIMARY} self-start`} disabled={pending || !subject.trim() || !body.trim() || !count}>
         {pending ? "Sending…" : "Send"}
       </button>
-      {note && <p className="text-sm text-ink-2">{note}</p>}
+      {note && <p className={MUTED}>{note}</p>}
     </form>
   );
 }

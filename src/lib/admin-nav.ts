@@ -1,7 +1,8 @@
 /**
- * The admin's sections, grouped. One array drives the desktop sidebar, the
- * phone picker and the quick-jump box, so a new section is one line here
- * plus its page under src/app/(app)/admin/. Pure; safe on both sides.
+ * The admin's sections, grouped. One array drives the group tabs, the row of
+ * section pills under them, each page's title and the quick-jump box, so a
+ * new section is one line here plus its page under src/app/(app)/admin/.
+ * Pure; safe on both sides.
  */
 
 export interface AdminNavItem {
@@ -10,6 +11,8 @@ export interface AdminNavItem {
   label: string;
   /** Extra words the quick-jump box matches ("banner" finds Announce). */
   keywords?: string;
+  /** The page's numbers follow the date range, so its header carries the range control. */
+  range?: boolean;
 }
 
 export interface AdminNavGroup {
@@ -19,12 +22,12 @@ export interface AdminNavGroup {
 }
 
 export const ADMIN_NAV: AdminNavGroup[] = [
-  { id: "overview", label: "Overview", items: [{ id: "overview", href: "/admin", label: "Dashboard", keywords: "overview stats metrics funnel activity numbers" }] },
+  { id: "overview", label: "Overview", items: [{ id: "overview", href: "/admin", label: "Overview", keywords: "dashboard stats metrics funnel activity numbers", range: true }] },
   {
     id: "people",
     label: "People",
     items: [
-      { id: "people", href: "/admin/people", label: "People", keywords: "accounts users ban delete stop email" },
+      { id: "people", href: "/admin/people", label: "People", keywords: "accounts users ban delete stop email", range: true },
       { id: "requests", href: "/admin/requests", label: "Requests", keywords: "access school approve" },
     ],
   },
@@ -32,7 +35,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     id: "listings",
     label: "Listings",
     items: [
-      { id: "listings", href: "/admin/listings", label: "All listings", keywords: "posts supply demand attention outcomes ended" },
+      { id: "listings", href: "/admin/listings", label: "All listings", keywords: "posts supply demand attention outcomes ended", range: true },
       { id: "semesters", href: "/admin/semesters", label: "Semesters", keywords: "archive ask posters" },
       { id: "photos", href: "/admin/photos", label: "Photos", keywords: "images orphans" },
     ],
@@ -41,9 +44,9 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     id: "comms",
     label: "Comms",
     items: [
-      { id: "announce", href: "/admin/announce", label: "Announce", keywords: "banner popup notice broadcast email" },
-      { id: "mail", href: "/admin/mail", label: "Mail", keywords: "one-off email message" },
-      { id: "digest", href: "/admin/digest", label: "Digest", keywords: "weekly saved search alerts" },
+      { id: "announce", href: "/admin/announce", label: "Announce", keywords: "banner popup notice broadcast email", range: true },
+      { id: "mail", href: "/admin/mail", label: "Mail", keywords: "one-off email message", range: true },
+      { id: "digest", href: "/admin/digest", label: "Digest", keywords: "weekly saved search alerts", range: true },
       { id: "survey", href: "/admin/survey", label: "Survey", keywords: "feedback" },
     ],
   },

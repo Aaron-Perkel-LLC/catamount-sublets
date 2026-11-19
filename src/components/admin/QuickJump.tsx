@@ -7,6 +7,7 @@ import { ADMIN_NAV } from "@/lib/admin-nav";
 import { adminQuickFind } from "@/server/actions/admin";
 import type { QuickFind } from "@/server/services/admin";
 import { goAdmin } from "./go";
+import { DIALOG } from "./ui";
 
 type Hit = { kind: "section"; key: string; label: string; detail: string; href: string } | { kind: "listing"; key: string; label: string; detail: string; id: number } | { kind: "person"; key: string; label: string; detail: string; id: string };
 
@@ -97,15 +98,21 @@ export function QuickJump({ href, openPost }: { href: (p: string) => string; ope
 
   return (
     <>
-      <button type="button" onClick={show} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-line bg-paper px-3 text-sm text-ink-2 hover:text-lake" aria-keyshortcuts="Meta+K Control+K /">
-        <Search className="h-4 w-4" aria-hidden />
-        <span>Find</span>
-        <kbd className="hidden rounded border border-line px-1 text-xs text-ink-3 md:inline">/</kbd>
+      <button
+        type="button"
+        onClick={show}
+        aria-label="Find a person, listing or page"
+        aria-keyshortcuts="Meta+K Control+K /"
+        className="inline-flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-line bg-paper text-[13px] text-ink-3 hover:border-lake hover:text-lake md:h-8 md:w-44 md:justify-start md:px-2.5"
+      >
+        <Search className="h-4 w-4 md:h-3.5 md:w-3.5" aria-hidden />
+        <span className="hidden md:inline">Find…</span>
+        <kbd className="ml-auto hidden rounded border border-line px-1 font-sans text-[11px] text-ink-3 md:inline">/</kbd>
       </button>
       <dialog
         ref={dialog}
         aria-label="Find in admin"
-        className="m-auto w-[min(36rem,calc(100vw-2rem))] rounded-xl border border-line bg-paper p-0 text-ink shadow-xl backdrop:bg-ink/60 max-md:mt-4"
+        className={`${DIALOG} max-md:mt-4`}
         onClick={(e) => e.target === dialog.current && dialog.current?.close()}
       >
         <div className="flex flex-col">

@@ -1,6 +1,10 @@
 import { Maintenance } from "@/components/admin/AnnounceTab";
+import { Card } from "@/components/admin/Card";
+import { DataTable, Num } from "@/components/admin/DataTable";
 import { StorageReadout } from "@/components/admin/ImagesTab";
-import { Panel, ScrollTable } from "@/components/admin/Panel";
+import { Pill } from "@/components/admin/Pill";
+import { Tip } from "@/components/admin/Tip";
+import { MUTED } from "@/components/admin/ui";
 import { getDb } from "@/db";
 import { formatBytes } from "@/lib/format";
 import { shortDate } from "@/lib/dates";
@@ -22,8 +26,17 @@ const clock = (iso: string) => {
   const d = new Date(iso);
   return `${shortDate(d)}, ${d.toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" })}`;
 };
+/** A run's summary as "sent 3 · empty 1", noughts and blanks left out. */
+const facts = (summary: Record<string, unknown>) =>
+  Object.entries(summary)
+    .filter(([, v]) => v !== 0 && v !== false && v !== "")
+    .map(([k, v]) => `${k} ${v}`);
 
-/** Running the site: storage against the plan's caps, the read-only switch, the crons' last runs, and the database. */
+/**
+ * Running the site, as two columns of cards on a wide screen: storage
+ * against the plan's caps and the crons' last runs, beside the read-only
+ * switch and the database. What a cron does and when is behind its ⓘ.
+ */
 export default async function AdminSystem() {
   await requireAdminPage("/admin/system");
   const db = await getDb();
@@ -31,62 +44,81 @@ export default async function AdminSystem() {
   const dbPct = Math.min(100, Math.round((tables.databaseBytes / DB_CAP) * 100));
 
   return (
-    <div className="flex flex-col gap-5">
-      <Panel title="Photo storage" hint="Blob's allowances, from the database's own numbers.">
+    <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="flex min-w-0 flex-col gap-4">
         <StorageReadout s={stats.storage} />
-      </Panel>
 
-      <Maintenance readOnly={readOnly} />
-
-      <Panel title="Crons" hint="Each one's last run, recorded by the run itself (Vercel keeps its logs only an hour). Times are Eastern.">
-        <ul className="flex flex-col divide-y divide-line-light text-sm">
-          {CRON_NAMES.map((name) => {
-            const run = runs[name];
-            const facts = run ? Object.entries(run.summary).filter(([, v]) => v !== 0 && v !== false && v !== "") : [];
-            return (
-              <li key={name} className="flex flex-col gap-0.5 py-2">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                  <span className="font-bold">{name}</span>
-                  <span className={`text-sm ${run && !run.ok ? "text-error-ink" : "text-ink-2"}`}>{run ? `${run.ok ? "Ran" : "Failed"} ${clock(run.at)}` : "Not recorded yet"}</span>
-                </div>
-                <span className="text-xs text-ink-3">
-                  {CRON_WHAT[name].when}. {CRON_WHAT[name].what}
-                </span>
-                {facts.length > 0 && <span className="text-xs text-ink-2 tabular-nums">{facts.map(([k, v]) => `${k} ${v}`).join(" · ")}</span>}
-                {[
-                  ["Last did something", runs[`${name}:acted`]],
-                  ["Last failed", runs[`${name}:failed`]],
-                ].map(([label, r]) =>
-                  r && typeof r === "object" && r.at !== run?.at ? (
-                    <span key={String(label)} className={`text-xs ${label === "Last failed" ? "text-error-ink" : "text-ink-2"}`}>
-                      {String(label)} {clock(r.at)}
-                      {Object.entries(r.summary)
-                        .filter(([, v]) => v !== 0 && v !== false && v !== "")
-                        .map(([k, v]) => ` · ${k} ${v}`)
-                        .join("")}
+        <Card flush title="Crons" tip="Each one's last run, recorded by the run itself (Vercel keeps its logs only an hour). Times are Eastern.">
+          <ul>
+            {CRON_NAMES.map((name) => {
+              const run = runs[name];
+              const did = run ? facts(run.summary) : [];
+              return (
+                <li key={name} className="flex flex-col gap-1 border-t border-line-light px-4 py-3 last:pb-0">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                    <span className="flex items-center gap-2">
+                      <Tip text={`${CRON_WHAT[name].when}. ${CRON_WHAT[name].what}`} className="text-[13px] font-bold">
+                        {name}
+                      </Tip>
+                      {run ? <Pill tone={run.ok ? "good" : "bad"}>{run.ok ? "Ran" : "Failed"}</Pill> : <Pill>Not recorded</Pill>}
                     </span>
-                  ) : null,
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </Panel>
+                    {run && <span className={`${MUTED} tabular-nums`}>{clock(run.at)}</span>}
+                  </div>
+                  {did.length > 0 && <span className="text-xs text-ink-3 tabular-nums">{did.join(" · ")}</span>}
+                  {[
+                    ["Last did something", runs[`${name}:acted`]],
+                    ["Last failed", runs[`${name}:failed`]],
+                  ].map(([label, r]) =>
+                    r && typeof r === "object" && r.at !== run?.at ? (
+                      <span key={String(label)} className={`text-xs tabular-nums ${label === "Last failed" ? "text-error-ink" : "text-ink-3"}`}>
+                        {[`${String(label)} ${clock(r.at)}`, ...facts(r.summary)].join(" · ")}
+                      </span>
+                    ) : null,
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      </div>
 
-      <Panel title="Database" hint={`${formatBytes(tables.databaseBytes)} of the ${formatBytes(DB_CAP)} the plan allows (${dbPct}%).`}>
-        <ScrollTable>
-          <table className="w-full max-w-sm text-sm">
-            <tbody className="tabular-nums">
-              {tables.rows.map((t) => (
-                <tr key={t.table} className="border-t border-line-light first:border-t-0">
-                  <td className="py-1 pr-3 text-ink-2">{t.table.replaceAll("_", " ")}</td>
-                  <td className="text-right">{t.n.toLocaleString("en-US")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollTable>
-      </Panel>
+      <div className="flex min-w-0 flex-col gap-4">
+        <Maintenance readOnly={readOnly} />
+
+        <Card
+          flush
+          title="Database"
+          tip={`${formatBytes(tables.databaseBytes)} of the ${formatBytes(DB_CAP)} the plan allows (${dbPct}%).`}
+          actions={
+            <span className={`${MUTED} tabular-nums`}>
+              <span className="text-sm font-bold text-ink">{formatBytes(tables.databaseBytes)}</span> / {formatBytes(DB_CAP)}
+            </span>
+          }
+        >
+          <DataTable
+            label="Rows per table"
+            rows={tables.rows}
+            rowKey={(t) => t.table}
+            columns={[
+              {
+                key: "table",
+                header: "Table",
+                primary: true,
+                // On a phone the count rides on the name's line (a labelled "Rows" line per table would double the list), and the Rows cell is dropped.
+                cell: (t) => (
+                  <span className="flex items-baseline justify-between gap-4">
+                    {t.table.replaceAll("_", " ")}
+                    <span className="md:hidden">
+                      <Num n={t.n} />
+                    </span>
+                  </span>
+                ),
+              },
+              { key: "rows", header: "Rows", numeric: true, className: "max-md:hidden", cell: (t) => <Num n={t.n} /> },
+            ]}
+          />
+        </Card>
+      </div>
     </div>
   );
 }

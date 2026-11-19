@@ -8,9 +8,10 @@ import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } f
  * keyboard focus, toggled by a tap (the ⓘ's hit area is 44 px). The bubble
  * is nudged sideways so it never leaves the screen. `quiet` (dense lists)
  * keeps the ⓘ out of sight until the label is pointed at, where there is a
- * pointer to point with; on a touch screen it always shows.
+ * pointer to point with; on a touch screen it always shows. `label` names
+ * the ⓘ for a screen reader where it isn't about a number (a form hint).
  */
-export function Tip({ text, children, className = "", quiet = false }: { text: string; children: ReactNode; className?: string; quiet?: boolean }) {
+export function Tip({ text, children, className = "", quiet = false, label = "What this counts" }: { text: string; children: ReactNode; className?: string; quiet?: boolean; label?: string }) {
   const id = useId();
   const wrap = useRef<HTMLSpanElement>(null);
   const bubble = useRef<HTMLSpanElement>(null);
@@ -55,7 +56,7 @@ export function Tip({ text, children, className = "", quiet = false }: { text: s
       {children}
       <button
         type="button"
-        aria-label="What this counts"
+        aria-label={label}
         aria-describedby={open ? id : undefined}
         aria-expanded={open}
         onClick={() => setPinned((p) => !p)}

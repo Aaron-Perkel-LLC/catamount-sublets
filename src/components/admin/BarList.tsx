@@ -1,26 +1,26 @@
-/** A titled list of counts with a bar each; `pct` adds the share after the count. `wide` gives long labels room. */
-export function BarList({ title, rows, wide = false, empty = "Nothing yet." }: { title: string; rows: { label: string; n: number; pct?: number }[]; wide?: boolean; empty?: string }) {
+import { Empty } from "./Card";
+import { num, NUM, ZERO } from "./ui";
+
+/** Counts as rows with a thin bar under each, as long as the row's share of the biggest. `pct` adds the share after the count. */
+export function BarList({ rows, empty = "Nothing yet." }: { rows: { label: string; n: number; pct?: number }[]; empty?: string }) {
   const max = Math.max(1, ...rows.map((r) => r.n));
+  if (rows.length === 0) return <Empty>{empty}</Empty>;
   return (
-    <section className="rounded-xl border border-line bg-paper p-4 text-sm">
-      <h3 className="mb-2 font-bold">{title}</h3>
-      {rows.length === 0 ? (
-        <p className="text-ink-3">{empty}</p>
-      ) : (
-        <ul className="flex flex-col gap-1.5">
-          {rows.map((r) => (
-            <li key={r.label} className={`grid items-center gap-2 ${wide ? "grid-cols-[9rem_1fr] sm:grid-cols-[14rem_1fr]" : "grid-cols-[6.5rem_1fr]"}`}>
-              {/* Wide lists carry whole sentences, so they wrap; the short ones truncate as before. */}
-              <span className={wide ? "leading-snug text-ink-2" : "truncate text-ink-2"}>{r.label}</span>
-              <span className="flex items-center gap-2">
-                <span className="h-3 rounded-r bg-chart-lake" style={{ width: `${(r.n / max) * 100}%`, minWidth: 2 }} aria-hidden />
-                <span className="font-bold tabular-nums">{r.n}</span>
-                {r.pct !== undefined && <span className="text-xs tabular-nums text-ink-3">{r.pct}%</span>}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+    <ul className="flex flex-col gap-2.5">
+      {rows.map((r) => (
+        <li key={r.label} className="flex flex-col gap-1">
+          <div className="flex items-baseline justify-between gap-3 text-[13px]">
+            <span className="leading-snug text-ink-2">{r.label}</span>
+            <span className="shrink-0">
+              <span className={r.n === 0 ? ZERO : NUM}>{num(r.n)}</span>
+              {r.pct !== undefined && <span className="ml-1.5 text-xs text-ink-3 tabular-nums">{r.pct}%</span>}
+            </span>
+          </div>
+          <div className="h-1 rounded-full bg-line-light">
+            <div className="h-full rounded-full bg-chart-lake" style={{ width: `${(r.n / max) * 100}%`, minWidth: r.n > 0 ? 3 : 0 }} />
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }

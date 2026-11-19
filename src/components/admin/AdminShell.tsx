@@ -1,14 +1,19 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { ListingViewProvider, useListingView, type Viewer } from "@/components/listings/listing-view";
 import { ADMIN_NAV, type AdminNavGroup, type AdminNavItem, navItemFor } from "@/lib/admin-nav";
+import { resolveRange } from "@/lib/admin-range";
+import { dayLabel } from "@/lib/chart";
 import { adminLoadListing } from "@/server/actions/admin";
 import { AdminPostActions } from "./AdminPostActions";
+import { PageHeader } from "./PageHeader";
+import { CountBadge } from "./Pill";
 import { QuickJump } from "./QuickJump";
+import { RangeControl } from "./RangeControl";
+import { Tip } from "./Tip";
 
 interface AdminApi {
   /** Opens a listing in the admin's listing view, from any section. */
@@ -25,49 +30,11 @@ export function useAdmin(): AdminApi {
   return api;
 }
 
-const COLLAPSED_KEY = "admin-nav-collapsed";
-const COLLAPSED_EVENT = "admin-nav-collapsed";
-
-/** The folded sidebar groups, kept in this browser only (and none folded where storage is unavailable). */
-const collapsedStore = {
-  subscribe(cb: () => void) {
-    window.addEventListener(COLLAPSED_EVENT, cb);
-    window.addEventListener("storage", cb);
-    return () => {
-      window.removeEventListener(COLLAPSED_EVENT, cb);
-      window.removeEventListener("storage", cb);
-    };
-  },
-  read(): string {
-    try {
-      return localStorage.getItem(COLLAPSED_KEY) ?? "[]";
-    } catch {
-      return "[]";
-    }
-  },
-  write(ids: string[]) {
-    try {
-      localStorage.setItem(COLLAPSED_KEY, JSON.stringify(ids));
-    } catch {
-      /* not remembered */
-    }
-    window.dispatchEvent(new Event(COLLAPSED_EVENT));
-  },
-};
-
-function parseCollapsed(raw: string): Set<string> {
-  try {
-    const v = JSON.parse(raw) as unknown;
-    return new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
-  } catch {
-    return new Set();
-  }
-}
-
 /**
- * Every admin page's frame: the sections grouped (one config, src/lib/admin-nav.ts),
- * as a sidebar on a desktop and a group-then-section picker on a phone, the
- * quick-jump box, and the one listing view any section opens a post in.
+ * Every admin page's frame, from one config (src/lib/admin-nav.ts): the page's
+ * title with Find and the date range on one line, the groups as a tab row,
+ * the open group's sections as small pills under it (both rows scroll
+ * sideways on a phone), and the one listing view any section opens a post in.
  * `#post:<id>` on any admin page opens that listing (the listing notices'
  * links, through /admin's old-link redirect).
  */
@@ -127,152 +94,94 @@ function Shell({ waiting, children }: { waiting: number; children: ReactNode }) 
   }, [openPost, pathname]);
 
   const api = useMemo(() => ({ openPost, href }), [openPost, href]);
-  const badge = (item: AdminNavItem) => (item.id === "requests" && waiting > 0 ? waiting : null);
+  const badge = (item: AdminNavItem) => (item.id === "requests" ? waiting : 0);
+  // The range is whole Eastern days, so the server's render and the browser's agree except across midnight.
+  const range = useMemo(() => (current?.item.range ? resolveRange({ range: params.get("range") ?? undefined, from: params.get("from") ?? undefined, to: params.get("to") ?? undefined }) : null), [current, params]);
 
   return (
     <AdminCtx.Provider value={api}>
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold">Admin</h1>
-          <QuickJump href={href} openPost={openPost} />
+      <div className="flex flex-col gap-4 text-sm md:gap-5">
+        <PageHeader title={current?.item.label ?? "Admin"} find={<QuickJump href={href} openPost={openPost} />} range={range && <RangeControl range={range} pathname={pathname} params={new URLSearchParams(params.toString())} />} />
+        <div className="-mt-1 flex flex-col gap-3">
+          <GroupTabs current={current} href={href} badge={badge} caption={range && <RangeCaption range={range} />} />
+          {current && current.group.items.length > 1 && <SectionPills group={current.group} current={current.item.id} href={href} badge={badge} />}
+          {range && (
+            <div className="md:hidden">
+              <RangeCaption range={range} />
+            </div>
+          )}
         </div>
-        <PhoneNav current={current} href={href} badge={badge} />
-        <div className="flex flex-col gap-4 md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:items-start md:gap-8">
-          <SideNav current={current?.item.id ?? null} href={href} badge={badge} />
-          <div className="flex min-w-0 flex-col gap-4">
-            {current && (
-              <h2 className="sr-only text-xl font-bold md:not-sr-only">
-                {current.group.items.length > 1 || current.group.label !== current.item.label ? current.item.label : current.group.label}
-              </h2>
-            )}
-            {missing && (
-              <p role="status" className="text-sm text-error-ink">
-                {missing}
-              </p>
-            )}
-            {children}
-          </div>
-        </div>
+        {missing && (
+          <p role="status" className="text-sm text-error-ink">
+            {missing}
+          </p>
+        )}
+        {children}
       </div>
     </AdminCtx.Provider>
   );
 }
 
-type NavProps = { href: (p: string) => string; badge: (item: AdminNavItem) => number | null };
+type NavProps = { href: (p: string) => string; badge: (item: AdminNavItem) => number };
 
-function Badge({ n }: { n: number | null }) {
-  return n ? (
-    <span className="ml-1.5 rounded-full bg-maple px-1.5 text-xs text-paper" aria-label={`${n} waiting`}>
-      {n}
-    </span>
-  ) : null;
+const span = (a: string, b: string) => (a === b ? dayLabel(a) : `${dayLabel(a)} – ${dayLabel(b)}`);
+
+/** The range in one short muted line; what "vs" means is behind its ⓘ. */
+function RangeCaption({ range }: { range: ReturnType<typeof resolveRange> }) {
+  const text = range.key === "all" ? "All time" : range.key === "cutover" ? `Since ${dayLabel(range.from)}` : range.prev ? `${span(range.from, range.to)} · vs ${span(range.prev.from, range.prev.to)}` : span(range.from, range.to);
+  return (
+    <Tip text={range.prev ? "Whole Eastern days. Every change is against the same number of days just before." : "Whole Eastern days. This range has nothing before it to compare with."} className="text-xs text-ink-3">
+      {text}
+    </Tip>
+  );
 }
 
-/** Desktop: the groups down the side, each one foldable (remembered in this browser only). */
-function SideNav({ current, href, badge }: NavProps & { current: string | null }) {
-  const raw = useSyncExternalStore(collapsedStore.subscribe, collapsedStore.read, () => "[]");
-  const collapsed = useMemo(() => parseCollapsed(raw), [raw]);
-  const toggle = (id: string) => {
-    const next = new Set(collapsed);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    collapsedStore.write([...next]);
-  };
-
-  const link = (item: AdminNavItem, label = item.label) => (
-    <Link
-      href={href(item.href)}
-      aria-current={current === item.id ? "page" : undefined}
-      className={`flex w-full items-center rounded-lg border-l-4 px-3 py-2 text-left text-sm font-bold ${current === item.id ? "border-maple bg-notice-tint text-lake" : "border-transparent text-ink-2 hover:bg-line-light hover:text-lake"}`}
-    >
-      {label}
-      <Badge n={badge(item)} />
-    </Link>
-  );
-
+/** The groups as a slim tab row: the current one underlined. A group's tab goes to its first section. */
+function GroupTabs({ current, href, badge, caption }: NavProps & { current: { group: AdminNavGroup; item: AdminNavItem } | null; caption: ReactNode }) {
   return (
-    <nav aria-label="Admin sections" className="hidden md:sticky md:top-4 md:block">
-      <ul className="flex flex-col gap-1">
-        {ADMIN_NAV.map((g) =>
-          g.items.length === 1 ? (
-            <li key={g.id}>{link(g.items[0], g.label)}</li>
-          ) : (
-            <li key={g.id} className="flex flex-col">
-              <button
-                type="button"
-                aria-expanded={!collapsed.has(g.id) || g.items.some((i) => i.id === current)}
-                onClick={() => toggle(g.id)}
-                className="flex items-center justify-between rounded-lg px-3 pt-2 pb-1 text-xs font-bold tracking-wide text-ink-3 uppercase hover:text-lake"
-              >
-                {g.label}
-                {g.items.some((i) => badge(i)) && collapsed.has(g.id) && <Badge n={g.items.reduce((t, i) => t + (badge(i) ?? 0), 0)} />}
-                <ChevronDown className={`ml-auto h-3.5 w-3.5 transition-transform ${collapsed.has(g.id) && !g.items.some((i) => i.id === current) ? "-rotate-90" : ""}`} aria-hidden />
-              </button>
-              {(!collapsed.has(g.id) || g.items.some((i) => i.id === current)) && (
-                <ul className="flex flex-col gap-0.5">
-                  {g.items.map((i) => (
-                    <li key={i.id}>{link(i)}</li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          ),
-        )}
-      </ul>
+    <nav aria-label="Admin sections" className="-mx-4 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0">
+      <div className="flex w-max items-center gap-5 md:w-auto">
+        {ADMIN_NAV.map((g) => {
+          const on = current?.group.id === g.id;
+          return (
+            <Link
+              key={g.id}
+              href={href(g.items[0].href)}
+              aria-current={on ? (current?.item.id === g.items[0].id ? "page" : "true") : undefined}
+              className={`-mb-px inline-flex h-11 items-center gap-1.5 border-b-2 text-[13px] whitespace-nowrap md:h-10 ${on ? "border-lake font-bold text-ink" : "border-transparent text-ink-3 hover:text-ink"}`}
+            >
+              {g.label}
+              <CountBadge n={g.items.reduce((t, i) => t + badge(i), 0)} label="waiting" />
+            </Link>
+          );
+        })}
+        {caption && <span className="ml-auto hidden md:block">{caption}</span>}
+      </div>
     </nav>
   );
 }
 
-/** Phone: the groups as a row of pills, then the open group's sections; every target at least 40 px tall. */
-function PhoneNav({ current, href, badge }: NavProps & { current: { group: AdminNavGroup; item: AdminNavItem } | null }) {
-  // The group picked here, until the page changes; then the current page's group.
-  const [picked, setPicked] = useState<{ on: string | undefined; id: string } | null>(null);
-  const groupId = picked && picked.on === current?.item.id ? picked.id : (current?.group.id ?? ADMIN_NAV[0].id);
-  const setGroupId = (id: string) => setPicked({ on: current?.item.id, id });
-  const group = ADMIN_NAV.find((g) => g.id === groupId) ?? ADMIN_NAV[0];
-  const pill = (on: boolean) => `inline-flex min-h-10 items-center rounded-full border px-3.5 text-sm font-bold whitespace-nowrap ${on ? "border-lake bg-lake text-paper" : "border-line bg-paper text-ink-2"}`;
-
+/** The open group's sections as small pills, when it has more than one. */
+function SectionPills({ group, current, href, badge }: NavProps & { group: AdminNavGroup; current: string }) {
   return (
-    <nav aria-label="Admin sections" className="flex flex-col gap-2 md:hidden">
-      <div className="-mx-4 overflow-x-auto px-4">
-        <ul className="flex w-max gap-1.5">
-          {ADMIN_NAV.map((g) => (
-            <li key={g.id}>
-              {g.items.length === 1 ? (
-                <Link href={href(g.items[0].href)} aria-current={current?.group.id === g.id ? "page" : undefined} className={pill(current?.group.id === g.id)}>
-                  {g.label}
-                </Link>
-              ) : (
-                <button type="button" aria-expanded={groupId === g.id} onClick={() => setGroupId(g.id)} className={pill(groupId === g.id)}>
-                  {g.label}
-                  <Badge n={g.items.reduce((t, i) => t + (badge(i) ?? 0), 0) || null} />
-                </button>
-              )}
+    <nav aria-label={`${group.label} sections`} className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+      <ul className="flex w-max items-center gap-1 md:w-auto">
+        {group.items.map((i) => {
+          const on = i.id === current;
+          return (
+            <li key={i.id}>
+              <Link
+                href={href(i.href)}
+                aria-current={on ? "page" : undefined}
+                className={`inline-flex h-11 items-center gap-1.5 rounded-full px-3 text-[13px] whitespace-nowrap md:h-7 ${on ? "bg-paper font-bold text-ink shadow-[0_1px_2px_rgb(28_35_40/0.1)]" : "text-ink-2 hover:bg-line-light hover:text-ink"}`}
+              >
+                {i.label}
+                <CountBadge n={badge(i)} label="waiting" />
+              </Link>
             </li>
-          ))}
-        </ul>
-      </div>
-      {group.items.length > 1 && (
-        <div className="-mx-4 overflow-x-auto px-4">
-          <ul className="flex w-max gap-1.5 border-b border-line pb-2">
-            {group.items.map((i) => {
-              const on = current?.item.id === i.id;
-              return (
-                <li key={i.id}>
-                  <Link
-                    href={href(i.href)}
-                    aria-current={on ? "page" : undefined}
-                    className={`inline-flex min-h-10 items-center rounded-lg px-3 text-sm whitespace-nowrap ${on ? "bg-notice-tint font-bold text-lake" : "text-ink-2"}`}
-                  >
-                    {i.label}
-                    <Badge n={badge(i)} />
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
+          );
+        })}
+      </ul>
     </nav>
   );
 }

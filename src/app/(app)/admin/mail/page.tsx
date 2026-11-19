@@ -1,16 +1,22 @@
+import { Card } from "@/components/admin/Card";
 import { CsvButton } from "@/components/admin/CsvButton";
+import { DataTable, Num } from "@/components/admin/DataTable";
 import { MailTab } from "@/components/admin/MailTab";
-import { Panel } from "@/components/admin/Panel";
-import { RangePicker } from "@/components/admin/RangePicker";
+import { MUTED, num } from "@/components/admin/ui";
 import { getDb } from "@/db";
-import { type AdminSearchParams, param, rangeDto } from "@/lib/admin-page";
+import { type AdminSearchParams, param } from "@/lib/admin-page";
 import { resolveRange } from "@/lib/admin-range";
 import { dayLabel } from "@/lib/chart";
 import { requireAdminPage } from "@/server/auth";
 import { mailNumbers } from "@/server/data/admin-metrics";
 import { recentAdminMessages } from "@/server/data/admin-messages";
 
-/** One email to one address, previewed before it goes, and how many went in the range. */
+/**
+ * One email to one address, previewed before it goes, and how many went in
+ * the range. On a wide screen the composer is the left column, with the
+ * range's numbers and then the history (MailTab orders it last) beside it;
+ * the second row takes whatever height the composer has over the numbers.
+ */
 export default async function AdminMail({ searchParams }: { searchParams: AdminSearchParams }) {
   await requireAdminPage("/admin/mail");
   const sp = await searchParams;
@@ -18,42 +24,45 @@ export default async function AdminMail({ searchParams }: { searchParams: AdminS
   const db = await getDb();
   const [history, counts] = await Promise.all([recentAdminMessages(db), mailNumbers(db, r)]);
   const totals = counts.reduce((t, c) => ({ sent: t.sent + c.sent, failed: t.failed + c.failed }), { sent: 0, failed: 0 });
+  const total = "text-sm font-bold tabular-nums";
   return (
-    <div className="flex flex-col gap-5">
+    <div className="grid items-start gap-4 lg:grid-cols-2 lg:grid-rows-[auto_1fr]">
       <MailTab history={history.map((m) => ({ ...m, createdAt: m.createdAt.toISOString() }))} />
-      <RangePicker range={rangeDto(r)} />
-      <Panel
+      <Card
+        flush
         title="Mail sent"
-        hint={`${totals.sent} sent, ${totals.failed} failed in the range: one-off emails and request replies (broadcasts are not stored).`}
+        tip="One-off emails and request replies in the range. Broadcasts are not stored, so they aren't counted."
         actions={
-          <CsvButton
-            name="admin-mail"
-            columns={[
-              { key: "day", label: r.bucket === "day" ? "day" : "week_of" },
-              { key: "sent", label: "sent" },
-              { key: "failed", label: "failed" },
-              { key: "pending", label: "pending" },
-            ]}
-            rows={counts}
-          />
+          <>
+            <span className={MUTED}>
+              <span className={`${total} text-ink`}>{num(totals.sent)}</span> sent · <span className={`${total} ${totals.failed ? "text-error-ink" : "text-ink"}`}>{num(totals.failed)}</span> failed
+            </span>
+            <CsvButton
+              name="admin-mail"
+              columns={[
+                { key: "day", label: r.bucket === "day" ? "day" : "week_of" },
+                { key: "sent", label: "sent" },
+                { key: "failed", label: "failed" },
+                { key: "pending", label: "pending" },
+              ]}
+              rows={counts}
+            />
+          </>
         }
       >
-        {counts.length === 0 ? (
-          <p className="text-sm text-ink-3">None in this range.</p>
-        ) : (
-          <ul className="flex flex-col divide-y divide-line-light text-sm tabular-nums">
-            {counts.map((c) => (
-              <li key={c.day} className="flex justify-between gap-3 py-1.5">
-                <span>{r.bucket === "day" ? dayLabel(c.day, true) : `Week of ${dayLabel(c.day)}`}</span>
-                <span>
-                  {c.sent} sent{c.failed ? `, ${c.failed} failed` : ""}
-                  {c.pending ? `, ${c.pending} pending` : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
+        <DataTable
+          label={r.bucket === "day" ? "Mail sent by day" : "Mail sent by week"}
+          rows={counts}
+          rowKey={(c) => c.day}
+          empty="None in this range."
+          columns={[
+            { key: "day", header: r.bucket === "day" ? "Day" : "Week", primary: true, cell: (c) => <span className="font-bold">{r.bucket === "day" ? dayLabel(c.day, true) : `Week of ${dayLabel(c.day)}`}</span> },
+            { key: "sent", header: "Sent", numeric: true, cell: (c) => <Num n={c.sent} /> },
+            { key: "failed", header: "Failed", numeric: true, cell: (c) => <Num n={c.failed} /> },
+            { key: "pending", header: "Pending", numeric: true, cell: (c) => <Num n={c.pending} /> },
+          ]}
+        />
+      </Card>
     </div>
   );
 }

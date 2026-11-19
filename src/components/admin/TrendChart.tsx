@@ -1,6 +1,7 @@
 "use client";
 
 import { type KeyboardEvent, type PointerEvent, useLayoutEffect, useRef, useState } from "react";
+import type { TrendPoint } from "@/lib/admin-trend";
 import { niceTicks } from "@/lib/chart";
 
 export interface TrendSeries {
@@ -12,12 +13,6 @@ export interface TrendSeries {
   values: (number | null)[];
 }
 
-export interface TrendPoint {
-  day: string;
-  when: string;
-  tick: string;
-}
-
 const TOP = 8;
 const AXIS_H = 24;
 const LEFT = 36;
@@ -25,8 +20,8 @@ const RIGHT = 8;
 const TIP_W = 184;
 
 /**
- * One chart: a soft area and, at most, a line over it, on hairline
- * gridlines with one y-axis. A crosshair snaps to the nearest point on
+ * The admin's one chart: soft areas and lines on hairline gridlines with one
+ * y-axis (series share a unit, or they are separate charts). A crosshair snaps to the nearest point on
  * hover, touch or the arrow keys and reads out every series there; the same
  * numbers are in the table under it.
  */
