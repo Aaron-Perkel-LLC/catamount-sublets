@@ -60,6 +60,17 @@ export async function requireUserOrThrow(): Promise<SessionUser> {
   return user;
 }
 
+/**
+ * For admin pages: sign-in first, then anyone but the admin goes to Browse.
+ * Every admin page calls it itself; the admin layout's check alone does not
+ * guard a page (layouts and pages render in parallel).
+ */
+export async function requireAdminPage(next: string): Promise<SessionUser> {
+  const user = await requireUser(next);
+  if (user.role !== "admin") redirect("/browse");
+  return user;
+}
+
 export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireUserOrThrow();
   if (user.role !== "admin") throw new ForbiddenError();

@@ -14,7 +14,7 @@ import {
   type ShareTarget,
 } from "@/lib/options";
 import { createHmac } from "node:crypto";
-import { actorKey, appSecret } from "@/lib/share";
+import { actorKey, appSecret, parseShareSlug, verifyShareToken } from "@/lib/share";
 import { publicListingWhere, signedOutAudienceWhere, visibleSemesterWhere } from "./visibility";
 
 /**
@@ -92,6 +92,10 @@ export function anonymousActorKey(ip: string, userAgent: string, at = new Date()
 export async function recordAnonymousView(db: DbOrTx, input: { listingId: number; source?: string | null; ip: string; userAgent: string }): Promise<RecordResult> {
   if (!Number.isInteger(input.listingId) || input.listingId <= 0 || !input.ip) return "invalid";
   const source = input.source && (EVENT_SOURCES as readonly string[]).includes(input.source) ? (input.source as EventSource) : null;
+  const now = new Date();
+  const key = anonymousActorKey(input.ip, input.userAgent, now);
+  // The limit before the listing, so whether a request is limited never says anything about the listing.
+  if (await anonymousLimited(db, key, now)) return "limited";
   const [listing] = await db
     .select({ semesterCode: listingSemesters.semesterCode })
     .from(listings)
@@ -99,14 +103,6 @@ export async function recordAnonymousView(db: DbOrTx, input: { listingId: number
     .where(and(eq(listings.id, input.listingId), publicListingWhere(), signedOutAudienceWhere()))
     .limit(1);
   if (!listing) return "invalid";
-
-  const now = new Date();
-  const key = anonymousActorKey(input.ip, input.userAgent, now);
-  const [{ n }] = await db
-    .select({ n: count() })
-    .from(listingEvents)
-    .where(and(eq(listingEvents.actorKey, key), gt(listingEvents.createdAt, new Date(now.getTime() - 60_000))));
-  if (n >= EVENTS_PER_MINUTE) return "limited";
 
   const type: EventType = "listing_open";
   const inserted = await db
@@ -120,6 +116,50 @@ export async function recordAnonymousView(db: DbOrTx, input: { listingId: number
       signedOut: true,
       dedupeKey: `${type}:${input.listingId}:${key}:${easternDate(now)}`,
     })
+    .onConflictDoNothing({ target: listingEvents.dedupeKey })
+    .returning({ id: listingEvents.id });
+  return inserted.length > 0 ? "stored" : "duplicate";
+}
+
+async function anonymousLimited(db: DbOrTx, key: string, now: Date): Promise<boolean> {
+  const [{ n }] = await db
+    .select({ n: count() })
+    .from(listingEvents)
+    .where(and(eq(listingEvents.actorKey, key), gt(listingEvents.createdAt, new Date(now.getTime() - 60_000))));
+  return n >= EVENTS_PER_MINUTE;
+}
+
+/**
+ * A signed-out visitor arriving by a share link: the same daily code, limit
+ * and Eastern-day dedupe as a signed-out view. Only for an open listing on
+ * the board that is either public, or reached through its own valid share
+ * slug (a students-only listing's share link still counts). The caller has
+ * dropped bots and answers the same whatever this returns.
+ */
+export async function recordAnonymousShareArrival(
+  db: DbOrTx,
+  input: { listingId: number; slug?: string | null; source?: string | null; ip: string; userAgent: string },
+): Promise<RecordResult> {
+  if (!Number.isInteger(input.listingId) || input.listingId <= 0 || !input.ip) return "invalid";
+  const source = input.source && (EVENT_SOURCES as readonly string[]).includes(input.source) ? (input.source as EventSource) : null;
+  const now = new Date();
+  const key = anonymousActorKey(input.ip, input.userAgent, now);
+  if (await anonymousLimited(db, key, now)) return "limited";
+  const [listing] = await db
+    .select({ semesterCode: listingSemesters.semesterCode, isPublic: sql<boolean>`${signedOutAudienceWhere()}`, legacyToken: listings.legacyShareToken })
+    .from(listings)
+    .leftJoin(listingSemesters, and(eq(listingSemesters.listingId, listings.id), eq(listingSemesters.position, 0)))
+    .where(and(eq(listings.id, input.listingId), publicListingWhere()))
+    .limit(1);
+  if (!listing) return "invalid";
+  const parsed = input.slug ? parseShareSlug(input.slug) : null;
+  const bySlug = parsed !== null && parsed.id === input.listingId && verifyShareToken(parsed.id, parsed.token, listing.legacyToken);
+  if (!listing.isPublic && !bySlug) return "invalid";
+
+  const type: EventType = "share_arrival";
+  const inserted = await db
+    .insert(listingEvents)
+    .values({ listingId: input.listingId, actorKey: key, semesterCode: listing.semesterCode, type, source, signedOut: true, dedupeKey: `${type}:${input.listingId}:${key}:${easternDate(now)}` })
     .onConflictDoNothing({ target: listingEvents.dedupeKey })
     .returning({ id: listingEvents.id });
   return inserted.length > 0 ? "stored" : "duplicate";

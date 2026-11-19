@@ -8,7 +8,7 @@ import type { ListingDto } from "@/server/data/listings";
 
 /**
  * The admin's strip at the top of a listing view: its status, who can see
- * it, its photos in the Images section, and delete. What was the Posts tab's
+ * it, its photos in the Photos section, and delete. What was the Posts tab's
  * row. The admin may change any listing's audience; that is not recorded as
  * the poster's choice (src/lib/visibility-rollout.ts).
  */
@@ -78,7 +78,7 @@ export function AdminPostActions({ listing, close }: { listing: ListingDto; clos
           <option value="signed-in">Signed-in only</option>
         </select>
       </label>
-      <button type="button" className="link text-sm" onClick={() => leave(() => (window.location.hash = `images:${listing.id}`))}>
+      <button type="button" className="link text-sm" onClick={() => leave(() => router.push(`/admin/photos#images:${listing.id}`))}>
         {photos} photo{photos === 1 ? "" : "s"}
       </button>
       <button

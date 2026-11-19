@@ -8,7 +8,7 @@ import { suggestedCode } from "@/lib/semesters";
 import { adminAddSemester, adminArchiveCommit, adminArchivePreview, adminDeleteSemester, adminOutcomeAskPreview, adminSendOutcomeAsks, adminSendOutcomeAskTest, adminToggleSemester } from "@/server/actions/admin";
 import type { ArchivePlan } from "@/server/services/admin";
 import type { AskPreview } from "@/server/services/listing-outcome";
-import type { ArchiveRowDto, SemesterRowDto } from "./AdminTabs";
+import type { ArchiveRowDto, SemesterRowDto } from "./types";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 

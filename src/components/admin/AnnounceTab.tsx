@@ -7,19 +7,17 @@ import type { Announcement, ReadOnly } from "@/server/data/settings";
 import type { Audience } from "@/server/services/admin";
 import { AnnouncementBanner } from "../AnnouncementBanner";
 import type { NoticeAdminRow } from "@/server/data/notices";
-import type { PersonDto, SemesterRowDto } from "./AdminTabs";
+import type { PersonDto, SemesterRowDto } from "./types";
 import { NoticesSection } from "./NoticesSection";
 
-/** Telling people things: the banner on every signed-in page, a popup, an email, and (folded away) the read-only switch. */
+/** Telling people things: the banner on every signed-in page, a popup and an email. (The read-only switch lives in System.) */
 export function AnnounceTab({
   announcement,
-  readOnly,
   semesters,
   people,
   notices,
 }: {
   announcement: Announcement;
-  readOnly: ReadOnly;
   semesters: SemesterRowDto[];
   people: PersonDto[];
   notices: NoticeAdminRow[];
@@ -35,7 +33,6 @@ export function AnnounceTab({
       <Card title="Email" hint="Sent from the site's address; replies come to you.">
         <EmailForm semesters={semesters} people={people} />
       </Card>
-      <Maintenance readOnly={readOnly} />
     </div>
   );
 }
@@ -105,7 +102,7 @@ function BannerForm({ announcement }: { announcement: Announcement }) {
 }
 
 /** The read-only switch, for a migration or an outage: out of the way, but open by itself while it is on. */
-function Maintenance({ readOnly }: { readOnly: ReadOnly }) {
+export function Maintenance({ readOnly }: { readOnly: ReadOnly }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [ro, setRo] = useState<ReadOnly>(readOnly);

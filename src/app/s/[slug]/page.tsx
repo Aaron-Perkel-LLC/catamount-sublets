@@ -5,6 +5,7 @@ import { SITE } from "@/config/site";
 import { getDb } from "@/db";
 import { appUrl } from "@/env";
 import { parseShareSlug, shareSlug } from "@/lib/share";
+import { ShareArrivalBeacon } from "@/components/listings/ShareArrivalBeacon";
 import { resolveShare, type ShareResolution } from "@/server/data/share";
 import { log } from "@/server/log";
 
@@ -66,6 +67,7 @@ export default async function SharePage({ params }: { params: Promise<{ slug: st
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col justify-center gap-6 px-4 py-10">
+      {r.state === "open" && <ShareArrivalBeacon listingId={r.id} slug={slug} />}
       <div className="overflow-hidden rounded-xl border border-line bg-paper shadow-sm">
         {r.state === "open" && (
           // The same bytes the og:image tag points at, so showing it here exposes nothing the preview has not.

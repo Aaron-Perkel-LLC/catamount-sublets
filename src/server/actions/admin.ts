@@ -142,6 +142,14 @@ export async function adminDeletePerson(userId: string, dryRun: boolean): Promis
 }
 
 /** The People tab's search: ids of every account matching `q` (all of them for ""). The query is never logged. */
+/** The quick-jump box (src/components/admin/QuickJump.tsx): listings by number or address, people by the People search. */
+export async function adminQuickFind(q: string): Promise<admin.QuickFind> {
+  await requireAdmin();
+  const parsed = peopleQuery.safeParse(q);
+  if (!parsed.success) return { listings: [], people: [] };
+  return admin.quickFind(await getDb(), parsed.data);
+}
+
 export async function adminSearchPeople(q: string): Promise<admin.Result<{ ids: string[] }>> {
   await requireAdmin();
   const parsed = peopleQuery.safeParse(q);

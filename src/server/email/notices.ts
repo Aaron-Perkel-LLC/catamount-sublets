@@ -100,7 +100,7 @@ async function send(subject: string, props: Parameters<typeof AdminNoticeEmail>[
   await sendMail({ to: ADMIN_INBOX, subject: `[${SITE.name}] ${subject}`, react: AdminNoticeEmail(props), kind: "admin_notice", ref });
 }
 
-const links = (id: number) => ({ listing: `${appUrl()}/listing/${id}`, admin: `${appUrl()}/admin#post:${id}` });
+const links = (id: number) => ({ listing: `${appUrl()}/listing/${id}`, admin: `${appUrl()}/admin/listings#post:${id}` });
 
 export async function noticeCreated(s: Snapshot): Promise<void> {
   await send(subjectFor(s, "New listing"), {

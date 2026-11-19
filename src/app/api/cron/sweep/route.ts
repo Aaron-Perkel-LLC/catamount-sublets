@@ -5,6 +5,7 @@ import { otpSends, rateLimit, rateLimitBuckets, verification } from "@/db/schema
 import { expiredBucketsBefore } from "@/server/rate-limit";
 import { failStalePending } from "@/server/data/admin-messages";
 import { failStaleDigestSends } from "@/server/data/digest";
+import { recordCronRun } from "@/server/data/cron-runs";
 import { fillMissingAreas } from "@/server/data/my-listing";
 import { log } from "@/server/log";
 import { sweepRawUploads } from "@/server/services/admin";
@@ -25,6 +26,17 @@ export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) return new NextResponse("Unauthorized", { status: 401 });
   const db = await getDb();
+  try {
+    const summary = await sweep(db);
+    await recordCronRun(db, "sweep", true, summary);
+    return NextResponse.json(summary);
+  } catch (error) {
+    await recordCronRun(db, "sweep", false, {});
+    throw error;
+  }
+}
+
+async function sweep(db: Awaited<ReturnType<typeof getDb>>) {
   const dayAgo = new Date(Date.now() - 86_400_000);
   const raw = await sweepRawUploads();
   const codes = await db.delete(verification).where(lt(verification.expiresAt, new Date())).returning({ id: verification.id });
@@ -36,5 +48,5 @@ export async function GET(request: Request) {
   const areas = await fillMissingAreas(db);
   const summary = { raw, codes: codes.length, limits: limits.length, sends: sends.length, buckets: buckets.length, interrupted, digestInterrupted, areas };
   log.info("cron.sweep", summary);
-  return NextResponse.json(summary);
+  return summary;
 }

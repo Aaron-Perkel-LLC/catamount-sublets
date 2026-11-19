@@ -8,7 +8,7 @@ import { formatMoney } from "@/lib/format";
 import { LISTING_STATUSES, type ListingStatus } from "@/lib/options";
 import { highlightParts, PEOPLE_QUERY_MAX } from "@/lib/people-search";
 import { adminDeletePerson, adminSearchPeople, adminSetBanned, adminSetNoEmail } from "@/server/actions/admin";
-import type { PersonDto } from "./AdminTabs";
+import type { PersonDto } from "./types";
 import { SortHeader, useSort } from "./SortHeader";
 import type { SortDir } from "./sort";
 
@@ -258,7 +258,7 @@ export function PeopleTab({
  * The search box's state. Matching happens on the server (adminSearchPeople)
  * across every account; the table then shows the rows whose ids came back.
  * The query lives in ?q= so a reload or a pasted link lands on the same
- * search, and "/" focuses the box from anywhere on the tab.
+ * search. ("/" opens the admin's quick-jump box, which finds people too.)
  */
 function usePeopleSearch(initial: { q: string; ids: string[] | null }) {
   const [q, setQ] = useState(initial.q);
@@ -301,18 +301,6 @@ function usePeopleSearch(initial: { q: string; ids: string[] | null }) {
     }, 250);
     return () => clearTimeout(timer);
   }, [q, matchedQ]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
-      const t = e.target as HTMLElement | null;
-      if (t && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName))) return;
-      e.preventDefault();
-      inputRef.current?.focus();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   return {
     q,

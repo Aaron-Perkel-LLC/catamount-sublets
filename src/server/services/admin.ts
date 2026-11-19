@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { Db } from "@/db";
 import { listingEvents, listingPhotos, listings, listingSemesters, semesterArchives, semesters, session, user } from "@/db/schema";
 import { CONTACT_EVENT_TYPES, LISTING_STATUS_VALUES, type ListingStatus } from "@/lib/options";
+import { easternDate, easternDayStart } from "@/lib/dates";
+import { formatAddress } from "@/lib/format";
 import { escapeLike } from "@/lib/people-search";
 import { posterFirstName } from "@/lib/person-name";
 import { orderSemesterCodes, sortSemesters } from "@/lib/semesters";
@@ -314,6 +316,39 @@ export async function searchPeopleIds(db: Db, q: string): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
+export interface QuickFind {
+  listings: { id: number; label: string; status: string }[];
+  people: { id: string; name: string | null; email: string }[];
+}
+
+/**
+ * The admin's quick-jump box: a listing by its number ("#123" or "123", or
+ * one whose address matches) and up to 8 people by the People search. Sections
+ * are matched in the browser from the nav config.
+ */
+export async function quickFind(db: Db, q: string): Promise<QuickFind> {
+  const term = q.trim();
+  if (!term) return { listings: [], people: [] };
+  const idMatch = /^#?(\d{1,9})$/.exec(term);
+  const listingRows = await db
+    .select({ id: listings.id, address: listings.address, status: listings.status })
+    .from(listings)
+    .where(idMatch ? eq(listings.id, Number(idMatch[1])) : sql`${listings.address} ilike ${`%${escapeLike(term)}%`} escape '\\'`)
+    .orderBy(desc(listings.id))
+    .limit(5);
+  const ids = idMatch ? [] : (await searchPeopleIds(db, term)).slice(0, 8);
+  const people = ids.length
+    ? await db
+        .select({ id: user.id, email: user.email, first: user.firstName, last: user.lastName, name: user.name })
+        .from(user)
+        .where(inArray(user.id, ids))
+    : [];
+  return {
+    listings: listingRows.map((l) => ({ id: l.id, label: formatAddress(l.address), status: l.status })),
+    people: people.map((p) => ({ id: p.id, email: p.email, name: [p.first, p.last].filter(Boolean).join(" ") || null })),
+  };
+}
+
 export async function listPeople(db: Db): Promise<Person[]> {
   const rows = await db
     .select({ u: user, listingId: listings.id, displayName: listings.displayName })
@@ -570,7 +605,8 @@ export async function adminStats(db: Db) {
     db.select({ n: count(), bytes: sql<number>`coalesce(sum(${listingPhotos.bytes}), 0)::bigint` }).from(listingPhotos),
     db.select({ n: count() }).from(listings).where(sql`not (${visibleSemesterWhere()})`),
     db.select({ n: count() }).from(listings).where(eq(listings.status, "taken")),
-    db.select({ n: count() }).from(listingPhotos).where(sql`${listingPhotos.createdAt} >= date_trunc('month', now())`),
+    // Since the 1st of this month, Eastern (the cap's month is Vercel's billing month; Eastern is the admin's).
+    db.select({ n: count() }).from(listingPhotos).where(sql`${listingPhotos.createdAt} >= ${easternDayStart(`${easternDate(new Date()).slice(0, 7)}-01`).toISOString()}::timestamptz`),
   ]);
   return {
     posts: Number(posts.n),

@@ -5,7 +5,7 @@ import { useEffect, useState, useTransition } from "react";
 import { formatBytes } from "@/lib/format";
 import { adminBulkDeletePhotos, adminDeleteOrphans, adminLoadInventory, adminLoadOrphans, adminPhotoOp } from "@/server/actions/admin";
 import type { InventoryListing, OrphanReport } from "@/server/services/admin";
-import type { SemesterRowDto } from "./AdminTabs";
+import type { SemesterRowDto } from "./types";
 
 export interface StorageUsage {
   files: number;
@@ -15,7 +15,7 @@ export interface StorageUsage {
 }
 
 /** The Blob allowances that matter on the Hobby plan, from the database's own numbers; transfer is only on Vercel's usage page. */
-function StorageReadout({ s }: { s: StorageUsage }) {
+export function StorageReadout({ s }: { s: StorageUsage }) {
   const pct = (n: number, cap: number) => Math.min(100, Math.round((n / cap) * 100));
   const bar = (n: number, cap: number) => (
     <span className="inline-block h-2 w-24 overflow-hidden rounded-full bg-line align-middle">

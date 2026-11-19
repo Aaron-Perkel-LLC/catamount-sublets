@@ -4,7 +4,7 @@ import { getSessionUser } from "@/server/auth";
 import { isBot } from "@/lib/bots";
 import { eq } from "drizzle-orm";
 import { listings } from "@/db/schema";
-import { anonymousActorKey, recordAnonymousView, recordEvent } from "@/server/data/events";
+import { anonymousActorKey, recordAnonymousShareArrival, recordAnonymousView, recordEvent } from "@/server/data/events";
 import { recordNoticeEvent } from "@/server/data/notices";
 import { RATE_LIMITS, takeRateLimit } from "@/server/rate-limit";
 import { clientIp, sameOrigin } from "@/server/http";
@@ -16,6 +16,8 @@ const input = z.object({
   listing_id: z.coerce.number().int().positive(),
   source: z.string().max(12).optional(),
   target: z.string().max(12).optional(),
+  /** A share link's slug, from the share page: lets a students-only listing's link count its signed-out arrival. */
+  slug: z.string().max(40).optional(),
 });
 
 /** A popup notice's count: a view from anyone, a dismissal or CTA click from a signed-out visitor (signed in, those go with the dismissal's Server Action). */
@@ -28,7 +30,9 @@ const noticeInput = z.object({
  * The activity beacon (src/lib/track.ts). Always 204, 429 when a person is
  * sending too much, nothing else: the server decides what counts and the
  * client never learns why something was dropped. A signed-out visitor can
- * record a listing view and nothing else; bots are not counted.
+ * record a listing view and a share-link arrival, nothing else; bots are not
+ * counted. A signed-out arrival always answers 204, limited or not, so it
+ * says nothing about the listing.
  */
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return new Response(null, { status: 403 });
@@ -44,7 +48,18 @@ export async function POST(request: Request) {
   if (!parsed.success) return new Response(null, { status: 204 });
   if (!user) {
     const userAgent = request.headers.get("user-agent") ?? "";
-    if (parsed.data.type !== "listing_open" || isBot(userAgent)) return new Response(null, { status: 204 });
+    if (isBot(userAgent)) return new Response(null, { status: 204 });
+    if (parsed.data.type === "share_arrival") {
+      await recordAnonymousShareArrival(await getDb(), {
+        listingId: parsed.data.listing_id,
+        slug: parsed.data.slug,
+        source: parsed.data.source,
+        ip: clientIp(request), // keys the arrival (anonymousActorKey); never stored or logged
+        userAgent,
+      });
+      return new Response(null, { status: 204 });
+    }
+    if (parsed.data.type !== "listing_open") return new Response(null, { status: 204 });
     const result = await recordAnonymousView(await getDb(), {
       listingId: parsed.data.listing_id,
       source: parsed.data.source,

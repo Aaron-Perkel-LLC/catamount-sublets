@@ -80,7 +80,7 @@ export function SurveyTab({ survey }: { survey: SurveyDto }) {
               written.map((t) => (
                 <article key={t.id} className="flex flex-col gap-2 rounded-xl border border-line bg-paper p-4 text-sm">
                   <header className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-3">
-                    <a href={`#people:${t.userId}`} className="font-bold text-lake">
+                    <a href={`/admin/people#people:${t.userId}`} className="font-bold text-lake">
                       {t.firstName ?? "Someone"}
                     </a>
                     <span className="rounded-full border border-line px-2">{t.posted ? "posted" : "no post"}</span>

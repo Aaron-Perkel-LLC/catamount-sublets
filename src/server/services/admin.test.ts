@@ -117,6 +117,16 @@ describe("archive", () => {
 });
 
 describe("posts and people", () => {
+  it("quick-finds a listing by number or address and people by the People search", async () => {
+    const [l] = await db.select({ id: s.listings.id, address: s.listings.address }).from(s.listings).limit(1);
+    expect((await admin.quickFind(db, `#${l.id}`)).listings.map((x) => x.id)).toEqual([l.id]);
+    expect((await admin.quickFind(db, String(l.id))).people).toEqual([]);
+    expect((await admin.quickFind(db, l.address.slice(0, 6))).listings.map((x) => x.id)).toContain(l.id);
+    expect((await admin.quickFind(db, "v@uvm")).people).toEqual([expect.objectContaining({ email: "v@uvm.edu" })]);
+    expect(await admin.quickFind(db, "  ")).toEqual({ listings: [], people: [] });
+    expect((await admin.quickFind(db, "100%_")).listings).toEqual([]);
+  });
+
   it("names people by their shown name, never a login", async () => {
     await db.update(s.user).set({ firstName: "Ada", lastName: "Lovelace" }).where(eq(s.user.id, people.a.id));
     const byEmail = new Map((await admin.listPeople(db)).map((p) => [p.email, p.name]));

@@ -18,6 +18,18 @@ export function track(type: EventType, listingId: number, source?: EventSource |
   void fetch("/api/events", { method: "POST", body, keepalive: true, credentials: "same-origin" }).catch(() => {});
 }
 
+/** A share-link arrival, with the link's slug so a students-only listing's link counts a signed-out arrival too. */
+export function trackShareArrival(listingId: number, slug: string): void {
+  if (typeof window === "undefined" || !listingId) return;
+  const body = new URLSearchParams({ type: "share_arrival", listing_id: String(listingId), source: "share-link", slug });
+  try {
+    if (navigator.sendBeacon && navigator.sendBeacon("/api/events", body)) return;
+  } catch {
+    /* fall through */
+  }
+  void fetch("/api/events", { method: "POST", body, keepalive: true, credentials: "same-origin" }).catch(() => {});
+}
+
 /** A popup notice's view (anyone), or a signed-out visitor's dismissal or CTA click. Same beacon, same fire and forget. */
 export function trackNotice(type: "view" | "dismiss" | "cta", noticeId: number): void {
   if (typeof window === "undefined" || !noticeId) return;

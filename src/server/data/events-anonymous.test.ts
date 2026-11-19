@@ -3,7 +3,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import type { Db } from "@/db";
 import * as s from "@/db/schema";
 import { createTestDb } from "@/db/test-db";
-import { anonymousActorKey, recordAnonymousView } from "./events";
+import { shareSlug } from "@/lib/share";
+import { anonymousActorKey, recordAnonymousShareArrival, recordAnonymousView } from "./events";
 import { setListingVisibility } from "./my-listing";
 import { setListingSemesters } from "./semesters";
 
@@ -67,5 +68,43 @@ describe("signed-out views", () => {
     await setListingVisibility(db, listingId, admin, false);
     expect(await recordAnonymousView(db, { listingId: 999_999, ip: IP, userAgent: UA })).toBe("invalid");
     expect(await rows()).toHaveLength(0);
+  });
+});
+
+describe("signed-out share arrivals", () => {
+  const arrive = (extra: { slug?: string; listingId?: number; ip?: string } = {}) =>
+    recordAnonymousShareArrival(db, { listingId: extra.listingId ?? listingId, slug: extra.slug, source: "share-link", ip: extra.ip ?? IP, userAgent: UA });
+
+  it("are stored once per visitor, listing and Eastern day for a public listing, flagged signed out", async () => {
+    expect(await arrive()).toBe("stored");
+    expect(await arrive()).toBe("duplicate");
+    expect(await rows()).toEqual([expect.objectContaining({ type: "share_arrival", signedOut: true, source: "share-link", semesterCode: "spring27" })]);
+  });
+
+  it("count a students-only listing only through its own valid share slug", async () => {
+    await setListingVisibility(db, listingId, admin, true);
+    expect(await arrive()).toBe("invalid");
+    expect(await arrive({ slug: `${listingId}-0000000000` })).toBe("invalid");
+    expect(await arrive({ slug: shareSlug(listingId + 1) })).toBe("invalid");
+    expect(await arrive({ slug: shareSlug(listingId) })).toBe("stored");
+    await setListingVisibility(db, listingId, admin, false);
+    expect(await rows()).toHaveLength(1);
+  });
+
+  it("are not taken for a taken or missing listing, even with a valid slug", async () => {
+    await db.update(s.listings).set({ status: "taken" }).where(eq(s.listings.id, listingId));
+    expect(await arrive({ slug: shareSlug(listingId) })).toBe("invalid");
+    await db.update(s.listings).set({ status: "open" }).where(eq(s.listings.id, listingId));
+    expect(await arrive({ listingId: 999_999, slug: shareSlug(999_999) })).toBe("invalid");
+    expect(await rows()).toHaveLength(0);
+  });
+
+  it("hit the per-visitor limit before looking at the listing, so being limited says nothing about it", async () => {
+    await db.insert(s.listingEvents).values(
+      Array.from({ length: 60 }, (_, i) => ({ listingId, actorKey: anonymousActorKey(IP, UA), type: "share_target", signedOut: true, dedupeKey: `x${i}` })),
+    );
+    expect(await arrive({ listingId: 999_999 })).toBe("limited");
+    expect(await arrive()).toBe("limited");
+    expect(await recordAnonymousView(db, { listingId: 999_999, ip: IP, userAgent: UA })).toBe("limited");
   });
 });

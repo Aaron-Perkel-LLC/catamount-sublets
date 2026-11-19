@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** The Mail section lives on the admin page; this is its linkable address. /admin checks who is asking. */
+/** The Mail section's old address (it was /admin#mail before sections became pages). /admin/mail checks who is asking. */
 export default function AdminEmailPage() {
-  redirect("/admin#mail");
+  redirect("/admin/mail");
 }

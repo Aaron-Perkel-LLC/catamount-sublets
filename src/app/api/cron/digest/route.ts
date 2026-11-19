@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
+import { recordCronRun } from "@/server/data/cron-runs";
 import { runDigest } from "@/server/services/digest";
 
 export const runtime = "nodejs";
@@ -15,6 +16,13 @@ export const maxDuration = 300;
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) return new NextResponse("Unauthorized", { status: 401 });
-  const summary = await runDigest(await getDb());
-  return NextResponse.json(summary);
+  const db = await getDb();
+  try {
+    const summary = await runDigest(db);
+    await recordCronRun(db, "digest", true, summary);
+    return NextResponse.json(summary);
+  } catch (error) {
+    await recordCronRun(db, "digest", false, {});
+    throw error;
+  }
 }

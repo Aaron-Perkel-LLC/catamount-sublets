@@ -1,4 +1,4 @@
-/** Axis arithmetic for the admin's charts. Pure; the drawing is in src/components/admin/DailyChart.tsx. */
+/** Axis arithmetic for the admin's charts. Pure; the drawing is in src/components/admin/LineChart.tsx. */
 
 /**
  * Clean y-axis ticks from 0 up to just past `max`, about `target` steps of

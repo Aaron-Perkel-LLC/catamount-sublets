@@ -22,7 +22,17 @@ export interface DigestSwitch {
   enabled: boolean;
 }
 
+/** Each cron's last run (src/server/data/cron-runs.ts): when, whether it finished, and its counts. Vercel's own logs keep an hour. */
+export interface CronRun {
+  at: string;
+  ok: boolean;
+  /** Counts and short state words only (never an address or an id). */
+  summary: Record<string, number | boolean | string>;
+}
+export type CronRuns = Record<string, CronRun>;
+
 interface Settings {
+  cron_runs: CronRuns;
   announcement: Announcement;
   read_only: ReadOnly;
   approved_emails: ApprovedEmails;
@@ -30,6 +40,7 @@ interface Settings {
 }
 
 const DEFAULTS: Settings = {
+  cron_runs: {},
   announcement: { active: false, message: "", style: "info" },
   read_only: { active: false, message: "" },
   approved_emails: { emails: [] },

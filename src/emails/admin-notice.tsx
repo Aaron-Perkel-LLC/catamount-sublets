@@ -54,5 +54,5 @@ AdminNoticeEmail.PreviewProps = {
     { label: "Price", before: "$950/mo", after: "$900/mo (or best offer)" },
     { label: "Semesters", before: "Spring 2027", after: "Spring & Summer 2027" },
   ],
-  links: { listing: "https://catamountsublets.com/listing/187", admin: "https://catamountsublets.com/admin#post:187" },
+  links: { listing: "https://catamountsublets.com/listing/187", admin: "https://catamountsublets.com/admin/listings#post:187" },
 };
