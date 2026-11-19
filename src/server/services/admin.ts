@@ -2,7 +2,7 @@ import { and, asc, count, desc, eq, inArray, ne, or, sql, type SQL } from "drizz
 import { z } from "zod";
 import type { Db } from "@/db";
 import { listingEvents, listingPhotos, listings, listingSemesters, semesterArchives, semesters, session, user } from "@/db/schema";
-import { LISTING_STATUS_VALUES, type ListingStatus } from "@/lib/options";
+import { CONTACT_EVENT_TYPES, LISTING_STATUS_VALUES, type ListingStatus } from "@/lib/options";
 import { escapeLike } from "@/lib/people-search";
 import { posterFirstName } from "@/lib/person-name";
 import { orderSemesterCodes, sortSemesters } from "@/lib/semesters";
@@ -68,7 +68,7 @@ export interface ArchivePlan {
   blocking: string[];
   going: { id: number; status: string; price: number; photos: number; bytes: number; ownerEmail: string; ownerName: string | null; address: string }[];
   staying: { id: number; ownerEmail: string; ownerName: string | null; address: string; nextSemester: string }[];
-  totals: { listings: number; taken: number; photos: number; bytes: number; priceMedian: number | null; priceMin: number | null; priceMax: number | null; views: number; contacts: number; shares: number; shareArrivals: number; events: number };
+  totals: { listings: number; taken: number; photos: number; bytes: number; priceMedian: number | null; priceMin: number | null; priceMax: number | null; views: number; contacts: number; shares: number; shareArrivals: number };
 }
 
 /**
@@ -118,9 +118,18 @@ export async function archivePlan(db: Db, code: string): Promise<ArchivePlan> {
   const activity = await listingActivity(db, "all");
   const prices = going.map((g) => g.price).sort((a, b) => a - b);
   const median = prices.length ? (prices.length % 2 ? prices[(prices.length - 1) / 2] : (prices[prices.length / 2 - 1] + prices[prices.length / 2]) / 2) : null;
-  const [{ events }] = goingIds.length
-    ? await db.select({ events: count() }).from(listingEvents).where(sql`${listingEvents.listingId} in (${sql.join(goingIds.map((i) => sql`${i}`), sql`, `)}) or ${listingEvents.semesterCode} = ${code}`)
-    : [{ events: 0 }];
+  // Listings of this semester deleted before the archive (filled, taken down, removed) keep their
+  // events (src/db/schema/events.ts), so their numbers belong in the semester's totals too.
+  const deleted = await db
+    .select({
+      views: sql<number>`count(distinct case when ${listingEvents.type} = 'listing_open' then ${listingEvents.listingId} || ':' || ${listingEvents.actorKey} end)::int`,
+      contacts: sql<number>`count(distinct case when ${listingEvents.type} in (${sql.join(CONTACT_EVENT_TYPES.map((t) => sql`${t}`), sql`, `)}) then ${listingEvents.listingId} || ':' || ${listingEvents.actorKey} end)::int`,
+      shares: sql<number>`count(case when ${listingEvents.type} = 'share_target' then 1 end)::int`,
+      arrivals: sql<number>`count(distinct case when ${listingEvents.type} = 'share_arrival' then ${listingEvents.listingId} || ':' || ${listingEvents.actorKey} end)::int`,
+    })
+    .from(listingEvents)
+    .where(and(eq(listingEvents.semesterCode, code), sql`not exists (select 1 from ${listings} where ${listings.id} = ${listingEvents.listingId})`));
+  const d = deleted[0] ?? { views: 0, contacts: 0, shares: 0, arrivals: 0 };
 
   const totals = going.reduce(
     (t, g) => {
@@ -138,7 +147,7 @@ export async function archivePlan(db: Db, code: string): Promise<ArchivePlan> {
         shareArrivals: t.shareArrivals + (a?.arrivals ?? 0),
       };
     },
-    { ...emptyTotals(), priceMedian: median, priceMin: prices[0] ?? null, priceMax: prices.at(-1) ?? null, events: Number(events) },
+    { ...emptyTotals(), priceMedian: median, priceMin: prices[0] ?? null, priceMax: prices.at(-1) ?? null, views: Number(d.views), contacts: Number(d.contacts), shares: Number(d.shares), shareArrivals: Number(d.arrivals) },
   );
   return {
     code,
@@ -150,7 +159,7 @@ export async function archivePlan(db: Db, code: string): Promise<ArchivePlan> {
   };
 }
 
-const emptyTotals = (): ArchivePlan["totals"] => ({ listings: 0, taken: 0, photos: 0, bytes: 0, priceMedian: null, priceMin: null, priceMax: null, views: 0, contacts: 0, shares: 0, shareArrivals: 0, events: 0 });
+const emptyTotals = (): ArchivePlan["totals"] => ({ listings: 0, taken: 0, photos: 0, bytes: 0, priceMedian: null, priceMin: null, priceMax: null, views: 0, contacts: 0, shares: 0, shareArrivals: 0 });
 
 /**
  * The archive. One transaction under an advisory lock: re-plans, refuses

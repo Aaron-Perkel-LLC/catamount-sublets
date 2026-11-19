@@ -190,9 +190,10 @@ export async function applyPlan(db: Db, plan: Plan, options: { prune: boolean })
       }
     }
 
-    // Sequences continue from the legacy AUTO_INCREMENT values, so no id is ever reused.
-    await tx.execute(sql`select setval('listings_id_seq', ${Math.max(plan.autoIncrement.sublets - 1, 1)}, true)`);
-    await tx.execute(sql`select setval('listing_photos_id_seq', ${Math.max(plan.autoIncrement.sublet_images - 1, 1)}, true)`);
+    // Sequences continue from the legacy AUTO_INCREMENT values, and never move back (a re-run after
+    // cutover must not hand out an id a deleted listing had: its events are kept, see listing_events).
+    await tx.execute(sql`select setval('listings_id_seq', greatest(${Math.max(plan.autoIncrement.sublets - 1, 1)}, (select last_value from listings_id_seq), (select coalesce(max(listing_id), 1) from listing_events)), true)`);
+    await tx.execute(sql`select setval('listing_photos_id_seq', greatest(${Math.max(plan.autoIncrement.sublet_images - 1, 1)}, (select last_value from listing_photos_id_seq)), true)`);
   });
 
   if (prunedFiles.length) {

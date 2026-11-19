@@ -5,8 +5,8 @@ import { deletePerson } from "./admin";
 /**
  * After the stale-notice deadline: remove each migrated poster who was sent
  * the notice and has still never signed in, account and listing together,
- * through deletePerson (the delete-user path: photos from storage, events,
- * sessions, admin emails). Nothing is written to listing_outcomes: nobody
+ * through deletePerson (the delete-user path: photos from storage, sessions,
+ * admin emails; the listing's events stay). Nothing is written to listing_outcomes: nobody
  * answered, and a removal is not an outcome.
  *
  * Who goes: the audience recomputed now (so anyone who signed in after the

@@ -77,7 +77,17 @@ describe("archive", () => {
     expect(plan.blocking).toEqual([]);
     expect(plan.going.map((g) => g.ownerEmail)).toEqual(["a@uvm.edu"]);
     expect(plan.staying.map((g) => [g.ownerEmail, g.nextSemester])).toEqual([["b@uvm.edu", "Spring 2027"]]);
-    expect(plan.totals).toMatchObject({ listings: 1, taken: 1, photos: 1, priceMedian: 700, priceMin: 700, priceMax: 700 });
+    expect(plan.totals).toMatchObject({ listings: 1, taken: 1, photos: 1, priceMedian: 700, priceMin: 700, priceMax: 700, views: 0, contacts: 0 });
+
+    // A fall26 listing deleted before the archive (#9999, gone): its kept events count in the semester's totals.
+    await db.insert(s.listingEvents).values([
+      { listingId: 9999, actorKey: "aaaaaaaaaaaaaaaa", semesterCode: "fall26", type: "listing_open" },
+      { listingId: 9999, actorKey: "bbbbbbbbbbbbbbbb", semesterCode: "fall26", type: "listing_open" },
+      { listingId: 9999, actorKey: "bbbbbbbbbbbbbbbb", semesterCode: "fall26", type: "copy_email" },
+      { listingId: 9999, actorKey: "bbbbbbbbbbbbbbbb", semesterCode: "fall26", type: "dial" },
+      { listingId: 9998, actorKey: "cccccccccccccccc", semesterCode: "spring27", type: "listing_open" },
+    ]);
+    expect((await admin.archivePlan(db, "fall26")).totals).toMatchObject({ listings: 1, views: 2, contacts: 1, shares: 0, shareArrivals: 0 });
     expect((await admin.archivePlan(db, "spring27")).blocking[0]).toMatch(/still active/);
   });
 
@@ -92,7 +102,7 @@ describe("archive", () => {
     expect(r).toEqual({ ok: true, data: { listings: 1, filesDeleted: 3 } });
     expect(await files()).toBe(before - 3);
     const [row] = await db.select().from(s.semesterArchives);
-    expect(row).toMatchObject({ semesterCode: "fall26", listings: 1, taken: 1, photos: 1 });
+    expect(row).toMatchObject({ semesterCode: "fall26", listings: 1, taken: 1, photos: 1, views: 3, contacts: 1 }); // a's view plus deleted #9999's
     expect(Object.keys(row.manifest.listings ?? {})).toHaveLength(1);
     expect((await db.select().from(s.listings).where(eq(s.listings.userId, people.a.id))).length).toBe(0);
     const bSems = await db.select().from(s.listingSemesters).where(eq(s.listingSemesters.listingId, bListing.id));

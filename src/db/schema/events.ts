@@ -10,9 +10,11 @@ import { createdAt, inList, inListOrNull } from "./helpers";
  *
  * listing_id has no foreign key (like listing_outcomes): events outlive their
  * listing, its poster's account and the semester's archive, so past totals
- * don't shrink when a filled listing is deleted. They hold no personal data,
- * only the listing's number and a one-way code. Every writer checks that the
- * listing exists before inserting (src/server/data/events.ts).
+ * don't shrink when a filled listing is deleted. They hold no name, email or
+ * contact detail: the listing's number and the one-way actor code. Every
+ * writer looks the listing up before inserting (src/server/data/events.ts),
+ * so a made-up id is refused; an event racing a delete can still land for
+ * the id just deleted, which is a real event and harmless.
  */
 export const listingEvents = pgTable(
   "listing_events",
