@@ -40,5 +40,6 @@ npm run email:dev    # react-email preview on :3001
 - The weekly digest matches through `newBoardListings()`, which is Browse's own query narrowed by date and owner, and saved searches store Browse's query string. Never add a second filter path or format, or the email and the site disagree. Digest listings show `shareCardLines()` fields only.
 - Data access in `src/server/data/`, one module per table family, returning DTOs that never include another user's email or id.
 - Tests next to the code as `*.test.ts`; data tests boot PGlite and run the real migrations (`src/db/test-db.ts`).
+- For new features, design from what I need first, then decide what existing code to keep. Don't start from the existing code.
 - Commit messages: imperative, one line of what and why.
 - **What's new:** every PR with a user-visible change adds an entry to `src/content/changelog.ts` in the same PR (date, title, 1–3 plain sentences, optional link; student-facing only), or says in the PR why not.
