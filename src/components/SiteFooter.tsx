@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { SITE } from "@/config/site";
 import { CHANGELOG } from "@/content/changelog";
 import { easternDate, easternYear } from "@/lib/dates";
 import { latestMarker } from "@/lib/whats-new";
-import { WhatsNewLink } from "./WhatsNew";
+import { PrivacyLink, WhatsNewLink } from "./WhatsNew";
 
 /**
  * The footer on the front page and every signed-in page, in two lines: the
@@ -33,10 +34,26 @@ export function SiteFooter() {
               Contact
             </a>{" "}
             ·{" "}
-            <Link href="/privacy" className={link}>
-              Privacy
-            </Link>{" "}
-            · <WhatsNewLink latest={latestMarker(CHANGELOG, today)} today={today} className={link} />
+            {/* Both carry the current page as ?from= (they read the URL), so the page they open links back here. */}
+            <Suspense
+              fallback={
+                <Link href="/privacy" className={link}>
+                  Privacy
+                </Link>
+              }
+            >
+              <PrivacyLink className={link} />
+            </Suspense>{" "}
+            ·{" "}
+            <Suspense
+              fallback={
+                <Link href="/whats-new" className={link}>
+                  What&apos;s new
+                </Link>
+              }
+            >
+              <WhatsNewLink latest={latestMarker(CHANGELOG, today)} today={today} className={link} />
+            </Suspense>
           </span>
         </p>
         <p>{SITE.disclaimer}</p>

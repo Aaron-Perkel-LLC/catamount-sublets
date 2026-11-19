@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { MarkWhatsNewSeen } from "@/components/WhatsNew";
 import { SITE } from "@/config/site";
 import { CHANGELOG } from "@/content/changelog";
+import { backHref } from "@/lib/back-link";
 import { easternDate, SITE_TIME_ZONE } from "@/lib/dates";
 import { latestMarker, shownEntries } from "@/lib/whats-new";
 
@@ -23,13 +24,14 @@ const longDate = (date: string) =>
  * midnight, and the page's scripts carry the CSP nonce (src/proxy.ts), which
  * a prerendered page's would not, so MarkWhatsNewSeen runs.
  */
-export default async function WhatsNewPage() {
+export default async function WhatsNewPage({ searchParams }: { searchParams: Promise<{ from?: string | string[] }> }) {
   await connection();
+  const { from } = await searchParams;
   const today = easternDate(new Date());
   const entries = shownEntries(CHANGELOG, today);
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-10">
-      <Link href="/" className="text-sm font-bold text-lake">
+      <Link href={backHref(from)} className="text-sm font-bold text-lake">
         ← {SITE.name}
       </Link>
       <h1 className="text-3xl font-bold">What&apos;s new</h1>

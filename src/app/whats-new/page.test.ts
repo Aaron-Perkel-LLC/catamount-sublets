@@ -6,10 +6,10 @@ vi.mock("next/server", () => ({ connection: async () => {} }));
 
 const { default: WhatsNewPage } = await import("./page");
 
-const render = async (iso: string) => {
+const render = async (iso: string, from?: string) => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(iso));
-  return renderToStaticMarkup(await WhatsNewPage()).replaceAll("&#x27;", "'");
+  return renderToStaticMarkup(await WhatsNewPage({ searchParams: Promise.resolve({ from }) })).replaceAll("&#x27;", "'");
 };
 afterEach(() => vi.useRealTimers());
 
@@ -28,5 +28,12 @@ describe("/whats-new", () => {
     expect(await render("2026-11-21T04:59:00Z")).not.toContain("Listings are public by default"); // 23:59 on the 20th
     const html = await render("2026-11-21T05:00:00Z"); // 00:00 on the 21st
     expect(html.indexOf("Listings are public by default")).toBeLessThan(html.indexOf("An Account link and"));
+  });
+
+  it("links back to the page the footer link was on, or the front page", async () => {
+    const back = (html: string) => html.match(/<a [^>]*href="([^"]*)"[^>]*>← /)?.[1];
+    expect(back(await render("2026-11-20T15:00:00Z", "/map?semester=spring-2027"))).toBe("/map?semester=spring-2027");
+    expect(back(await render("2026-11-20T15:00:00Z"))).toBe("/");
+    expect(back(await render("2026-11-20T15:00:00Z", "//evil.example"))).toBe("/");
   });
 });
