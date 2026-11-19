@@ -22,6 +22,8 @@
   /* Chart series (admin Activity): checked with the dataviz palette validator against paper. Lake is lightened for marks; #1d4f73 is too dark to read as a hue. */
   --color-chart-lake: #2f6f9f;
   --color-chart-maple: #bc4c25;
+  /* The lighter step of chart-lake, for the lighter part of a two-part bar (checked as an ordinal pair with it). */
+  --color-chart-lake-soft: #8fb8d8;
 
   --color-included-tint: #e6f0e9;
   --color-included-ink: #27624a;
