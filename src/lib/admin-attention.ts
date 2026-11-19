@@ -16,6 +16,10 @@ export const ATTENTION = {
   "no-contacts": "Views but no contacts",
 } as const;
 export type AttentionFlag = keyof typeof ATTENTION;
+/** The same flags, short enough for a list row; the full wording is the hover. */
+export const ATTENTION_SHORT: Record<AttentionFlag, string> = { "no-views": "No views", unconfirmed: "Unconfirmed", "no-contacts": "No contacts" };
+/** The three rules in a line, for the ⓘ beside "Needs attention". */
+export const ATTENTION_RULES = "No views in 14 days (posted 3+ days ago) · 60+ days old and never confirmed available · 3+ views in the range and no contacts.";
 
 export interface AttentionInput {
   status: string;

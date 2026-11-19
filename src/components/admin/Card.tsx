@@ -11,14 +11,14 @@ import { CARD, CARD_TITLE } from "./ui";
 export function Card({ title, tip, actions, children, id, flush = false, className = "" }: { title?: string; tip?: string; actions?: ReactNode; children: ReactNode; id?: string; flush?: boolean; className?: string }) {
   const heading = title ? (
     <h2 id={id ? `${id}-h` : undefined} className={CARD_TITLE}>
-      {title}
+      {tip ? <Tip text={tip}>{title}</Tip> : title}
     </h2>
   ) : null;
   return (
     <section id={id} aria-labelledby={id && title ? `${id}-h` : undefined} className={`${CARD} flex min-w-0 flex-col ${className}`}>
       {(title || actions) && (
         <div className="flex min-h-12 items-center justify-between gap-3 px-4 pt-1">
-          {tip ? <Tip text={tip}>{heading}</Tip> : heading}
+          {heading}
           {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
         </div>
       )}

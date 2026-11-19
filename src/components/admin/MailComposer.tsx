@@ -235,7 +235,7 @@ function Field({ id, label, error, tip, children }: { id: string; label: string;
   return (
     <div className={FIELD_LABEL}>
       {tip ? (
-        <Tip text={tip} label="About this field" className="self-start">
+        <Tip text={tip} flat label="About this field" className="self-start">
           {name}
         </Tip>
       ) : (

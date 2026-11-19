@@ -114,7 +114,7 @@ export default async function AdminSystem() {
                   </span>
                 ),
               },
-              { key: "rows", header: "Rows", numeric: true, className: "max-md:hidden", cell: (t) => <Num n={t.n} /> },
+              { key: "rows", header: "Rows", numeric: true, desktopOnly: true, cell: (t) => <Num n={t.n} /> },
             ]}
           />
         </Card>

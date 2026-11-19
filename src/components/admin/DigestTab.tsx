@@ -132,11 +132,9 @@ export function DigestTab() {
       {/* Built from the card's parts, not Card: with nothing blocking and nothing to say it is one row, which Card would pad as if a body followed. */}
       <section className={`${CARD} flex flex-col px-4 py-1`} aria-labelledby="digest-switch-h">
         <div className="flex min-h-12 items-center justify-between gap-3">
-          <Tip text="The saved-search email. While the switch is off the hourly cron does nothing.">
-            <h2 id="digest-switch-h" className={CARD_TITLE}>
-              Weekly digest
-            </h2>
-          </Tip>
+          <h2 id="digest-switch-h" className={CARD_TITLE}>
+            <Tip text="The saved-search email. While the switch is off the hourly cron does nothing.">Weekly digest</Tip>
+          </h2>
           <div className="flex shrink-0 items-center gap-2">
             <Pill tone={overview.switchOn ? "good" : "muted"}>{overview.switchOn ? "On" : "Off"}</Pill>
             <button type="button" className={overview.switchOn ? BTN : BTN_PRIMARY} disabled={pending || (!overview.switchOn && overview.blockers.length > 0)} onClick={() => flip(!overview.switchOn)}>

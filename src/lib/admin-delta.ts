@@ -19,16 +19,13 @@ export interface Chip {
 
 const signed = (n: number, unit = "") => (n === 0 ? `0${unit}` : `${n > 0 ? "+" : "−"}${Math.abs(n)}${unit}`);
 
-/**
- * A count against the period before. Up is good unless `neutral` (people
- * leaving, mail failing). Null with nothing to compare, or nothing in either period.
- */
-export function countChip(cur: number, prev: number | null, neutral = false): Chip | null {
+/** A count against the period before (up is good). Null with nothing to compare, or nothing in either period. */
+export function countChip(cur: number, prev: number | null): Chip | null {
   if (prev === null || (cur === 0 && prev === 0)) return null;
   const diff = cur - prev;
   const pct = prev > 0 ? Math.round((diff / prev) * 100) : 0;
   if (prev < MIN_FOR_PCT || pct === 0) return { tone: "neutral", text: signed(diff), words: `${signed(diff)} against ${prev} in the period before` };
-  return { tone: neutral ? "neutral" : diff > 0 ? "good" : "bad", text: `${diff > 0 ? "▲" : "▼"} ${Math.abs(pct)}%`, words: `${diff > 0 ? "Up" : "Down"} ${Math.abs(pct)}% from ${prev} in the period before` };
+  return { tone: diff > 0 ? "good" : "bad", text: `${diff > 0 ? "▲" : "▼"} ${Math.abs(pct)}%`, words: `${diff > 0 ? "Up" : "Down"} ${Math.abs(pct)}% from ${prev} in the period before` };
 }
 
 /** A rate (0–100) against the period before, in percentage points; grey when that period had too few people (`prevOf`) to divide by. */

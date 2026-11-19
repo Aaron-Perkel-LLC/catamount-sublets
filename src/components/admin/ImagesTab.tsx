@@ -61,7 +61,6 @@ const VIEWS = [
 ] as const;
 const STATUS_TONE: Record<string, PillTone> = { open: "good", taken: "info" };
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
-/** A photo's control: a square icon button, 44 px on a phone and 24 px under a thumbnail with a pointer (ui.ts has no icon button). */
 const plural = (n: number, one: string) => `${num(n)} ${n === 1 ? one : `${one}s`}`;
 
 /**

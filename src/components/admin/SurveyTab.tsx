@@ -44,9 +44,9 @@ const average = (s: ScaleSummary) => (s.average === null ? "—" : String(s.aver
 function Question({ title, tip, rows }: { title: string; tip: string; rows: { label: string; n: number; pct: number }[] }) {
   return (
     <Card>
-      <Tip text={tip} className="self-start">
-        <h2 className={CARD_TITLE}>{title}</h2>
-      </Tip>
+      <h2 className={`${CARD_TITLE} self-start`}>
+        <Tip text={tip}>{title}</Tip>
+      </h2>
       <BarList rows={rows} />
     </Card>
   );

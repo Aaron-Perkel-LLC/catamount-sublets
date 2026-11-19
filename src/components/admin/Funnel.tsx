@@ -1,3 +1,4 @@
+import { Tip } from "./Tip";
 import { num, ZERO } from "./ui";
 
 /**
@@ -10,11 +11,17 @@ export function Funnel({ steps }: { steps: { label: string; n: number; tip?: str
   return (
     <ol className="grid gap-x-3 gap-y-3 sm:grid-cols-5">
       {steps.map((s, i) => (
-        <li key={s.label} className="flex min-w-0 flex-col gap-1.5" title={s.tip}>
+        <li key={s.label} className="flex min-w-0 flex-col gap-1.5">
           <div className="flex items-baseline justify-between gap-2 sm:flex-col sm:gap-0.5">
-            <span className="truncate text-xs text-ink-3">
-              <span className="tabular-nums">{i + 1}</span> {s.label}
-            </span>
+            {s.tip ? (
+              <Tip text={s.tip} quiet className="text-xs whitespace-nowrap text-ink-3">
+                <span className="tabular-nums">{i + 1}</span> {s.label}
+              </Tip>
+            ) : (
+              <span className="truncate text-xs text-ink-3">
+                <span className="tabular-nums">{i + 1}</span> {s.label}
+              </span>
+            )}
             <span className={`text-lg leading-6 ${s.n === 0 ? ZERO : "font-bold tabular-nums"}`}>{num(s.n)}</span>
           </div>
           <div className="h-1.5 rounded-full bg-line-light">

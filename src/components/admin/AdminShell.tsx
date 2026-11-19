@@ -96,7 +96,8 @@ function Shell({ waiting, children }: { waiting: number; children: ReactNode }) 
   const api = useMemo(() => ({ openPost, href }), [openPost, href]);
   const badge = (item: AdminNavItem) => (item.id === "requests" ? waiting : 0);
   // The range is whole Eastern days, so the server's render and the browser's agree except across midnight.
-  const range = useMemo(() => (current?.item.range ? resolveRange({ range: params.get("range") ?? undefined, from: params.get("from") ?? undefined, to: params.get("to") ?? undefined }) : null), [current, params]);
+  const hasRange = Boolean(current?.item.range);
+  const range = useMemo(() => (hasRange ? resolveRange({ range: params.get("range") ?? undefined, from: params.get("from") ?? undefined, to: params.get("to") ?? undefined }) : null), [hasRange, params]);
 
   return (
     <AdminCtx.Provider value={api}>

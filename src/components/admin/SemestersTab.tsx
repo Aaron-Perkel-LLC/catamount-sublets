@@ -16,7 +16,6 @@ import { BTN, BTN_DANGER, BTN_PRIMARY, CARD_TITLE, DIALOG, FIELD, FIELD_LABEL, M
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** A dialog's frame: the quick-jump box's (QuickJump.tsx), so the admin's dialogs match. */
 /** A fold inside a dialog ("The 3 listings going"): a link-weight line, 44 px to tap on a phone. */
 const FOLD = "cursor-pointer py-3 text-[13px] leading-5 font-bold text-lake md:py-0";
 /** Rows carry 32 px buttons, so the other cells sit on their middle. */
@@ -70,7 +69,8 @@ export function SemestersTab({ semesters, archives }: { semesters: SemesterRowDt
     { key: "listings", header: "Listings", numeric: true, className: MID, cell: (s) => <Num n={s.postCount} /> },
     {
       key: "actions",
-      header: "",
+      header: "Actions",
+      srHeader: true,
       bare: true,
       cell: (s) => (
         <span className="flex flex-wrap gap-2 md:justify-end">

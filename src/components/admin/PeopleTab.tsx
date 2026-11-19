@@ -124,7 +124,8 @@ export function PeopleTab({
     },
     {
       key: "actions",
-      header: "",
+      header: "Actions",
+      srHeader: true,
       bare: true,
       // With a pointer, the row's last cell; on a phone, the card's top right corner.
       className: "w-px md:py-1 md:text-right max-md:absolute max-md:top-1 max-md:right-2 max-md:w-auto max-md:pt-0",

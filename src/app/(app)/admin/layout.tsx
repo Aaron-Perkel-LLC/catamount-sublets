@@ -11,8 +11,8 @@ export const metadata: Metadata = { title: `Admin · ${SITE.name}` };
 export const maxDuration = 800;
 
 /**
- * The admin's frame: sections grouped in a sidebar (a picker on a phone),
- * the quick-jump box and the listing view. The check here only decides
+ * The admin's frame: the page title with Find and the date range, the
+ * groups as tabs with their sections as pills, and the listing view. The check here only decides
  * whether to draw the frame: anyone else gets the bare page, whose own
  * requireAdminPage() sends them on (to sign-in back to that page, or away).
  * Every page under it checks the admin itself, since a layout does not

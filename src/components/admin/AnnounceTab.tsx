@@ -12,9 +12,7 @@ import { NoticesSection } from "./NoticesSection";
 import { Pill } from "./Pill";
 import { Tip } from "./Tip";
 import type { PersonDto, SemesterRowDto } from "./types";
-import { BTN, BTN_PRIMARY, CHOICE, FIELD, FIELD_LABEL, MUTED, SELECT, TEXTAREA } from "./ui";
-
-/** A radio or checkbox with its words: a 44 px row on a phone. */
+import { BTN, BTN_PRIMARY, CHOICE, FIELD, FIELD_LABEL, LINK, MUTED, SELECT, TEXTAREA } from "./ui";
 
 /**
  * Telling people things: the banner on every signed-in page and the popups
@@ -98,7 +96,7 @@ function BannerCard({ announcement }: { announcement: Announcement }) {
 
 /**
  * The read-only switch, for a migration or an outage: its state as a pill,
- * the message students get, and the switch itself.
+ * and, folded away unless it is on, the message students get and the switch.
  */
 export function Maintenance({ readOnly }: { readOnly: ReadOnly }) {
   const router = useRouter();
@@ -108,36 +106,42 @@ export function Maintenance({ readOnly }: { readOnly: ReadOnly }) {
 
   return (
     <Card title="Read-only mode" tip="For a migration or an outage." actions={<Pill tone={readOnly.active ? "bad" : "muted"}>{readOnly.active ? "On" : "Off"}</Pill>}>
-      <p className={MUTED}>While on, every write (posting, editing, photos, status, account deletion) is refused with this message. Reading and signing in keep working.</p>
-      <label className={FIELD_LABEL}>
-        Message
-        <input className={FIELD} placeholder="The site is read-only while it moves." value={ro.message} onChange={(e) => setRo({ ...ro, message: e.target.value })} />
-      </label>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <label className={CHOICE}>
-          <input type="checkbox" className="h-4 w-4" checked={ro.active} onChange={(e) => setRo({ ...ro, active: e.target.checked })} />
-          Site is read-only
-        </label>
-        <button
-          type="button"
-          className={BTN}
-          disabled={pending}
-          onClick={() =>
-            start(async () => {
-              const r = await adminSetReadOnly(ro.active, ro.message);
-              setNote(r.ok ? (ro.active ? "Read-only is on." : "Read-only is off.") : r.error);
-              if (r.ok) router.refresh();
-            })
-          }
-        >
-          Save switch
-        </button>
-        {note && (
-          <span role="status" className={MUTED}>
-            {note}
-          </span>
-        )}
-      </div>
+      {/* Folded away unless it is on, as it always was: turning the whole site read-only takes opening this first. */}
+      <details open={readOnly.active} className="[&_summary::-webkit-details-marker]:hidden">
+        <summary className={`${LINK} cursor-pointer list-none`}>Read-only switch</summary>
+        <div className="flex flex-col gap-3 pt-2">
+          <p className={MUTED}>While on, every write (posting, editing, photos, status, account deletion) is refused with this message. Reading and signing in keep working.</p>
+          <label className={FIELD_LABEL}>
+            Message
+            <input className={FIELD} placeholder="The site is read-only while it moves." value={ro.message} onChange={(e) => setRo({ ...ro, message: e.target.value })} />
+          </label>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <label className={CHOICE}>
+              <input type="checkbox" className="h-4 w-4" checked={ro.active} onChange={(e) => setRo({ ...ro, active: e.target.checked })} />
+              Site is read-only
+            </label>
+            <button
+              type="button"
+              className={BTN}
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  const r = await adminSetReadOnly(ro.active, ro.message);
+                  setNote(r.ok ? (ro.active ? "Read-only is on." : "Read-only is off.") : r.error);
+                  if (r.ok) router.refresh();
+                })
+              }
+            >
+              Save switch
+            </button>
+            {note && (
+              <span role="status" className={MUTED}>
+                {note}
+              </span>
+            )}
+          </div>
+        </div>
+      </details>
     </Card>
   );
 }
@@ -243,7 +247,7 @@ function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people:
         <input className={FIELD} value={subject} onChange={(e) => setSubject(e.target.value)} required maxLength={150} />
       </label>
       <div className={FIELD_LABEL}>
-        <Tip label="About this field" text="{name} is the person's name; without it a greeting is added. {survey} is their own survey link. Blank lines separate paragraphs. The sign-off is added for you." className="self-start">
+        <Tip flat label="About this field" text="{name} is the person's name; without it a greeting is added. {survey} is their own survey link. Blank lines separate paragraphs. The sign-off is added for you." className="self-start">
           <label htmlFor={bodyId}>Message</label>
         </Tip>
         <textarea id={bodyId} className={TEXTAREA} rows={8} value={body} onChange={(e) => setBody(e.target.value)} required maxLength={10000} />

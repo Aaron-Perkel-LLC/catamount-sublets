@@ -12,7 +12,6 @@ describe("countChip", () => {
     expect(countChip(30, 20)).toMatchObject({ tone: "good", text: "▲ 50%" });
     expect(countChip(15, 20)).toMatchObject({ tone: "bad", text: "▼ 25%" });
     expect(countChip(20, 20)).toMatchObject({ tone: "neutral", text: "0" });
-    expect(countChip(30, 20, true)).toMatchObject({ tone: "neutral", text: "▲ 50%" });
   });
   it("is nothing without a period before, or with nothing in either", () => {
     expect(countChip(5, null)).toBeNull();

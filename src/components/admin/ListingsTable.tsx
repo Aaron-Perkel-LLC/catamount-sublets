@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ATTENTION, type AttentionFlag } from "@/lib/admin-attention";
+import { ATTENTION, ATTENTION_SHORT, type AttentionFlag } from "@/lib/admin-attention";
 import { shortDate } from "@/lib/dates";
 import { useAdmin } from "./AdminShell";
 import { CsvButton } from "./CsvButton";
@@ -41,9 +41,7 @@ function statusText(r: ListingRowDto): string {
 
 const STATUSES = ["all", "on board", "open", "paused", "taken", "hidden", "deleted"] as const;
 const STATUS_TONE: Record<string, PillTone> = { "on board": "good", "open, off board": "warn", taken: "info" };
-/** The attention flags, short enough for a row; the full wording is the hover. */
-const FLAG_SHORT: Record<AttentionFlag, string> = { "no-views": "No views", unconfirmed: "Unconfirmed", "no-contacts": "No contacts" };
-const flagsOf = (r: ListingRowDto) => r.flags.map((f) => ({ short: FLAG_SHORT[f as AttentionFlag] ?? f, long: ATTENTION[f as AttentionFlag] ?? f }));
+const flagsOf = (r: ListingRowDto) => r.flags.map((f) => ({ short: ATTENTION_SHORT[f as AttentionFlag] ?? f, long: ATTENTION[f as AttentionFlag] ?? f }));
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /**
@@ -105,7 +103,8 @@ export function ListingsTable({ rows, initialAttention = false }: { rows: Listin
           {r.deleted ? (
             <span className="text-ink-3">{r.label}</span>
           ) : (
-            <button type="button" className={`${LINK} text-left`} onClick={() => void openPost(r.id)}>
+            <button type="button" className={`${LINK} gap-1.5 text-left`} onClick={() => void openPost(r.id)}>
+              <span className="font-normal text-ink-3 tabular-nums">#{r.id}</span>
               {r.label}
             </button>
           )}
@@ -133,6 +132,7 @@ export function ListingsTable({ rows, initialAttention = false }: { rows: Listin
     { key: "contacts", header: "Contacts", numeric: true, sort: "contacts", cell: (r) => <Num n={r.contacts} /> },
     { key: "converted", header: "Converted", numeric: true, wide: true, sort: "converted", cell: (r) => <Num n={r.converted} /> },
     { key: "shares", header: "Shares", numeric: true, wide: true, sort: "shares", cell: (r) => <Num n={r.shares} /> },
+    { key: "photos", header: "Photos", numeric: true, phoneOnly: true, cell: (r) => (r.deleted ? null : <Num n={r.photos} />) },
     { key: "confirmed", header: "Confirmed", numeric: true, wide: true, sort: "confirmed", cell: (r) => (r.confirmedAvailableAt ? shortDate(new Date(r.confirmedAvailableAt)) : null) },
   ];
 

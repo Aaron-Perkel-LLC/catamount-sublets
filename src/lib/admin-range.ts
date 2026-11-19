@@ -27,7 +27,7 @@ export const CUTOVER_DATE = "2026-10-09";
 const ALL_FROM = "2025-01-01";
 /** A custom range is at most this long, so a typo can't ask for a decade of weekly buckets. */
 const MAX_DAYS = 731;
-/** Up to this many days a chart is daily; past it, weekly. */
+/** Up to this many days a table by period (Mail sent) is daily; past it, weekly. Charts smooth their own way: src/lib/admin-trend.ts. */
 const DAILY_MAX = 62;
 
 const isoDate = z

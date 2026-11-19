@@ -26,6 +26,8 @@ export interface Kpi {
   unit?: "count" | "percent";
   /** Two parts of the whole, as a labelled two-tone bar. */
   split?: { label: string; n: number }[];
+  /** Where the chart's points differ from the card's number, for the chart's ⓘ. */
+  seriesNote?: string;
   /** More rows for the chart's readout when this card is picked. */
   extra?: { label: string; values: number[] }[];
 }
@@ -42,8 +44,8 @@ export function KpiTabs({ first, children }: { first: string; children: ReactNod
 /**
  * A headline number: label, the number in tabular figures, a delta chip and
  * (given a series) a sparkline. No sentences: the explanation is behind the
- * ⓘ. Inside KpiTabs a card with a series is also a tab: picking it puts its
- * series on the chart, and the picked card is ringed.
+ * ⓘ. Inside KpiTabs a card with a series is also a button: pressing it puts
+ * its series on the chart, and the pressed card is ringed.
  */
 export function KpiCard({ kpi }: { kpi: Kpi }) {
   const tabs = useContext(Picked);
@@ -51,14 +53,16 @@ export function KpiCard({ kpi }: { kpi: Kpi }) {
   const on = tab?.key === kpi.key;
   return (
     <section className={`${CARD} relative flex min-w-0 flex-col gap-2 p-4 ${on ? "ring-2 ring-lake" : tab ? "hover:ring-1 hover:ring-line" : ""}`}>
-      {tab && <button type="button" role="tab" aria-selected={on} aria-label={`${kpi.label}: ${kpi.value}. Show on the chart.`} onClick={() => tab.pick(kpi.key)} className="absolute inset-0 rounded-xl" />}
-      {kpi.tip ? (
-        <Tip text={kpi.tip} className={`z-10 self-start ${LABEL} ${on ? "font-bold text-ink" : ""}`}>
-          <h2>{kpi.label}</h2>
-        </Tip>
-      ) : (
-        <h2 className={`${LABEL} ${on ? "font-bold text-ink" : ""}`}>{kpi.label}</h2>
-      )}
+      {tab && <button type="button" aria-pressed={on} aria-label={`${kpi.label}: ${kpi.value}. Show on the chart.`} onClick={() => tab.pick(kpi.key)} className="absolute inset-0 rounded-xl" />}
+      <h2 className={`self-start ${LABEL} ${on ? "font-bold text-ink" : ""}`}>
+        {kpi.tip ? (
+          <Tip text={kpi.tip} className="z-10">
+            {kpi.label}
+          </Tip>
+        ) : (
+          kpi.label
+        )}
+      </h2>
       <div className="pointer-events-none flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="text-[30px] leading-8 font-bold tabular-nums">{kpi.value}</span>
         {kpi.of && <span className="self-end pb-0.5 text-[13px] text-ink-3 tabular-nums">{kpi.of}</span>}
@@ -78,11 +82,11 @@ export function KpiCard({ kpi }: { kpi: Kpi }) {
   );
 }
 
-/** The KPI cards in a row of four (two by two on a phone); a tab list when they drive a chart. */
+/** The KPI cards in a row of four (two by two on a phone). */
 export function KpiRow({ kpis }: { kpis: Kpi[] }) {
   const tabs = useContext(Picked);
   return (
-    <div role={tabs ? "tablist" : undefined} aria-label={tabs ? "Chart" : undefined} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div role={tabs ? "group" : undefined} aria-label={tabs ? "Headline numbers; press one to chart it" : undefined} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {kpis.map((k) => (
         <KpiCard key={k.key} kpi={k} />
       ))}
@@ -95,9 +99,10 @@ export function KpiTrend({ kpis, points, mode }: { kpis: Kpi[]; points: TrendPoi
   const tabs = useContext(Picked);
   const kpi = kpis.find((k) => k.key === tabs?.key && k.series) ?? kpis.find((k) => k.series);
   if (!kpi?.series) return null;
+  const tip = [mode === "rolling" ? "Each point is the total for the 7 days ending that day, so one quiet or busy day doesn't swing the line. The card above is the whole range." : "", kpi.seriesNote ?? ""].filter(Boolean).join(" ");
   return (
-    <Card title={kpi.label} tip={mode === "rolling" ? "Each point is the total for the 7 days ending that day, so one quiet or busy day doesn't swing the line. The card above is the whole range." : undefined} actions={<span className="text-xs text-ink-3">{mode === "rolling" ? "7-day totals" : "By day"}</span>}>
-      <div role="tabpanel" className="-mb-3">
+    <Card title={kpi.label} tip={tip || undefined} actions={<span className="text-xs text-ink-3">{mode === "rolling" ? "7-day totals" : "By day"}</span>}>
+      <div aria-live="polite" className="-mb-3">
         <TrendChart label={kpi.label} points={points} unit={kpi.unit ?? "count"} series={[{ key: kpi.key, label: kpi.label.toLowerCase(), color: "var(--color-chart-lake)", kind: "area", values: kpi.series }]} extra={kpi.extra ?? []} />
       </div>
     </Card>

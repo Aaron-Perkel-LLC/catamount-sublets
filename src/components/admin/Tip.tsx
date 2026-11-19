@@ -5,13 +5,14 @@ import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } f
 
 /**
  * A label with its explanation behind a small ⓘ: shown on hover and on
- * keyboard focus, toggled by a tap (the ⓘ's hit area is 44 px). The bubble
+ * keyboard focus, toggled by a tap (on a touch screen the ⓘ's hit area is
+ * 44 px; `flat` keeps that area off a field right under the label). The bubble
  * is nudged sideways so it never leaves the screen. `quiet` (dense lists)
  * keeps the ⓘ out of sight until the label is pointed at, where there is a
  * pointer to point with; on a touch screen it always shows. `label` names
  * the ⓘ for a screen reader where it isn't about a number (a form hint).
  */
-export function Tip({ text, children, className = "", quiet = false, label = "What this counts" }: { text: string; children: ReactNode; className?: string; quiet?: boolean; label?: string }) {
+export function Tip({ text, children, className = "", quiet = false, flat = false, label = "What this counts" }: { text: string; children: ReactNode; className?: string; quiet?: boolean; flat?: boolean; label?: string }) {
   const id = useId();
   const wrap = useRef<HTMLSpanElement>(null);
   const bubble = useRef<HTMLSpanElement>(null);
@@ -62,7 +63,7 @@ export function Tip({ text, children, className = "", quiet = false, label = "Wh
         onClick={() => setPinned((p) => !p)}
         onFocus={(e) => e.currentTarget.matches(":focus-visible") && setHover(true)}
         onBlur={() => setHover(false)}
-        className={`relative grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full text-ink-3/60 before:absolute before:-inset-4 hover:text-lake ${quiet && !open ? "group-hover/tip:opacity-100 focus-visible:opacity-100 [@media(hover:hover)]:opacity-0" : ""}`}
+        className={`relative grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full text-ink-3/60 before:absolute before:-inset-1 hover:text-lake [@media(hover:none)]:before:-inset-4 ${flat ? "[@media(hover:none)]:before:-bottom-1" : ""} ${quiet && !open ? "group-hover/tip:opacity-100 focus-visible:opacity-100 [@media(hover:hover)]:opacity-0" : ""}`}
       >
         <Info className="h-3.5 w-3.5" aria-hidden />
       </button>

@@ -3,19 +3,20 @@ import type { Kpi } from "@/components/admin/KpiCard";
 import type { Stat, StatGroup } from "@/components/admin/StatList";
 import { num } from "@/components/admin/ui";
 import type { DbOrTx } from "@/db";
-import { ATTENTION, type AttentionFlag } from "@/lib/admin-attention";
+import type { AttentionFlag } from "@/lib/admin-attention";
 import { countChip, rateChip, share } from "@/lib/admin-delta";
 import { rangeQuery, type ResolvedRange } from "@/lib/admin-range";
 import { type TrendMode, type TrendPoint, trendRange, trendSeries } from "@/lib/admin-trend";
 import { easternDate } from "@/lib/dates";
+import { VIEWER_SEGMENTS, type ViewerSegment } from "@/lib/viewer-segment";
 import { adminPosts, listingRows } from "@/server/data/admin-listings";
 import { activitySeries, listingNumbers, overviewMetrics, sourcesAndTargets } from "@/server/data/admin-metrics";
 
 /** EVENT_SOURCES and SHARE_TARGETS (src/lib/options.ts) as people say them. */
 const SOURCE_LABELS: Record<string, string> = { browse: "Browse", map: "Map", "share-link": "Share link", deeplink: "Direct link", post: "Post page", unknown: "Not recorded" };
 const TARGET_LABELS: Record<string, string> = { native: "Share sheet", instagram: "Instagram", snapchat: "Snapchat", text: "Text", email: "Email", x: "X", copy: "Copy link", unknown: "Not recorded" };
-/** The attention flags, short enough for a list row; the full wording (src/lib/admin-attention.ts) is the hover. */
-export const ATTENTION_SHORT: Record<AttentionFlag, string> = { "no-views": "No views", unconfirmed: "Unconfirmed", "no-contacts": "No contacts" };
+const SEGMENT_KEYS = VIEWER_SEGMENTS.map((s) => s.key) as ViewerSegment[];
+const sumOf = (xs: number[]) => xs.reduce((t, x) => t + x, 0);
 
 export interface OverviewView {
   mode: TrendMode;
@@ -31,8 +32,11 @@ export interface OverviewView {
 
 /**
  * The Overview's numbers, shaped for the page. The queries are phase 32's;
- * the only arithmetic added is the chart's trailing 7-day totals
- * (src/lib/admin-trend.ts), summed here from the daily series.
+ * what is added is each headline number's shape over the range: the daily
+ * series as trailing 7-day totals (src/lib/admin-trend.ts), new listings
+ * per day counted here from the listings' own dates, and the contact rate
+ * per point. Views are split by whatever VIEWER_SEGMENTS lists; the contact
+ * rate and the funnel are about signed-in and signed-out by name.
  */
 export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<OverviewView> {
   const [o, daily, st, posts, numbers] = await Promise.all([overviewMetrics(db, r), activitySeries(db, trendRange(r)), sourcesAndTargets(db, r), adminPosts(db), listingNumbers(db, r)]);
@@ -45,14 +49,14 @@ export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<Overvi
   }
   const t = trendSeries(
     r,
-    daily.map((d) => ({ day: d.day, out: d.views.signed_out, in: d.views.signed_in, contacts: d.contacts, listings: postedOn.get(d.day) ?? 0 })),
-    ["out", "in", "contacts", "listings"],
+    daily.map((d) => ({ day: d.day, ...d.views, contacts: d.contacts, listings: postedOn.get(d.day) ?? 0 })),
+    [...SEGMENT_KEYS, "contacts", "listings"],
   );
 
   const out = o.views.signed_out;
   const signedIn = o.views.signed_in;
-  const views = out.cur + signedIn.cur;
-  const viewsPrev = r.prev ? (out.prev ?? 0) + (signedIn.prev ?? 0) : null;
+  const views = sumOf(SEGMENT_KEYS.map((k) => o.views[k].cur));
+  const viewsPrev = r.prev ? sumOf(SEGMENT_KEYS.map((k) => o.views[k].prev ?? 0)) : null;
   const rate = share(o.contacts.cur, o.signedInViewers.cur);
   const ratePrev = o.contacts.prev === null || o.signedInViewers.prev === null ? null : share(o.contacts.prev, o.signedInViewers.prev);
 
@@ -63,15 +67,9 @@ export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<Overvi
       value: num(views),
       chip: countChip(views, viewsPrev),
       tip: "A view is one person opening one listing on one Eastern day.",
-      series: t.values.out.map((n, i) => n + t.values.in[i]),
-      split: [
-        { label: "signed out", n: out.cur },
-        { label: "signed in", n: signedIn.cur },
-      ],
-      extra: [
-        { label: "signed out", values: t.values.out },
-        { label: "signed in", values: t.values.in },
-      ],
+      series: t.points.map((_, i) => sumOf(SEGMENT_KEYS.map((k) => t.values[k][i]))),
+      split: VIEWER_SEGMENTS.map((s) => ({ label: s.label.toLowerCase(), n: o.views[s.key].cur })),
+      extra: VIEWER_SEGMENTS.map((s) => ({ label: s.label.toLowerCase(), values: t.values[s.key] })),
     },
     {
       key: "contacts",
@@ -80,6 +78,7 @@ export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<Overvi
       chip: countChip(o.contacts.cur, o.contacts.prev),
       tip: `People who got in touch about a listing, counted once per listing. ${num(o.taps.cur)} taps in all (copy, call, text, mail app).`,
       series: t.values.contacts,
+      seriesNote: "The chart counts a person once per listing per day, so someone who got in touch about the same listing on two days is in a 7-day point twice; the card counts them once.",
     },
     {
       key: "rate",
@@ -87,7 +86,8 @@ export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<Overvi
       value: rate === null ? "—" : `${Math.round(rate)}%`,
       chip: rateChip(rate, ratePrev, o.signedInViewers.prev),
       tip: `${num(o.contacts.cur)} of ${num(o.signedInViewers.cur)} signed-in viewers got in touch. Signed-out visitors can't, so they aren't in it. The chart divides by signed-in views.`,
-      series: t.values.contacts.map((c, i) => (t.values.in[i] > 0 ? Math.min(100, Math.round((c / t.values.in[i]) * 100)) : null)),
+      series: t.values.contacts.map((c, i) => (t.values.signed_in[i] > 0 ? Math.min(100, Math.round((c / t.values.signed_in[i]) * 100)) : null)),
+      seriesNote: "The chart divides contacts by signed-in views (people-days); the card divides by signed-in viewers, so the two can differ.",
       unit: "percent",
     },
     {
@@ -101,10 +101,8 @@ export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<Overvi
   ];
 
   const stat = (label: string, n: number, more: Partial<Stat> = {}): Stat => ({ label, value: num(n), zero: n === 0, ...more });
-  const arrivalsOut = o.shareArrivals.signed_out;
-  const arrivalsIn = o.shareArrivals.signed_in;
-  const arrivals = arrivalsOut.cur + arrivalsIn.cur;
-  const arrivalsPrev = r.prev ? (arrivalsOut.prev ?? 0) + (arrivalsIn.prev ?? 0) : null;
+  const arrivals = sumOf(SEGMENT_KEYS.map((k) => o.shareArrivals[k].cur));
+  const arrivalsPrev = r.prev ? sumOf(SEGMENT_KEYS.map((k) => o.shareArrivals[k].prev ?? 0)) : null;
   const filled = share(o.outcomes.throughSite.cur, o.outcomes.answered.cur);
 
   return {
@@ -124,7 +122,7 @@ export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<Overvi
         title: "Audience",
         stats: [
           stat("New accounts", o.newAccounts.cur, { chip: countChip(o.newAccounts.cur, o.newAccounts.prev), tip: "Not counting migrated accounts or the admin." }),
-          stat("Share arrivals", arrivals, { chip: countChip(arrivals, arrivalsPrev), tip: `${num(arrivalsOut.cur)} signed out, ${num(arrivalsIn.cur)} signed in. Someone who arrives signed out and then signs in counts once in each.` }),
+          stat("Share arrivals", arrivals, { chip: countChip(arrivals, arrivalsPrev), tip: `${VIEWER_SEGMENTS.map((s) => `${num(o.shareArrivals[s.key].cur)} ${s.label.toLowerCase()}`).join(", ")}. Someone who arrives signed out and then signs in counts once in each.` }),
           stat("Saved searches", o.savedSearches.added.cur, { chip: countChip(o.savedSearches.added.cur, o.savedSearches.added.prev), tip: `Added in the range. ${num(o.savedSearches.total)} saved in all.` }),
           stat("Digest subscribers", o.digest.subscribed, { tip: `Subscribed now. In the range ${num(o.digest.joined.cur)} joined and ${num(o.digest.left.cur)} left (left is each subscription's current state).` }),
         ],
@@ -152,5 +150,3 @@ export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<Overvi
     query: rangeQuery(r),
   };
 }
-
-export { ATTENTION };

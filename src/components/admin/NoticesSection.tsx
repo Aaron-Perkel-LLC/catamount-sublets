@@ -197,7 +197,7 @@ function NoticeForm({ id, initial, live, onDone, onCancel }: { id: number | null
       </label>
       <div className={FIELD_LABEL}>
         <span className="flex items-center justify-between gap-3">
-          <Tip label="About this field" text="**bold**, *italic*, [links](/browse), lists, ### headings, > quotes. No images or HTML.">
+          <Tip flat label="About this field" text="**bold**, *italic*, [links](/browse), lists, ### headings, > quotes. No images or HTML.">
             <label htmlFor={bodyId}>Body (Markdown)</label>
           </Tip>
           <span className="tabular-nums">
