@@ -113,7 +113,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           sources,
           targets,
           outcomes,
-          perListing: posts.map((p) => ({ id: p.id, shortAddress: p.shortAddress, ownerId: p.ownerId, ownerEmail: p.ownerEmail, ownerName: p.ownerName, status: p.status, hidden: p.hidden, ...(activity.get(p.id) ?? { views: 0, contacts: 0, converted: 0, shares: 0, arrivals: 0 }) })),
+          perListing: [
+            ...posts.map((p) => ({ id: p.id, shortAddress: p.shortAddress, ownerId: p.ownerId, ownerEmail: p.ownerEmail, ownerName: p.ownerName, status: p.status, hidden: p.hidden, deleted: false, ...(activity.get(p.id) ?? { views: 0, contacts: 0, converted: 0, shares: 0, arrivals: 0 }) })),
+            ...[...activity].filter(([id]) => !postById.has(id)).map(([id, a]) => ({ id, shortAddress: `Deleted #${id}`, ownerId: null, ownerEmail: null, ownerName: null, status: "deleted", hidden: false, deleted: true, ...a })),
+          ],
         }}
       />
     </div>

@@ -157,7 +157,8 @@ const emptyTotals = (): ArchivePlan["totals"] => ({ listings: 0, taken: 0, photo
  * if anything changed, writes the totals row with a manifest of what is
  * about to go, takes the semester off the staying listings (their next
  * semester becomes first and their events are re-tagged), deletes the going
- * listings (photos, semesters and events cascade) and stamps the semester.
+ * listings (photos and semesters cascade; their events stay, see
+ * src/db/schema/events.ts) and stamps the semester.
  * Files are deleted from storage only after the commit.
  */
 export async function archiveCommit(db: Db, code: string, confirm: string): Promise<Result<{ listings: number; filesDeleted: number }>> {
@@ -208,7 +209,6 @@ export async function archiveCommit(db: Db, code: string, confirm: string): Prom
         await tx.update(listingEvents).set({ semesterCode: ordered[0]?.code ?? null }).where(and(eq(listingEvents.listingId, stay.id), eq(listingEvents.semesterCode, code)));
       }
       if (goingIds.length) await tx.delete(listings).where(inArray(listings.id, goingIds));
-      await tx.delete(listingEvents).where(eq(listingEvents.semesterCode, code));
       await tx.update(semesters).set({ archivedAt: new Date() }).where(eq(semesters.code, code));
       return fileUrls;
     });
@@ -342,6 +342,7 @@ export interface DeletionReport {
   listingId: number | null;
   photos: number;
   files: number;
+  /** The listing's activity events. They are kept (no foreign key), so this is informational. */
   events: number;
   sessions: number;
   /** One-off emails the admin sent to this address (admin_messages); deleted with the account. */
@@ -349,8 +350,9 @@ export interface DeletionReport {
 }
 
 /**
- * Delete a person entirely: their listing (photos, semesters, events
- * cascade), their sessions, and their files from storage. Used by the
+ * Delete a person entirely: their listing (photos and semesters cascade;
+ * its events stay, anonymous, see src/db/schema/events.ts), their sessions,
+ * and their files from storage. Used by the
  * People tab, the account page, and the delete-user script.
  */
 export async function deletePerson(db: Db, userId: string, actingAdminId: string | null, dryRun = false): Promise<Result<DeletionReport>> {

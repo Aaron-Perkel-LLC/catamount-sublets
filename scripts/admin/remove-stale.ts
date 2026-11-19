@@ -2,7 +2,7 @@
  * After the stale-notice deadline: remove each migrated poster who was sent
  * the notice and has still never signed in, account and listing together
  * (src/server/services/stale.ts removeStale, through deletePerson: the
- * delete-user path, photos and events included). Nothing is written to
+ * delete-user path, photos included; the listing's anonymous events stay). Nothing is written to
  * listing_outcomes. Dry run by default; prints counts only. --apply removes
  * and appends one line per person to DELETIONS_LOG (default
  * ~/sublet-migration/deletions.log) with ids, never the address.
@@ -47,13 +47,13 @@ async function main() {
     db,
     { mailedIds, skip: await columnIn(SKIP), suppressed: await columnIn(SUPPRESSED), includeSuppressed, apply },
     async (r) => {
-      await appendFile(DELETIONS_LOG, `${new Date().toISOString()} removed-stale user=${r.userId} listing=${r.listingId ?? "-"} photos=${r.photos} events=${r.events}\n`, { mode: 0o600 });
+      await appendFile(DELETIONS_LOG, `${new Date().toISOString()} removed-stale user=${r.userId} listing=${r.listingId ?? "-"} photos=${r.photos} events_kept=${r.events}\n`, { mode: 0o600 });
     },
   );
 
   console.log(`${mailedIds.size} id(s) in the notice log; ${report.audience} account(s) still never signed in with a listing`);
   console.log(`kept: ${report.keptNoEmail} asked for no email, ${report.keptSkip} on skip.txt, ${report.keptUnmailed} not mailed${includeSuppressed ? "" : " (suppressed addresses kept; --include-unmailed removes them)"}`);
-  console.log(`${apply ? "removed" : "would remove"}: ${report.removed} account(s) and listing(s), ${report.photos} photo(s), ${report.events} event(s); ${report.droppedAtRecheck} dropped at the re-check, ${report.failed} failed`);
+  console.log(`${apply ? "removed" : "would remove"}: ${report.removed} account(s) and listing(s), ${report.photos} photo(s), ${report.events} event(s) kept; ${report.droppedAtRecheck} dropped at the re-check, ${report.failed} failed`);
   console.log(apply ? `logged ids to ${DELETIONS_LOG}` : "dry run; nothing removed.");
 }
 

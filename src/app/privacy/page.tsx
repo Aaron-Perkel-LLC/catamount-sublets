@@ -6,7 +6,7 @@ import { SITE_TIME_ZONE } from "@/lib/dates";
 export const metadata: Metadata = { title: `Privacy · ${SITE.name}`, alternates: { canonical: "/privacy" } };
 
 /** Bump whenever this page changes what it says. */
-const LAST_UPDATED = "2026-11-16";
+const LAST_UPDATED = "2026-11-18";
 
 /** What the site keeps, who sees it, and how to get rid of it. Plain words, no legalese. */
 export default function PrivacyPage() {
@@ -54,7 +54,8 @@ export default function PrivacyPage() {
         </p>
         <p>
           Counts of how many people opened a listing, got in touch, and shared it. People are recorded as a one-way code, never by
-          name or email, so no page can say who looked at what. Posters and the admin see totals only.
+          name or email, so no page can say who looked at what. Posters and the admin see totals only. The counts are kept after the
+          listing is gone, under the listing&apos;s number only, so the totals add up.
         </p>
         <p>
           If you ask us to add your school or to let you in: the name, email address and message you send, and our reply. Both are kept
@@ -96,7 +97,7 @@ export default function PrivacyPage() {
       <section className="flex flex-col gap-3 text-ink-2">
         <h2 className="text-lg font-bold text-ink">Getting rid of it</h2>
         <p>
-          Delete your listing from your post page, or your whole account from the <Link href="/account" className="link">account page</Link>: listing, photos and account go at once, with any email the admin sent you from the site. Or email{" "}
+          Delete your listing from your post page, or your whole account from the <Link href="/account" className="link">account page</Link>: listing, photos and account go at once, with any email the admin sent you from the site (the anonymous counts above stay). Or email{" "}
           <a href={`mailto:${SITE.supportEmail}`} className="link">
             {SITE.supportEmail}
           </a>{" "}

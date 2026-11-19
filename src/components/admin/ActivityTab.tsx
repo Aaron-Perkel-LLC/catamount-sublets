@@ -91,16 +91,26 @@ export function ActivityTab({ activity, onOpenPost }: { activity: ActivityDto; o
             {sorted.map((l) => (
               <tr key={l.id} className="border-t border-line-light align-top">
                 <td className="py-1.5 pr-3">
-                  <button type="button" className="link text-left text-sm" onClick={() => onOpenPost(l.id)}>
-                    {l.shortAddress}
-                  </button>
-                  {l.status !== "open" && <span className="ml-1 text-xs text-ink-3">({l.status})</span>}
-                  {l.hidden && <span className="ml-1 text-xs text-ink-3">(hidden)</span>}
+                  {l.deleted ? (
+                    <span className="text-ink-3">{l.shortAddress}</span>
+                  ) : (
+                    <>
+                      <button type="button" className="link text-left text-sm" onClick={() => onOpenPost(l.id)}>
+                        {l.shortAddress}
+                      </button>
+                      {l.status !== "open" && <span className="ml-1 text-xs text-ink-3">({l.status})</span>}
+                      {l.hidden && <span className="ml-1 text-xs text-ink-3">(hidden)</span>}
+                    </>
+                  )}
                 </td>
                 <td className="py-1.5 pr-3">
-                  <a href={`#people:${l.ownerId}`} className="link" title={l.ownerEmail}>
-                    {l.ownerName ?? l.ownerEmail}
-                  </a>
+                  {l.ownerId ? (
+                    <a href={`#people:${l.ownerId}`} className="link" title={l.ownerEmail ?? undefined}>
+                      {l.ownerName ?? l.ownerEmail}
+                    </a>
+                  ) : (
+                    <span className="text-ink-3">—</span>
+                  )}
                 </td>
                 <td className="py-1.5 pr-3">{l.views}</td>
                 <td className="py-1.5 pr-3">{l.contacts}</td>

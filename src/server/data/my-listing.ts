@@ -211,7 +211,7 @@ export async function listingFileUrls(db: DbOrTx, listingId: number): Promise<st
   return rows.flatMap((r) => [r.d, r.t, r.c]);
 }
 
-/** Delete the row (photos, semesters and events cascade). Returns the file URLs to remove, or null when nothing was deleted. */
+/** Delete the row (photos and semesters cascade; events stay, see src/db/schema/events.ts). Returns the file URLs to remove, or null when nothing was deleted. */
 export async function deleteListing(db: DbOrTx, listingId: number, actor: Actor): Promise<string[] | null> {
   const urls = await listingFileUrls(db, listingId);
   const rows = await db.delete(listings).where(owned(listingId, actor)).returning({ id: listings.id });

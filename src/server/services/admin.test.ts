@@ -81,9 +81,11 @@ describe("archive", () => {
     expect((await admin.archivePlan(db, "spring27")).blocking[0]).toMatch(/still active/);
   });
 
-  it("commits: totals row, staying listing re-tagged, going listing and files gone", async () => {
+  it("commits: totals row, staying listing re-tagged, going listing and files gone, every event kept", async () => {
     const [bListing] = await db.select({ id: s.listings.id }).from(s.listings).where(eq(s.listings.userId, people.b.id));
+    const [aListing] = await db.select({ id: s.listings.id }).from(s.listings).where(eq(s.listings.userId, people.a.id));
     expect(await recordEvent(db, people.viewer, { listingId: bListing.id, type: "listing_open", source: "browse" })).toBe("stored");
+    expect(await recordEvent(db, people.viewer, { listingId: aListing.id, type: "listing_open", source: "browse" })).toBe("stored");
     const before = await files();
     expect((await admin.archiveCommit(db, "fall26", "wrong")).ok).toBe(false);
     const r = await admin.archiveCommit(db, "fall26", "fall26");
@@ -97,6 +99,8 @@ describe("archive", () => {
     expect(bSems).toEqual([{ listingId: bListing.id, semesterCode: "spring27", position: 0 }]);
     const [ev] = await db.select({ sem: s.listingEvents.semesterCode }).from(s.listingEvents).where(eq(s.listingEvents.listingId, bListing.id));
     expect(ev.sem).toBe("spring27");
+    const goneEvents = await db.select({ sem: s.listingEvents.semesterCode }).from(s.listingEvents).where(eq(s.listingEvents.listingId, aListing.id));
+    expect(goneEvents).toEqual([{ sem: "fall26" }]);
     expect((await db.select().from(s.semesters).where(eq(s.semesters.code, "fall26")))[0].archivedAt).not.toBeNull();
     expect((await admin.archiveCommit(db, "fall26", "fall26")).ok).toBe(false);
   });
@@ -112,8 +116,9 @@ describe("posts and people", () => {
     await db.update(s.user).set({ firstName: null, lastName: null }).where(eq(s.user.id, people.a.id));
   });
 
-  it("sets status with a notice, bans with session revocation, and deletes a person with their files", async () => {
+  it("sets status with a notice, bans with session revocation, and deletes a person with their files, keeping the listing's events", async () => {
     const [cListing] = await db.select({ id: s.listings.id }).from(s.listings).where(eq(s.listings.userId, people.c.id));
+    expect(await recordEvent(db, people.viewer, { listingId: cListing.id, type: "copy_email", source: "browse" })).toBe("stored");
     expect(await admin.adminSetStatus(db, cListing.id, "paused")).toEqual({ ok: true, data: undefined });
     expect(sentInTests.at(-1)?.subject).toMatch(/paused/);
     expect(sentInTests.at(-1)?.text).toContain("The admin paused the listing by c@uvm.edu.");
@@ -126,11 +131,12 @@ describe("posts and people", () => {
     expect((await db.select({ b: s.user.banned, r: s.user.banReason }).from(s.user).where(eq(s.user.id, people.c.id)))[0]).toEqual({ b: true, r: "spam" });
 
     const dry = await admin.deletePerson(db, people.c.id, people.admin.id, true);
-    expect(dry).toMatchObject({ ok: true, data: { email: "c@uvm.edu", photos: 1, files: 3 } });
+    expect(dry).toMatchObject({ ok: true, data: { email: "c@uvm.edu", photos: 1, files: 3, events: 1 } });
     const before = await files();
     expect((await admin.deletePerson(db, people.c.id, people.admin.id)).ok).toBe(true);
     expect(await files()).toBe(before - 3);
     expect(await db.select().from(s.user).where(eq(s.user.id, people.c.id))).toHaveLength(0);
+    expect(await db.select().from(s.listingEvents).where(eq(s.listingEvents.listingId, cListing.id))).toHaveLength(1);
     expect((await admin.deletePerson(db, people.admin.id, people.admin.id)).ok).toBe(false);
   });
 

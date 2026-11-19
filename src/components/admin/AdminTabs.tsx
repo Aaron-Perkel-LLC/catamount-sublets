@@ -71,7 +71,8 @@ export interface ActivityDto {
   daily: { day: string; views: number; contacts: number }[];
   sources: { source: string; n: number }[];
   targets: { target: string; n: number }[];
-  perListing: ({ id: number; shortAddress: string; ownerId: string; ownerEmail: string; ownerName: string | null; status: string; hidden: boolean } & ListingActivity)[];
+  /** Every listing with its numbers, plus a row per deleted listing that still has events (deleted: true, no poster). */
+  perListing: ({ id: number; shortAddress: string; ownerId: string | null; ownerEmail: string | null; ownerName: string | null; status: string; hidden: boolean; deleted: boolean } & ListingActivity)[];
   outcomes: OutcomeSummary;
 }
 

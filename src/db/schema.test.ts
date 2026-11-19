@@ -91,7 +91,7 @@ describe("listings", () => {
     await expectDbError(db.delete(s.semesters).where(eq(s.semesters.code, "spring27")), /foreign key|semesters_code_fk/i);
   });
 
-  it("cascades photos, semesters and events when a listing or its user goes", async () => {
+  it("cascades photos and semesters when a listing or its user goes, and keeps its events", async () => {
     const u = await makeUser("cascade@uvm.edu");
     const l = await makeListing(u.id);
     await db.insert(s.listingSemesters).values({ listingId: l.id, semesterCode: "spring27", position: 0 });
@@ -120,7 +120,15 @@ describe("listings", () => {
     expect(await db.select().from(s.listings).where(eq(s.listings.id, l.id))).toHaveLength(0);
     expect(await db.select().from(s.listingPhotos).where(eq(s.listingPhotos.listingId, l.id))).toHaveLength(0);
     expect(await db.select().from(s.listingSemesters).where(eq(s.listingSemesters.listingId, l.id))).toHaveLength(0);
-    expect(await db.select().from(s.listingEvents).where(eq(s.listingEvents.listingId, l.id))).toHaveLength(0);
+    expect(await db.select().from(s.listingEvents).where(eq(s.listingEvents.listingId, l.id))).toHaveLength(1);
+  });
+
+  it("never reuses a deleted listing's id, so kept events can't land on a new listing", async () => {
+    const u = await makeUser("reuse@uvm.edu");
+    const first = await makeListing(u.id);
+    await db.delete(s.listings).where(eq(s.listings.id, first.id));
+    const second = await makeListing(u.id);
+    expect(second.id).toBeGreaterThan(first.id);
   });
 
   it("stores timestamps with their instant intact", async () => {

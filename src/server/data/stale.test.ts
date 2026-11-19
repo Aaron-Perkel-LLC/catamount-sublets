@@ -66,7 +66,7 @@ beforeAll(async () => {
   await person("failed"); // the send failed, so not in the log
   await person("viewer", { migrated: false, signedIn: true, listing: false });
 
-  // Photos and events on the stale listing, to see them go with it.
+  // Photos and events on the stale listing: the photos go with it, the events stay.
   const [u] = await db.select({ id: s.user.id, email: s.user.email, role: s.user.role }).from(s.user).where(eq(s.user.id, ids.stale));
   const ref = await saveRawUploadLocal(await sharp({ create: { width: 800, height: 600, channels: 3, background: "#1D4F73" } }).jpeg().toBuffer());
   const photo = await attachPhotoFor(db, { id: u.id, email: u.email, role: "user" }, ref);
@@ -140,7 +140,7 @@ describe("removeStale", () => {
     expect(users.has(ids.noname)).toBe(false);
     for (const k of ["late", "skipped", "failed", "quiet", "returned", "admin", "banned"]) expect(users.has(ids[k])).toBe(true);
     expect(await db.select().from(s.listings).where(eq(s.listings.id, listingIds.stale))).toHaveLength(0);
-    expect(await db.select().from(s.listingEvents).where(eq(s.listingEvents.listingId, listingIds.stale))).toHaveLength(0);
+    expect(await db.select().from(s.listingEvents).where(eq(s.listingEvents.listingId, listingIds.stale))).toHaveLength(1);
     expect(await db.select().from(s.listingPhotos).where(eq(s.listingPhotos.listingId, listingIds.stale))).toHaveLength(0);
     expect(await db.select().from(s.listingOutcomes)).toHaveLength(0);
   });

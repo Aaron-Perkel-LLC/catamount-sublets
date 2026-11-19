@@ -1,21 +1,24 @@
 import { bigint, boolean, char, check, index, integer, pgTable, text, unique } from "drizzle-orm/pg-core";
 import { EVENT_SOURCES, EVENT_TYPE_VALUES, SHARE_TARGETS } from "@/lib/options";
 import { createdAt, inList, inListOrNull } from "./helpers";
-import { listings } from "./listings";
 
 /**
  * The activity log: who did what to which listing, with the "who" reduced to
- * a keyed hash (actor_key) so no page can ever say who viewed what. Events
- * are deleted with their listing. The log started empty at cutover; the
- * archived semesters' totals live in semester_archives.
+ * a keyed hash (actor_key) so no page can ever say who viewed what. The log
+ * started empty at cutover; the archived semesters' totals also live in
+ * semester_archives.
+ *
+ * listing_id has no foreign key (like listing_outcomes): events outlive their
+ * listing, its poster's account and the semester's archive, so past totals
+ * don't shrink when a filled listing is deleted. They hold no personal data,
+ * only the listing's number and a one-way code. Every writer checks that the
+ * listing exists before inserting (src/server/data/events.ts).
  */
 export const listingEvents = pgTable(
   "listing_events",
   {
     id: bigint({ mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
-    listingId: integer()
-      .notNull()
-      .references(() => listings.id, { onDelete: "cascade" }),
+    listingId: integer().notNull(),
     /**
      * hmac_sha256(APP_SECRET, 'actor:' + user.id)[0:16]; for a signed-out
      * view, hmac_sha256(APP_SECRET, 'anon-view:' + Eastern date + ':' + IP + UA)[0:16],
