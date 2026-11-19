@@ -21,6 +21,7 @@
     "check:public-leaks": "node --import tsx scripts/check-public-leaks.ts",
     "check:deployment-leaks": "node --import tsx scripts/check-deployment-leaks.ts",
     "send-welcome": "node --env-file-if-exists=.env.local --import tsx scripts/admin/send-welcome.ts",
+    "seed-events": "node --env-file-if-exists=.env.local --import tsx scripts/admin/seed-events.ts",
     "clear-rate-limits": "node --env-file-if-exists=.env.local --import tsx scripts/admin/clear-rate-limits.ts",
     "welcome-batches": "node --env-file-if-exists=.env.local --import tsx scripts/admin/welcome-batches.ts",
     "send-survey": "node --env-file-if-exists=.env.local --import tsx scripts/admin/send-survey.ts",
