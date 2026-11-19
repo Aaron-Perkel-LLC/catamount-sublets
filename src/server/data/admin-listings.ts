@@ -6,6 +6,7 @@ import type { ListingRowDto } from "@/components/admin/types";
 import { attentionFlags } from "@/lib/admin-attention";
 import { daysBetweenDates, easternDate } from "@/lib/dates";
 import { formatAddress } from "@/lib/format";
+import { semesterSpan } from "@/lib/semesters";
 import type { ListingNumbers } from "./admin-metrics";
 import { labelFor, listingSemestersByListing } from "./semesters";
 import { posterColumns, shownName } from "./names";
@@ -35,6 +36,7 @@ export interface AdminPost {
   confirmedAvailableAt: Date | null;
   legacyImport: boolean;
   semesterLabel: string;
+  semesterShort: string;
   /** The first semester's code (position 0), what the events are tagged with. */
   firstSemester: string | null;
 }
@@ -73,6 +75,7 @@ export async function adminPosts(db: DbOrTx): Promise<AdminPost[]> {
       ownerName: shownName({ displayName }, poster, p.ownerEmail),
       shortAddress: formatAddress(address),
       semesterLabel: labelFor(list, false).label,
+      semesterShort: semesterSpan(list.map((x) => x.name)),
       firstSemester: list[0]?.code ?? null,
     };
   });
@@ -99,6 +102,7 @@ export function listingRows(posts: AdminPost[], numbers: Map<number, ListingNumb
       hidden: p.hidden,
       studentsOnly: p.signedInOnly,
       semesterLabel: p.semesterLabel,
+      semesterShort: p.semesterShort,
       firstSemester: p.firstSemester,
       postedAt,
       ageDays: daysBetweenDates(easternDate(p.postedAt), today),
@@ -115,7 +119,7 @@ export function listingRows(posts: AdminPost[], numbers: Map<number, ListingNumb
   });
   for (const [id, n] of numbers) {
     if (live.has(id) || (n.views === 0 && n.contacts === 0 && n.shares === 0 && n.arrivals === 0)) continue;
-    rows.push({ id, label: `Deleted #${id}`, deleted: true, ownerId: null, ownerName: null, ownerEmail: null, status: "deleted", onBoard: false, hidden: false, studentsOnly: false, semesterLabel: "", firstSemester: null, postedAt: null, ageDays: null, confirmedAvailableAt: null, photos: 0, ...n, flags: [] });
+    rows.push({ id, label: `Deleted #${id}`, deleted: true, ownerId: null, ownerName: null, ownerEmail: null, status: "deleted", onBoard: false, hidden: false, studentsOnly: false, semesterLabel: "", semesterShort: "", firstSemester: null, postedAt: null, ageDays: null, confirmedAvailableAt: null, photos: 0, ...n, flags: [] });
   }
   return rows;
 }

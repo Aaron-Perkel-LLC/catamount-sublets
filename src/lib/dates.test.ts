@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertIsoDate, daysBetweenDates, deadlineWords, easternClock, easternDate, easternGreeting, easternDayStart, easternDeadlinePassed, easternOffsetMinutes, nextDate, postedAgo, shortDate } from "./dates";
+import { assertIsoDate, daysBetweenDates, deadlineWords, easternClock, easternDate, easternGreeting, easternDayStart, easternDeadlinePassed, easternOffsetMinutes, nextDate, postedAgo, shortAge, shortDate } from "./dates";
 
 describe("easternDate", () => {
   it("uses the Eastern calendar day, not UTC", () => {
@@ -18,6 +18,12 @@ describe("easternOffsetMinutes / easternDayStart", () => {
     expect(easternOffsetMinutes(new Date("2026-01-01T12:00:00Z"))).toBe(-300);
     expect(easternDayStart("2026-10-08").toISOString()).toBe("2026-10-08T04:00:00.000Z");
     expect(easternDayStart("2026-12-25").toISOString()).toBe("2026-12-25T05:00:00.000Z");
+  });
+});
+
+describe("shortAge", () => {
+  it("is today, days up to 13, then whole weeks", () => {
+    expect([0, 1, 3, 13, 14, 20, 35, 400].map(shortAge)).toEqual(["today", "1d", "3d", "13d", "2w", "2w", "5w", "57w"]);
   });
 });
 

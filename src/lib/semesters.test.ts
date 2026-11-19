@@ -4,6 +4,7 @@ import {
   suggestedCode,
   semesterKey,
   semesterLabel,
+  semesterSpan,
   semesterParts,
   semestersBackToBack,
   sortSemesters,
@@ -56,6 +57,17 @@ describe("sortSemesters", () => {
       "Alpha",
       "Zeta",
     ]);
+  });
+});
+
+describe("semesterSpan", () => {
+  it("is the first and last semester with short years", () => {
+    expect(semesterSpan([])).toBe("");
+    expect(semesterSpan(["Spring 2027"])).toBe("Spring 27");
+    expect(semesterSpan(["Summer 2027", "Fall 2027"])).toBe("Summer – Fall 27");
+    expect(semesterSpan(["Fall 2027", "Spring 2028"])).toBe("Fall 27 – Spring 28");
+    expect(semesterSpan(["Summer 2027", "Fall 2027", "Spring 2028"])).toBe("Summer 27 – Spring 28");
+    expect(semesterSpan(["Winter break", "Spring 2027"])).toBe("Winter break – Spring 2027");
   });
 });
 

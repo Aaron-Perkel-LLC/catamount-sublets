@@ -1,5 +1,5 @@
 import { Card } from "@/components/admin/Card";
-import { type Kpi, KpiRow } from "@/components/admin/KpiCard";
+import { ChartKey, type Kpi, KpiRow } from "@/components/admin/KpiCard";
 import { PeopleSection } from "@/components/admin/sections/PeopleSection";
 import { type Stat, StatList } from "@/components/admin/StatList";
 import { TrendChart } from "@/components/admin/TrendChart";
@@ -33,7 +33,11 @@ export default async function AdminPeople({ searchParams }: { searchParams: Admi
   const [people, posts, matches, acc] = await Promise.all([listPeople(db), adminPosts(db), peopleQ ? searchPeopleIds(db, peopleQ) : null, accountMetrics(db, trendRange(r))]);
   const postById = new Map(posts.map((p) => [p.id, p]));
   const v = acc.visibility;
-  const t = trendSeries(r, acc.weekly, ["posters", "seekers"]);
+  const t = trendSeries(
+    r,
+    acc.weekly.map((d) => ({ ...d, all: d.posters + d.seekers })),
+    ["posters", "seekers", "all"],
+  );
 
   const kpis: Kpi[] = [
     { key: "d7", label: "Seen in 7 days", value: num(acc.active.d7), of: `/ ${num(acc.active.total)}`, tip: `Signed in, or used a session, in the last 7 days (sessions refresh at most daily, so to within a day). Of ${num(acc.active.total)} accounts, not counting the admin.` },
@@ -66,23 +70,29 @@ export default async function AdminPeople({ searchParams }: { searchParams: Admi
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_17rem]">
         <Card
           title="New accounts"
-          tip={`${t.mode === "rolling" ? "Each point is the total for the 7 days ending that day" : "By Eastern day"}, not counting migrated accounts or the admin. Posters have a listing now; seekers don't (someone who deleted theirs counts as a seeker).`}
+          tip={`${t.bucket === "day" ? "Each bar is that Eastern day on its own; the line is the average of the 7 days ending that day" : "Each bar is a week, Monday to Sunday"}. Migrated accounts and the admin aren't counted. Posters have a listing now; seekers don't (someone who deleted theirs counts as a seeker).`}
           actions={
-            <span className="flex items-center gap-3 text-xs text-ink-3">
-              <Key color={SEEKERS}>Seekers</Key>
-              <Key color={POSTERS}>Posters</Key>
-              <span className="border-l border-line-light pl-3 max-sm:hidden">{t.mode === "rolling" ? "7-day totals" : "By day"}</span>
-            </span>
+            <ChartKey
+              bucket={t.bucket}
+              line={Boolean(t.avg)}
+              series={[
+                { label: "Seekers", color: SEEKERS },
+                { label: "Posters", color: POSTERS },
+              ]}
+            />
           }
         >
           <div className="-mb-3">
             <TrendChart
               label="New accounts"
               points={t.points}
-              series={[
-                { key: "seekers", label: "seekers", color: SEEKERS, kind: "area", values: t.values.seekers },
-                { key: "posters", label: "posters", color: POSTERS, kind: "line", values: t.values.posters },
+              bucket={t.bucket}
+              noun={["new account", "new accounts"]}
+              bars={[
+                { key: "seekers", label: "seekers", color: SEEKERS, values: t.bars.seekers },
+                { key: "posters", label: "posters", color: POSTERS, values: t.bars.posters },
               ]}
+              avg={t.avg?.all ?? null}
             />
           </div>
         </Card>
@@ -108,15 +118,5 @@ export default async function AdminPeople({ searchParams }: { searchParams: Admi
         />
       </Card>
     </div>
-  );
-}
-
-/** One series in the chart's legend: a short stroke of its colour and its name. */
-function Key({ color, children }: { color: string; children: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="h-0.5 w-3 rounded-full" style={{ background: color }} aria-hidden />
-      {children}
-    </span>
   );
 }

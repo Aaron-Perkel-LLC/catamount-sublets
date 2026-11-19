@@ -3,34 +3,20 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ATTENTION, ATTENTION_SHORT, type AttentionFlag } from "@/lib/admin-attention";
-import { shortDate } from "@/lib/dates";
+import { shortAge, shortDate } from "@/lib/dates";
 import { useAdmin } from "./AdminShell";
 import { CsvButton } from "./CsvButton";
 import { type Column, DataTable, Flags, Num } from "./DataTable";
 import { Pill, type PillTone } from "./Pill";
+import { SegmentedControl } from "./SegmentedControl";
 import type { ListingRowDto } from "./types";
-import { LINK, MUTED, SELECT } from "./ui";
+import { LINK, MUTED, SELECT_SM } from "./ui";
 import { useSort } from "./useSort";
 
-type Key = "listing" | "poster" | "status" | "audience" | "age" | "views" | "contacts" | "converted" | "shares" | "confirmed";
-const value = (r: ListingRowDto, k: Key) =>
-  k === "listing"
-    ? r.label
-    : k === "poster"
-      ? (r.ownerName ?? r.ownerEmail)
-      : k === "status"
-        ? statusText(r)
-        : k === "audience"
-          ? r.deleted
-            ? null
-            : r.studentsOnly
-              ? "Students"
-              : "Public"
-          : k === "age"
-            ? r.ageDays
-            : k === "confirmed"
-              ? r.confirmedAvailableAt
-              : r[k];
+type Key = "listing" | "status" | "age" | "views" | "contacts" | "rate" | "shares" | "confirmed";
+/** Contacts over views in the range, as a whole percent, at most 100 (the two are counted apart, so a contact can follow a view from before the range); null with no views to divide by. */
+const rateOf = (r: ListingRowDto) => (r.views > 0 ? Math.min(100, Math.round((r.contacts / r.views) * 100)) : null);
+const value = (r: ListingRowDto, k: Key) => (k === "listing" ? r.label : k === "status" ? statusText(r) : k === "age" ? r.ageDays : k === "rate" ? rateOf(r) : k === "confirmed" ? r.confirmedAvailableAt : r[k]);
 
 function statusText(r: ListingRowDto): string {
   if (r.deleted) return "deleted";
@@ -41,20 +27,29 @@ function statusText(r: ListingRowDto): string {
 
 const STATUSES = ["all", "on board", "open", "paused", "taken", "hidden", "deleted"] as const;
 const STATUS_TONE: Record<string, PillTone> = { "on board": "good", "open, off board": "warn", taken: "info" };
+/** The pill's words where the status itself is too long for one. */
+const STATUS_SHORT: Record<string, string> = { "open, off board": "Off board" };
+const WHICH = [
+  { key: "all", label: "All listings" },
+  { key: "attention", label: "Needs attention" },
+] as const;
 const flagsOf = (r: ListingRowDto) => r.flags.map((f) => ({ short: ATTENTION_SHORT[f as AttentionFlag] ?? f, long: ATTENTION[f as AttentionFlag] ?? f }));
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /**
  * Every listing with its numbers in the range: filter, sort, open one in the
- * listing view, or download what's shown as CSV. A card per listing on a
- * phone. Views are people-days; contacts, people who got in touch.
+ * listing view, or download what's shown as CSV. One line per listing (its
+ * address, with its number and poster's name small under it); a card per
+ * listing on a phone. Views are people-days; contacts, people who got in
+ * touch; rate, contacts over views. The poster shows by name only: an
+ * account with none reads "No name", and the email stays in People.
  */
 export function ListingsTable({ rows, initialAttention = false }: { rows: ListingRowDto[]; initialAttention?: boolean }) {
   const { openPost, href } = useAdmin();
   const [status, setStatus] = useState<(typeof STATUSES)[number]>("all");
   const [semester, setSemester] = useState("");
   const [audience, setAudience] = useState<"" | "public" | "students">("");
-  const [attention, setAttention] = useState<"" | "any" | AttentionFlag>(initialAttention ? "any" : "");
+  const [which, setWhich] = useState<(typeof WHICH)[number]["key"]>(initialAttention ? "attention" : "all");
 
   const semesters = useMemo(() => [...new Map(rows.filter((r) => r.firstSemester).map((r) => [r.firstSemester!, r.semesterLabel])).entries()], [rows]);
   const filtered = useMemo(
@@ -64,17 +59,17 @@ export function ListingsTable({ rows, initialAttention = false }: { rows: Listin
         if (status !== "all" && !(status === "open" ? r.status === "open" && !r.deleted : st === status)) return false;
         if (semester && r.firstSemester !== semester) return false;
         if (audience && (r.deleted || (audience === "students") !== r.studentsOnly)) return false;
-        if (attention === "any" ? r.flags.length === 0 : attention && !r.flags.includes(attention)) return false;
+        if (which === "attention" && r.flags.length === 0) return false;
         return true;
       }),
-    [rows, status, semester, audience, attention],
+    [rows, status, semester, audience, which],
   );
   const { sorted, sort, onSort } = useSort<ListingRowDto, Key>(filtered, value, { key: "views", dir: "desc" });
 
   const csv = sorted.map((r) => ({
     id: r.id,
     listing: r.label,
-    poster: r.ownerName ?? r.ownerEmail ?? "",
+    poster: r.ownerName ?? "",
     email: r.ownerEmail ?? "",
     status: statusText(r),
     seen_by: r.deleted ? "" : r.studentsOnly ? "students" : "public",
@@ -85,6 +80,7 @@ export function ListingsTable({ rows, initialAttention = false }: { rows: Listin
     photos: r.photos,
     views: r.views,
     contacts: r.contacts,
+    rate_pct: rateOf(r),
     converted: r.converted,
     shares: r.shares,
     share_arrivals: r.arrivals,
@@ -98,57 +94,80 @@ export function ListingsTable({ rows, initialAttention = false }: { rows: Listin
       header: "Listing",
       primary: true,
       sort: "listing",
+      className: "md:w-full md:max-w-0",
       cell: (r) => (
-        <span className="flex flex-col gap-0.5">
+        <span className="flex min-w-0 flex-col md:gap-px">
           {r.deleted ? (
-            <span className="text-ink-3">{r.label}</span>
+            <span className="truncate">Deleted listing</span>
           ) : (
-            <button type="button" className={`${LINK} gap-1.5 text-left`} onClick={() => void openPost(r.id)}>
-              <span className="font-normal text-ink-3 tabular-nums">#{r.id}</span>
-              {r.label}
+            <button type="button" title={r.label} className={`${LINK} max-w-full self-start text-left`} onClick={() => void openPost(r.id)}>
+              <span className="truncate">{r.label}</span>
             </button>
           )}
-          <Flags flags={flagsOf(r)} />
+          <span className="flex min-w-0 items-center gap-1.5 text-xs font-normal text-ink-3 md:overflow-hidden">
+            <span className="shrink-0 tabular-nums">#{r.id}</span>
+            {!r.deleted && (
+              <>
+                <span aria-hidden>·</span>
+                {r.ownerId ? (
+                  <Link href={href(`/admin/people#people:${r.ownerId}`)} className={`truncate underline-offset-2 hover:text-lake hover:underline ${r.ownerName ? "" : "text-ink-3/70"}`}>
+                    {r.ownerName ?? "No name"}
+                  </Link>
+                ) : (
+                  <span className="shrink-0 text-ink-3/70">No name</span>
+                )}
+              </>
+            )}
+            <Flags flags={flagsOf(r)} oneLine />
+          </span>
         </span>
       ),
     },
     {
-      key: "poster",
-      header: "Poster",
-      wide: true,
-      sort: "poster",
-      cell: (r) =>
-        r.ownerId ? (
-          <Link href={href(`/admin/people#people:${r.ownerId}`)} className={LINK} title={r.ownerEmail ?? undefined}>
-            {r.ownerName ?? r.ownerEmail}
-          </Link>
-        ) : null,
+      key: "status",
+      header: "Status",
+      sort: "status",
+      // Two pills need the card's whole width on a phone.
+      className: "max-md:col-span-2",
+      cell: (r) => {
+        const st = statusText(r);
+        return (
+          <span className="inline-flex items-center gap-1">
+            <Pill tone={r.deleted ? "outline" : (STATUS_TONE[st] ?? "muted")} title={STATUS_SHORT[st] ? cap(st) : undefined}>
+              {STATUS_SHORT[st] ?? cap(st)}
+            </Pill>
+            {!r.deleted && (
+              <Pill tone="outline" title={r.studentsOnly ? "Shown to signed-in students only" : "Shown to anyone, signed in or not"}>
+                {r.studentsOnly ? "Students" : "Public"}
+              </Pill>
+            )}
+          </span>
+        );
+      },
     },
-    { key: "status", header: "Status", sort: "status", cell: (r) => <Pill tone={STATUS_TONE[statusText(r)] ?? "muted"}>{cap(statusText(r))}</Pill> },
-    { key: "audience", header: "Seen by", wide: true, sort: "audience", cell: (r) => (r.deleted ? null : r.studentsOnly ? "Students" : "Public") },
-    { key: "semesters", header: "For", wide: true, cell: (r) => r.semesterLabel || null },
-    { key: "age", header: "Age", numeric: true, sort: "age", cell: (r) => (r.ageDays === null ? null : `${r.ageDays}d`) },
+    { key: "semesters", header: "For", wide: true, cell: (r) => (r.semesterShort ? <span title={r.semesterLabel}>{r.semesterShort}</span> : null) },
+    { key: "age", header: "Age", numeric: true, sort: "age", cell: (r) => (r.ageDays === null ? null : <span title={r.postedAt ? `Posted ${shortDate(new Date(r.postedAt))}` : undefined}>{shortAge(r.ageDays)}</span>) },
     { key: "views", header: "Views", numeric: true, sort: "views", cell: (r) => <Num n={r.views} /> },
     { key: "contacts", header: "Contacts", numeric: true, sort: "contacts", cell: (r) => <Num n={r.contacts} /> },
-    { key: "converted", header: "Converted", numeric: true, wide: true, sort: "converted", cell: (r) => <Num n={r.converted} /> },
+    { key: "rate", header: "Rate", numeric: true, sort: "rate", cell: (r) => (rateOf(r) === null ? null : <span title={`${r.contacts} of ${r.views} views`}>{rateOf(r)}%</span>) },
     { key: "shares", header: "Shares", numeric: true, wide: true, sort: "shares", cell: (r) => <Num n={r.shares} /> },
     { key: "photos", header: "Photos", numeric: true, phoneOnly: true, cell: (r) => (r.deleted ? null : <Num n={r.photos} />) },
     { key: "confirmed", header: "Confirmed", numeric: true, wide: true, sort: "confirmed", cell: (r) => (r.confirmedAvailableAt ? shortDate(new Date(r.confirmedAvailableAt)) : null) },
   ];
 
-  const select = `${SELECT} md:w-auto`;
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2 px-4">
+        <SegmentedControl label="Which listings" segments={WHICH} value={which} onPick={setWhich} className="w-full md:w-auto" />
         <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto">
-          <select aria-label="Status" className={select} value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+          <select aria-label="Status" className={SELECT_SM} value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
             {STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s === "all" ? "Any status" : cap(s)}
               </option>
             ))}
           </select>
-          <select aria-label="First semester" className={select} value={semester} onChange={(e) => setSemester(e.target.value)}>
+          <select aria-label="First semester" className={SELECT_SM} value={semester} onChange={(e) => setSemester(e.target.value)}>
             <option value="">Any semester</option>
             {semesters.map(([code, label]) => (
               <option key={code} value={code}>
@@ -156,19 +175,10 @@ export function ListingsTable({ rows, initialAttention = false }: { rows: Listin
               </option>
             ))}
           </select>
-          <select aria-label="Seen by" className={select} value={audience} onChange={(e) => setAudience(e.target.value as typeof audience)}>
-            <option value="">Seen by anyone</option>
+          <select aria-label="Seen by" className={SELECT_SM} value={audience} onChange={(e) => setAudience(e.target.value as typeof audience)}>
+            <option value="">Any audience</option>
             <option value="public">Public</option>
             <option value="students">Students only</option>
-          </select>
-          <select aria-label="Needs attention" className={select} value={attention} onChange={(e) => setAttention(e.target.value as typeof attention)}>
-            <option value="">All listings</option>
-            <option value="any">Needs attention</option>
-            {(Object.keys(ATTENTION) as AttentionFlag[]).map((f) => (
-              <option key={f} value={f}>
-                {ATTENTION[f]}
-              </option>
-            ))}
           </select>
         </div>
         <div className="ml-auto flex items-center gap-3">
@@ -178,7 +188,7 @@ export function ListingsTable({ rows, initialAttention = false }: { rows: Listin
           <CsvButton name="listings" columns={Object.keys(csv[0] ?? { id: 0 }).map((k) => ({ key: k, label: k }))} rows={csv} />
         </div>
       </div>
-      <DataTable label="Listings" columns={columns} rows={sorted} rowKey={(r) => r.id} sort={sort} onSort={onSort} empty="No listings match." />
+      <DataTable label="Listings" oneLine columns={columns} rows={sorted} rowKey={(r) => r.id} sort={sort} onSort={onSort} rowProps={(r) => (r.deleted ? { className: "text-ink-3" } : {})} empty="No listings match." />
     </div>
   );
 }

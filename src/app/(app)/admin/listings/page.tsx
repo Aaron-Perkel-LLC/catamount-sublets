@@ -40,7 +40,7 @@ export default async function AdminListings({ searchParams }: { searchParams: Ad
 
   return (
     <div className="flex flex-col gap-4">
-      <Card flush title="Listings" tip="Views are people-days in the range; contacts, people who got in touch. A deleted listing with activity in the range shows as Deleted #id.">
+      <Card flush title="Listings" tip="Views are people-days in the range; contacts, people who got in touch; rate, contacts over views. A deleted listing with activity in the range stays in the table, muted.">
         <ListingsTable rows={rows} initialAttention={param(sp, "view") === "attention"} />
       </Card>
 

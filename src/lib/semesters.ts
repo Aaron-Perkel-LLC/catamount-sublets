@@ -110,6 +110,27 @@ export function semesterLabel(names: readonly string[]): string {
 }
 
 /**
+ * The same span, short enough for a table cell that must not wrap: the first
+ * and last semester with two-digit years.
+ *
+ *   Spring 27
+ *   Summer – Fall 27
+ *   Fall 27 – Spring 28
+ *
+ * Names that are not a term and year are left as they are.
+ */
+export function semesterSpan(names: readonly string[]): string {
+  const list = names.map(String).filter((n) => n.length > 0);
+  if (list.length === 0) return "";
+  const first = semesterParts(list[0]);
+  const last = semesterParts(list[list.length - 1]);
+  if (!first || !last) return list.length === 1 ? list[0] : `${list[0]} – ${list[list.length - 1]}`;
+  const yy = (year: number | string) => String(year).slice(-2);
+  if (list.length === 1) return `${first.term} ${yy(first.year)}`;
+  return first.year === last.year ? `${first.term} – ${last.term} ${yy(last.year)}` : `${first.term} ${yy(first.year)} – ${last.term} ${yy(last.year)}`;
+}
+
+/**
  * Codes in calendar order with their position (0 = first), for writing
  * listing_semesters. Throws on a gap; validate with semestersBackToBack first.
  */

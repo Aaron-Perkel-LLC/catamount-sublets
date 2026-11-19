@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type PillTone = "good" | "warn" | "bad" | "info" | "muted";
+export type PillTone = "good" | "warn" | "bad" | "info" | "muted" | "outline";
 
 const TONE: Record<PillTone, string> = {
   good: "bg-included-tint text-included-ink",
@@ -8,12 +8,14 @@ const TONE: Record<PillTone, string> = {
   bad: "bg-error-tint text-error-ink",
   info: "bg-notice-tint text-notice-ink",
   muted: "bg-line-light text-ink-2",
+  /** A second, quieter fact beside a status pill (who a listing is shown to). */
+  outline: "text-ink-3 ring-1 ring-line ring-inset",
 };
 
 /** A status as a small pill. `dot` marks something that needs a look. */
 export function Pill({ tone = "muted", dot = false, title, children }: { tone?: PillTone; dot?: boolean; title?: string; children: ReactNode }) {
   return (
-    <span title={title} className={`inline-flex h-5 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] font-bold whitespace-nowrap ${TONE[tone]}`}>
+    <span title={title} className={`inline-flex h-5 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] whitespace-nowrap ${tone === "outline" ? "font-normal" : "font-bold"} ${TONE[tone]}`}>
       {dot && <span className="h-1.5 w-1.5 rounded-full bg-maple" aria-hidden />}
       {children}
     </span>

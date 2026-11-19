@@ -30,6 +30,12 @@ function typing(target: EventTarget | null): boolean {
  * Jump anywhere in the admin: a section by name, a listing by its number or
  * address, a person by name or email. Cmd/Ctrl-K anywhere, or "/" when not
  * typing in a field; on a phone, the search button.
+ *
+ * The field must never look like a sign-in field, or Safari offers the
+ * admin's own email in it: it is a search field named like one (the post
+ * form's trick, PLAN.md 1.3), with completion, correction and the password
+ * managers' fill switched off, and no word in its name, label or placeholder
+ * that reads as an email or a username.
  */
 export function QuickJump({ href, openPost }: { href: (p: string) => string; openPost: (id: number) => Promise<void> }) {
   const router = useRouter();
@@ -118,11 +124,20 @@ export function QuickJump({ href, openPost }: { href: (p: string) => string; ope
         <div className="flex flex-col">
           <label className="flex items-center gap-2 border-b border-line px-3">
             <Search className="h-4 w-4 shrink-0 text-ink-3" aria-hidden />
-            <span className="sr-only">Find a section, listing number or person</span>
+            <span className="sr-only">Find a page, listing or person</span>
             <input
               ref={input}
-              className="min-h-12 w-full bg-transparent text-base outline-none"
-              placeholder="Section, #listing, address, name or email"
+              type="search"
+              name="search_find"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              enterKeyHint="go"
+              data-1p-ignore
+              data-lpignore="true"
+              className="min-h-12 w-full appearance-none bg-transparent text-base outline-none [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none"
+              placeholder="Page, #listing, address or person"
               value={q}
               maxLength={100}
               role="combobox"

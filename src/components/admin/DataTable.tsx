@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import type { HTMLAttributes, ReactNode } from "react";
 import { Empty } from "./Card";
 import type { SortDir, SortState } from "./sort";
@@ -35,6 +35,12 @@ export interface Column<T, K extends string = string> {
  * other cells as labelled values two abreast, each labelled from its header
  * (data-label). A cell that renders nothing takes no room there. Meant to
  * sit flush inside a Card.
+ *
+ * A sortable header shows its arrow only on the sorted column, and on the
+ * others while pointed at (the way a click would sort); the arrow hangs
+ * outside the header's words, so a number column's header ends exactly where
+ * its numbers do. `oneLine` is for a wide table of short facts: nothing
+ * wraps, cells are centred on the row, and an empty cell is a muted dash.
  */
 export function DataTable<T, K extends string = string>({
   columns,
@@ -45,6 +51,7 @@ export function DataTable<T, K extends string = string>({
   empty = "Nothing here.",
   rowProps,
   label,
+  oneLine = false,
 }: {
   columns: Column<T, K>[];
   rows: readonly T[];
@@ -55,6 +62,8 @@ export function DataTable<T, K extends string = string>({
   rowProps?: (row: T) => HTMLAttributes<HTMLTableRowElement> & { [data: `data-${string}`]: string | undefined };
   /** What the table lists, for a screen reader. */
   label?: string;
+  /** Every row one line tall from 768 px up: no wrapping, cells centred, an empty cell a muted dash. */
+  oneLine?: boolean;
 }) {
   if (rows.length === 0) {
     return (
@@ -64,6 +73,9 @@ export function DataTable<T, K extends string = string>({
     );
   }
   const wide = (c: Column<T, K>) => (c.phoneOnly ? "md:hidden" : c.wide ? "md:max-lg:hidden" : "");
+  // A one-line table has few, short columns: more air between them, which also gives a number column's sort arrow room.
+  const pad = oneLine ? "px-2 lg:px-3.5" : "px-2";
+  const line = oneLine ? "align-middle md:whitespace-nowrap md:empty:before:text-ink-3/70 md:empty:before:content-['—']" : "align-top";
   const ROW = "border-t border-line-light max-md:grid max-md:grid-cols-2 max-md:items-center max-md:gap-x-6 max-md:gap-y-1 max-md:px-4 max-md:py-3";
   const props = (r: T) => {
     const { className, ...rest } = rowProps?.(r) ?? {};
@@ -86,13 +98,14 @@ export function DataTable<T, K extends string = string>({
           <tr role="row">
             {columns.map((c) => {
               const active = Boolean(c.sort && sort?.key === c.sort);
-              const Icon = !active ? ArrowUpDown : sort?.dir === "asc" ? ArrowUp : ArrowDown;
+              const first = c.firstDir ?? (c.numeric ? "desc" : "asc");
+              const Icon = (active ? sort?.dir : first) === "asc" ? ArrowUp : ArrowDown;
               return (
-                <th key={c.key} role="columnheader" scope="col" aria-sort={c.sort ? (active ? (sort?.dir === "asc" ? "ascending" : "descending") : "none") : undefined} className={`px-2 py-2 text-xs font-normal whitespace-nowrap text-ink-3 first:pl-4 last:pr-4 ${c.numeric ? "text-right" : "text-left"} ${wide(c)}`}>
+                <th key={c.key} role="columnheader" scope="col" aria-sort={c.sort ? (active ? (sort?.dir === "asc" ? "ascending" : "descending") : "none") : undefined} className={`${pad} py-2 text-xs font-normal whitespace-nowrap text-ink-3 first:pl-4 last:pr-4 ${c.numeric ? "text-right" : "text-left"} ${wide(c)}`}>
                   {c.sort && onSort ? (
-                    <button type="button" onClick={() => onSort(c.sort as K, c.firstDir ?? (c.numeric ? "desc" : "asc"))} className={`inline-flex items-center gap-1 text-xs whitespace-nowrap hover:text-lake ${active ? "font-bold text-ink" : ""}`}>
+                    <button type="button" onClick={() => onSort(c.sort as K, first)} className={`group/sort relative text-xs whitespace-nowrap hover:text-lake ${active ? "font-bold text-ink" : ""}`}>
                       {c.header}
-                      <Icon className={`h-3 w-3 ${active ? "" : "opacity-40"}`} aria-hidden />
+                      <Icon className={`absolute top-1/2 h-3 w-3 -translate-y-1/2 ${c.numeric ? "right-full mr-0.5" : "left-full ml-0.5"} ${active ? "" : "opacity-0 group-hover/sort:opacity-60 group-focus-visible/sort:opacity-60"}`} aria-hidden />
                     </button>
                   ) : c.srHeader ? (
                     <span className="sr-only">{c.header}</span>
@@ -108,7 +121,7 @@ export function DataTable<T, K extends string = string>({
           {rows.map((r) => (
             <tr key={rowKey(r)} role="row" {...props(r)}>
               {columns.map((c) => (
-                <td key={c.key} role="cell" data-label={c.header} data-primary={c.primary ? "" : undefined} data-bare={c.bare ? "" : undefined} className={`px-2 py-2 align-top first:pl-4 last:pr-4 max-md:p-0 max-md:first:pl-0 max-md:last:pr-0 ${c.numeric ? "text-right tabular-nums" : ""} ${wide(c)} ${phone(c)} ${c.className ?? ""}`}>
+                <td key={c.key} role="cell" data-label={c.header} data-primary={c.primary ? "" : undefined} data-bare={c.bare ? "" : undefined} className={`${pad} py-2 first:pl-4 last:pr-4 max-md:p-0 max-md:first:pl-0 max-md:last:pr-0 ${line} ${c.numeric ? "text-right tabular-nums" : ""} ${wide(c)} ${phone(c)} ${c.className ?? ""}`}>
                   {c.cell(r)}
                 </td>
               ))}
@@ -125,11 +138,11 @@ export function Num({ n }: { n: number }) {
   return <span className={n === 0 ? ZERO : "tabular-nums"}>{num(n)}</span>;
 }
 
-/** Marks on a row that needs a look: a small dot and a few words each, never a sentence. */
-export function Flags({ flags }: { flags: { short: string; long: string }[] }) {
+/** Marks on a row that needs a look: a small dot and a few words each, never a sentence. `oneLine` keeps them from wrapping in a one-line table. */
+export function Flags({ flags, oneLine = false }: { flags: { short: string; long: string }[]; oneLine?: boolean }) {
   if (flags.length === 0) return null;
   return (
-    <span className="flex flex-wrap items-center gap-x-2.5 text-[11px] font-normal text-ink-3">
+    <span className={`flex flex-wrap items-center gap-x-2.5 text-[11px] font-normal text-ink-3 ${oneLine ? "md:shrink-0 md:flex-nowrap" : ""}`}>
       {flags.map((f) => (
         <span key={f.short} title={f.long} className="inline-flex items-center gap-1 whitespace-nowrap">
           <span className="h-1.5 w-1.5 rounded-full bg-maple" aria-hidden />

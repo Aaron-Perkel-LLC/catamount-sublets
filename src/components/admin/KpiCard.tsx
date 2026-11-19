@@ -2,7 +2,7 @@
 
 import { createContext, type ReactNode, useContext, useMemo, useState } from "react";
 import type { Chip } from "@/lib/admin-delta";
-import type { TrendMode, TrendPoint } from "@/lib/admin-trend";
+import type { BarBucket, TrendPoint } from "@/lib/admin-trend";
 import { Card } from "./Card";
 import { DeltaChip } from "./DeltaChip";
 import { Sparkline } from "./Sparkline";
@@ -21,12 +21,20 @@ export interface Kpi {
   chip?: Chip | null;
   /** What the number counts, behind the ⓘ. */
   tip?: string;
-  /** One value per chart point (null: nothing to divide by). With it the card has a sparkline and can drive the chart. */
+  /** The card's sparkline, a smoothed line (null: nothing to divide by). */
   series?: (number | null)[];
+  /** The chart's bars: each day's (or week's) own value (null: no bar). With them the card can drive the chart. */
+  bars?: (number | null)[];
+  /** The chart's line: the 7-day average at each bar. Null with weekly bars. */
+  avg?: (number | null)[] | null;
+  /** What a bar counts, one and many, for the chart's readout: ["view", "views"]. */
+  noun?: [string, string];
+  /** What a missing bar means, for its readout. */
+  gap?: string;
   unit?: "count" | "percent";
   /** Two parts of the whole, as a labelled two-tone bar. */
   split?: { label: string; n: number }[];
-  /** Where the chart's points differ from the card's number, for the chart's ⓘ. */
+  /** Where the chart's bars differ from the card's number, for the chart's ⓘ. */
   seriesNote?: string;
   /** More rows for the chart's readout when this card is picked. */
   extra?: { label: string; values: number[] }[];
@@ -44,12 +52,12 @@ export function KpiTabs({ first, children }: { first: string; children: ReactNod
 /**
  * A headline number: label, the number in tabular figures, a delta chip and
  * (given a series) a sparkline. No sentences: the explanation is behind the
- * ⓘ. Inside KpiTabs a card with a series is also a button: pressing it puts
- * its series on the chart, and the pressed card is ringed.
+ * ⓘ. Inside KpiTabs a card with bars is also a button: pressing it puts
+ * them on the chart, and the pressed card is ringed.
  */
 export function KpiCard({ kpi }: { kpi: Kpi }) {
   const tabs = useContext(Picked);
-  const tab = tabs && kpi.series ? tabs : null;
+  const tab = tabs && kpi.bars ? tabs : null;
   const on = tab?.key === kpi.key;
   return (
     <section className={`${CARD} relative flex min-w-0 flex-col gap-2 p-4 ${on ? "ring-2 ring-lake" : tab ? "hover:ring-1 hover:ring-line" : ""}`}>
@@ -94,17 +102,37 @@ export function KpiRow({ kpis }: { kpis: Kpi[] }) {
   );
 }
 
-/** The chart for whichever KPI card is picked, on that metric's own scale. */
-export function KpiTrend({ kpis, points, mode }: { kpis: Kpi[]; points: TrendPoint[]; mode: TrendMode }) {
+/** The chart for whichever KPI card is picked, on that metric's own scale: a bar per day with the 7-day average over them, or a bar per week. */
+export function KpiTrend({ kpis, points, bucket }: { kpis: Kpi[]; points: TrendPoint[]; bucket: BarBucket }) {
   const tabs = useContext(Picked);
-  const kpi = kpis.find((k) => k.key === tabs?.key && k.series) ?? kpis.find((k) => k.series);
-  if (!kpi?.series) return null;
-  const tip = [mode === "rolling" ? "Each point is the total for the 7 days ending that day, so one quiet or busy day doesn't swing the line. The card above is the whole range." : "", kpi.seriesNote ?? ""].filter(Boolean).join(" ");
+  const kpi = kpis.find((k) => k.key === tabs?.key && k.bars) ?? kpis.find((k) => k.bars);
+  if (!kpi?.bars) return null;
+  const tip = [bucket === "day" ? "Each bar is that Eastern day on its own. The line is the average of the 7 days ending that day." : "Each bar is a week, Monday to Sunday; the first and the last can be part of a week.", kpi.seriesNote ?? ""].filter(Boolean).join(" ");
   return (
-    <Card title={kpi.label} tip={tip || undefined} actions={<span className="text-xs text-ink-3">{mode === "rolling" ? "7-day totals" : "By day"}</span>}>
+    <Card title={kpi.label} tip={tip} actions={<ChartKey bucket={bucket} line={Boolean(kpi.avg)} />}>
       <div aria-live="polite" className="-mb-3">
-        <TrendChart label={kpi.label} points={points} unit={kpi.unit ?? "count"} series={[{ key: kpi.key, label: kpi.label.toLowerCase(), color: "var(--color-chart-lake)", kind: "area", values: kpi.series }]} extra={kpi.extra ?? []} />
+        <TrendChart label={kpi.label} points={points} bucket={bucket} unit={kpi.unit ?? "count"} noun={kpi.noun ?? [kpi.label.toLowerCase(), kpi.label.toLowerCase()]} gap={kpi.gap} bars={[{ key: kpi.key, label: kpi.label.toLowerCase(), color: "var(--color-chart-lake)", values: kpi.bars }]} avg={kpi.avg} extra={kpi.extra ?? []} />
       </div>
     </Card>
+  );
+}
+
+/** What a chart's marks are, at its top right: the bars (one swatch per series) and the line. */
+export function ChartKey({ bucket, line, series = [{ label: bucket === "day" ? "Daily" : "Weekly", color: "var(--color-chart-lake)" }] }: { bucket: BarBucket; line: boolean; series?: { label: string; color: string }[] }) {
+  return (
+    <span className="flex items-center gap-3 text-xs text-ink-3">
+      {series.map((s) => (
+        <span key={s.label} className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-[2px]" style={{ background: s.color }} aria-hidden />
+          {s.label}
+        </span>
+      ))}
+      {line && (
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-0.5 w-3 rounded-full bg-ink" aria-hidden />
+          7-day avg
+        </span>
+      )}
+    </span>
   );
 }

@@ -33,8 +33,9 @@ export function useAdmin(): AdminApi {
 /**
  * Every admin page's frame, from one config (src/lib/admin-nav.ts): the page's
  * title with Find and the date range on one line, the groups as a tab row,
- * the open group's sections as small pills under it (both rows scroll
- * sideways on a phone), and the one listing view any section opens a post in.
+ * the open group's sections as small pills under it (on a phone both rows
+ * scroll sideways with no scrollbar; with room they don't scroll at all),
+ * and the one listing view any section opens a post in.
  * `#post:<id>` on any admin page opens that listing (the listing notices'
  * links, through /admin's old-link redirect).
  */
@@ -123,6 +124,14 @@ function Shell({ waiting, children }: { waiting: number; children: ReactNode }) 
   );
 }
 
+/**
+ * A row of tabs or pills. On a phone it runs to the screen's edges and
+ * scrolls sideways with its scrollbar hidden; from 768 px up it is not a
+ * scroll container at all, so nothing in it (an underline, a pill's shadow,
+ * an ⓘ's hit area) can raise a scrollbar.
+ */
+const NAV_ROW = "-mx-4 overflow-x-auto overflow-y-hidden px-4 [scrollbar-width:none] md:mx-0 md:overflow-visible md:px-0 [&::-webkit-scrollbar]:hidden";
+
 type NavProps = { href: (p: string) => string; badge: (item: AdminNavItem) => number };
 
 const span = (a: string, b: string) => (a === b ? dayLabel(a) : `${dayLabel(a)} – ${dayLabel(b)}`);
@@ -137,10 +146,14 @@ function RangeCaption({ range }: { range: ReturnType<typeof resolveRange> }) {
   );
 }
 
-/** The groups as a slim tab row: the current one underlined. A group's tab goes to its first section. */
+/**
+ * The groups as a slim tab row: the current one underlined. A group's tab
+ * goes to its first section. The row's hairline is drawn inside its own box
+ * and the underline sits on it, so nothing reaches outside the row.
+ */
 function GroupTabs({ current, href, badge, caption }: NavProps & { current: { group: AdminNavGroup; item: AdminNavItem } | null; caption: ReactNode }) {
   return (
-    <nav aria-label="Admin sections" className="-mx-4 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0">
+    <nav aria-label="Admin sections" className={`${NAV_ROW} shadow-[inset_0_-1px_0_var(--color-line)]`}>
       <div className="flex w-max items-center gap-5 md:w-auto">
         {ADMIN_NAV.map((g) => {
           const on = current?.group.id === g.id;
@@ -149,7 +162,7 @@ function GroupTabs({ current, href, badge, caption }: NavProps & { current: { gr
               key={g.id}
               href={href(g.items[0].href)}
               aria-current={on ? (current?.item.id === g.items[0].id ? "page" : "true") : undefined}
-              className={`-mb-px inline-flex h-11 items-center gap-1.5 border-b-2 text-[13px] whitespace-nowrap md:h-10 ${on ? "border-lake font-bold text-ink" : "border-transparent text-ink-3 hover:text-ink"}`}
+              className={`inline-flex h-11 items-center gap-1.5 border-b-2 text-[13px] whitespace-nowrap md:h-10 ${on ? "border-lake font-bold text-ink" : "border-transparent text-ink-3 hover:text-ink"}`}
             >
               {g.label}
               <CountBadge n={g.items.reduce((t, i) => t + badge(i), 0)} label="waiting" />
@@ -165,7 +178,7 @@ function GroupTabs({ current, href, badge, caption }: NavProps & { current: { gr
 /** The open group's sections as small pills, when it has more than one. */
 function SectionPills({ group, current, href, badge }: NavProps & { group: AdminNavGroup; current: string }) {
   return (
-    <nav aria-label={`${group.label} sections`} className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+    <nav aria-label={`${group.label} sections`} className={`${NAV_ROW} max-md:-my-1 max-md:py-1`}>
       <ul className="flex w-max items-center gap-1 md:w-auto">
         {group.items.map((i) => {
           const on = i.id === current;

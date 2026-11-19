@@ -57,6 +57,12 @@ export function postedAgo(postedAt: Date, now: Date = new Date()): string {
   return sameYear ? monthDay.format(postedAt) : monthDayYear.format(postedAt);
 }
 
+/** An age in days as a table cell: "today", "3d" up to 13 days, then whole weeks ("5w"). */
+export function shortAge(days: number): string {
+  if (days <= 0) return "today";
+  return days < 14 ? `${days}d` : `${Math.floor(days / 7)}w`;
+}
+
 /** The instant an Eastern calendar date starts, for range queries. */
 export function easternDayStart(date: string): Date {
   // Find the UTC instant whose Eastern date is `date` at 00:00 by probing the offset.

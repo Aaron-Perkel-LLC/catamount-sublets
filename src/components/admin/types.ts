@@ -62,6 +62,8 @@ export interface ListingRowDto {
   hidden: boolean;
   studentsOnly: boolean;
   semesterLabel: string;
+  /** "Fall 27 – Spring 28": the same span, short enough for one line. */
+  semesterShort: string;
   firstSemester: string | null;
   postedAt: string | null;
   ageDays: number | null;

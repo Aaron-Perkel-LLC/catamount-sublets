@@ -1,34 +1,47 @@
 import { addDays, CUTOVER_DATE, type ResolvedRange } from "./admin-range";
 import { dayLabel } from "./chart";
+import { daysBetweenDates } from "./dates";
 
 /**
- * How the admin's charts and sparklines smooth a range. Up to
- * TREND_DAILY_MAX days a point is a day. Past that a point is the total for
- * the TREND_WINDOW days ending that day: at this site's traffic a single day
- * is noise, calendar weeks leave four or five points and a part-finished
- * current week that always looks like a fall, and an average turns whole
- * people into fractions. A trailing total has none of those problems; what
- * it gives up is that the points no longer add up to the range's total,
- * which the big number beside the chart carries instead. Counts of events
- * are summed here; a count of distinct people over the window has to come
- * from the query (activitySeries' `window`). Pure.
+ * How the admin's charts and sparklines read a range.
+ *
+ * A chart draws a bar per Eastern day, that day's own count, with a thin line
+ * over the bars for the average of the TREND_WINDOW days ending that day: the
+ * bars are exact and the line says which way things are going, where a single
+ * day at this site's traffic is noise. Past BARS_DAILY_MAX days drawn a bar is
+ * a calendar week (Monday to Sunday) and there is no line.
+ *
+ * A KPI card's sparkline has no room for bars, so it stays a smoothed line:
+ * a day per point up to TREND_DAILY_MAX days, then the total for the
+ * TREND_WINDOW days ending each day. Counts of events are summed here; a
+ * count of distinct people over a window has to come from the query
+ * (activitySeries' `window`). Pure.
  */
 export const TREND_WINDOW = 7;
 export const TREND_DAILY_MAX = 14;
+export const BARS_DAILY_MAX = 90;
 
 export type TrendMode = "day" | "rolling";
+export type BarBucket = "day" | "week";
 
+/** How a sparkline smooths the range. */
 export function trendMode(r: Pick<ResolvedRange, "days">): TrendMode {
   return r.days > TREND_DAILY_MAX ? "rolling" : "day";
 }
 
+/** What a bar is: a day, or a week once more than BARS_DAILY_MAX days would be drawn. */
+export function barBucket(r: Pick<ResolvedRange, "chartFrom" | "to">): BarBucket {
+  return daysBetweenDates(r.chartFrom, r.to) + 1 > BARS_DAILY_MAX ? "week" : "day";
+}
+
 /**
- * The range to ask the daily series for: daily buckets, starting a window
- * early when the chart is rolling so its first points are whole, but never
- * before the activity log began.
+ * The range to ask the series for. Daily bars start a window early, so the
+ * first days' average and trailing total are whole, but never before the
+ * activity log began; weekly bars are asked for as they are.
  */
 export function trendRange(r: ResolvedRange): ResolvedRange {
-  if (trendMode(r) === "day" || r.chartFrom < CUTOVER_DATE) return { ...r, bucket: "day" };
+  if (barBucket(r) === "week") return { ...r, bucket: "week" };
+  if (r.chartFrom < CUTOVER_DATE) return { ...r, bucket: "day" };
   const lead = addDays(r.chartFrom, -(TREND_WINDOW - 1));
   return { ...r, bucket: "day", chartFrom: lead < CUTOVER_DATE ? CUTOVER_DATE : lead };
 }
@@ -45,31 +58,59 @@ export function trailingTotals(values: readonly number[], window: number): numbe
   return out;
 }
 
+/** For each position, the mean of the `window` values ending there, over the values there are at the very start. To one decimal. */
+export function trailingMeans(values: readonly number[], window: number): number[] {
+  return trailingTotals(values, window).map((t, i) => Math.round((t / Math.min(window, i + 1)) * 10) / 10);
+}
+
 export interface TrendPoint {
-  /** "YYYY-MM-DD": the day, or the day the window ends on. */
+  /** "YYYY-MM-DD": the day, or the Monday of the week. */
   day: string;
-  /** "Wed, Nov 18" or "7 days to Nov 18", for the tooltip and the table. */
+  /** "Nov 18" or "Week of Nov 16", for the tooltip and the table. */
   when: string;
   /** "Nov 18", for the axis. */
   tick: string;
 }
 
+export interface Trend<K extends string> {
+  bucket: BarBucket;
+  points: TrendPoint[];
+  /** A bar per point: that day's (or week's) own count. */
+  bars: Record<K, number[]>;
+  /** The line: the mean of the TREND_WINDOW days ending on each. Null with weekly bars. */
+  avg: Record<K, number[]> | null;
+  /** The trailing totals the means come from, for a rate over the window (a ratio of sums). Null with weekly bars. */
+  totals: Record<K, number[]> | null;
+  /** A sparkline's smoothed line: see trendMode(). */
+  spark: Record<K, number[]>;
+}
+
 /**
- * Daily rows (from trendRange's start) as chart points from the range's own
- * first day: each named series summed over the trailing window, or left
- * daily. A series in `windowed` is already per window (people counted once
- * across it, which a sum of days can't give), so it is taken as it comes.
+ * Rows from trendRange()'s start as chart points from the range's own first
+ * day. `windowed` gives a series' sparkline its own per-window values where
+ * a sum of days would be wrong (people counted once across the window),
+ * one per row; it is used only when the sparkline is rolling.
  */
-export function trendSeries<K extends string>(r: Pick<ResolvedRange, "days" | "chartFrom">, days: readonly ({ day: string } & Record<K, number>)[], keys: readonly K[], windowed: readonly K[] = []): { mode: TrendMode; points: TrendPoint[]; values: Record<K, number[]> } {
+export function trendSeries<K extends string>(r: Pick<ResolvedRange, "days" | "chartFrom" | "to">, rows: readonly ({ day: string } & Record<K, number>)[], keys: readonly K[], windowed: Partial<Record<K, readonly number[]>> = {}): Trend<K> {
+  const bucket = barBucket(r);
   const mode = trendMode(r);
-  const keep = days.map((d) => d.day >= r.chartFrom);
-  const values = {} as Record<K, number[]>;
+  const daily = bucket === "day";
+  // A week's bucket is keyed by its Monday, which can fall before the range's first day.
+  const keep = rows.map((d) => !daily || d.day >= r.chartFrom);
+  const kept = <T>(xs: readonly T[]) => xs.filter((_, i) => keep[i]);
+  const bars = {} as Record<K, number[]>;
+  const avg = {} as Record<K, number[]>;
+  const totals = {} as Record<K, number[]>;
+  const spark = {} as Record<K, number[]>;
   for (const k of keys) {
-    const raw = days.map((d) => d[k]);
-    values[k] = (mode === "rolling" && !windowed.includes(k) ? trailingTotals(raw, TREND_WINDOW) : raw).filter((_, i) => keep[i]);
+    const raw = rows.map((d) => d[k]);
+    bars[k] = kept(raw);
+    totals[k] = kept(trailingTotals(raw, TREND_WINDOW));
+    avg[k] = kept(trailingMeans(raw, TREND_WINDOW));
+    spark[k] = !daily || mode === "day" ? bars[k] : (windowed[k] ? kept(windowed[k]) : totals[k]);
   }
-  const points = days.filter((_, i) => keep[i]).map((d) => ({ day: d.day, when: mode === "rolling" ? `${TREND_WINDOW} days to ${dayLabel(d.day)}` : dayLabel(d.day, true), tick: dayLabel(d.day) }));
-  return { mode, points, values };
+  const points = kept(rows).map((d) => ({ day: d.day, when: daily ? dayLabel(d.day) : `Week of ${dayLabel(d.day)}`, tick: dayLabel(d.day) }));
+  return { bucket, points, bars, avg: daily ? avg : null, totals: daily ? totals : null, spark };
 }
 
 /**

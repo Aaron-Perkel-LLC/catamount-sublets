@@ -38,7 +38,7 @@ export default async function AdminOverview({ searchParams }: { searchParams: Ad
       <KpiRow kpis={v.kpis} />
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_17rem]">
         <div className="flex min-w-0 flex-col gap-4">
-          <KpiTrend kpis={v.kpis} points={v.points} mode={v.mode} />
+          <KpiTrend kpis={v.kpis} points={v.points} bucket={v.bucket} />
           <Card title="Funnel" tip="Each step is its own count over the same range, not the same people followed through: signed-out and signed-in views are different visits. Read it as orders of magnitude.">
             <Funnel steps={v.funnel} />
           </Card>

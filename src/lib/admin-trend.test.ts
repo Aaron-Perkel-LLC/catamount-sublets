@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolveRange } from "./admin-range";
-import { sparkWorthDrawing, trailingTotals, trendMode, trendRange, trendSeries } from "./admin-trend";
+import { barBucket, sparkWorthDrawing, trailingMeans, trailingTotals, trendMode, trendRange, trendSeries } from "./admin-trend";
 
 const now = new Date("2026-11-18T17:00:00Z");
 
@@ -11,29 +11,56 @@ describe("trend", () => {
     expect(trendMode(resolveRange({ range: "30d" }, now))).toBe("rolling");
   });
 
-  it("asks for the series six days early when rolling, never before the log began", () => {
+  it("draws a bar per day up to 90 days drawn, then a bar per week", () => {
+    expect(barBucket(resolveRange({ range: "30d" }, now))).toBe("day");
+    expect(barBucket(resolveRange({ range: "all" }, now))).toBe("day"); // drawn from cutover: 41 days
+    const later = new Date("2027-03-01T17:00:00Z");
+    expect(barBucket(resolveRange({ range: "custom", from: "2026-11-01", to: "2027-01-29" }, later))).toBe("day"); // 90 days
+    expect(barBucket(resolveRange({ range: "custom", from: "2026-11-01", to: "2027-01-30" }, later))).toBe("week");
+  });
+
+  it("asks for daily bars six days early, never before the log began, and for weekly bars as they are", () => {
     expect(trendRange(resolveRange({ range: "30d" }, now))).toMatchObject({ bucket: "day", chartFrom: "2026-10-14" });
-    expect(trendRange(resolveRange({ range: "7d" }, now))).toMatchObject({ bucket: "day", chartFrom: "2026-11-12" });
+    expect(trendRange(resolveRange({ range: "7d" }, now))).toMatchObject({ bucket: "day", chartFrom: "2026-11-06" });
     expect(trendRange(resolveRange({ range: "cutover" }, now))).toMatchObject({ bucket: "day", chartFrom: "2026-10-09" });
     expect(trendRange(resolveRange({ range: "all" }, now))).toMatchObject({ bucket: "day", chartFrom: "2026-10-09" });
+    expect(trendRange(resolveRange({ range: "custom", from: "2026-11-01", to: "2027-01-30" }, new Date("2027-03-01T17:00:00Z")))).toMatchObject({ bucket: "week", chartFrom: "2026-11-01" });
   });
 
-  it("sums the trailing window", () => {
+  it("sums and averages the trailing window", () => {
     expect(trailingTotals([1, 2, 3, 4, 5], 3)).toEqual([1, 3, 6, 9, 12]);
     expect(trailingTotals([], 7)).toEqual([]);
+    expect(trailingMeans([7, 7, 7, 0], 3)).toEqual([7, 7, 7, 4.7]);
+    expect(trailingMeans([2, 4, 9], 7)).toEqual([2, 3, 5]); // over the days there are, at the very start
   });
 
-  it("drops the lead days and labels the rest", () => {
-    const r = { days: 30, chartFrom: "2026-11-17" };
-    const days = Array.from({ length: 8 }, (_, i) => ({ day: `2026-11-${String(11 + i).padStart(2, "0")}`, n: 1 }));
+  it("gives each day's own bar, the 7-day average over it and the sparkline's smoothed line", () => {
+    const r = { days: 30, chartFrom: "2026-11-17", to: "2026-11-18" };
+    const days = Array.from({ length: 8 }, (_, i) => ({ day: `2026-11-${String(11 + i).padStart(2, "0")}`, n: i === 7 ? 15 : 1 }));
     const t = trendSeries(r, days, ["n"]);
-    expect(t.mode).toBe("rolling");
-    expect(t.values.n).toEqual([7, 7]);
-    expect(t.points.map((p) => p.when)).toEqual(["7 days to Nov 17", "7 days to Nov 18"]);
-    expect(trendSeries(r, days, ["n"], ["n"]).values.n).toEqual([1, 1]); // already per window: not summed again
-    const daily = trendSeries({ days: 7, chartFrom: "2026-11-17" }, days, ["n"]);
-    expect(daily.values.n).toEqual([1, 1]);
-    expect(daily.points[1].when).toBe("Wed, Nov 18");
+    expect(t.bucket).toBe("day");
+    expect(t.bars.n).toEqual([1, 15]); // the lead days are dropped
+    expect(t.avg?.n).toEqual([1, 3]); // (6 × 1 + 15) / 7
+    expect(t.totals?.n).toEqual([7, 21]);
+    expect(t.spark.n).toEqual([7, 21]); // trailing totals
+    expect(t.points.map((p) => p.when)).toEqual(["Nov 17", "Nov 18"]);
+    expect(trendSeries(r, days, ["n"], { n: [0, 0, 0, 0, 0, 0, 4, 5] }).spark.n).toEqual([4, 5]); // counted per window by the query: taken as it comes
+    const short = trendSeries({ ...r, days: 7 }, days, ["n"], { n: [0, 0, 0, 0, 0, 0, 4, 5] });
+    expect(short.spark.n).toEqual([1, 15]); // a short range's sparkline is the days themselves
+    expect(short.avg?.n).toEqual([1, 3]);
+  });
+
+  it("gives weekly bars no average, and keeps a first week that starts before the range", () => {
+    const r = { days: 120, chartFrom: "2026-11-01", to: "2027-02-28" };
+    const weeks = [
+      { day: "2026-10-26", n: 3 },
+      { day: "2026-11-02", n: 9 },
+    ];
+    const t = trendSeries(r, weeks, ["n"]);
+    expect(t).toMatchObject({ bucket: "week", avg: null, totals: null });
+    expect(t.bars.n).toEqual([3, 9]);
+    expect(t.spark.n).toEqual([3, 9]);
+    expect(t.points[0]).toEqual({ day: "2026-10-26", when: "Week of Oct 26", tick: "Oct 26" });
   });
 
   it("draws a sparkline only with three non-zero points that get past 2", () => {

@@ -37,6 +37,8 @@ export const LINK = "inline-flex min-h-11 items-center text-[13px] font-bold tex
 export const FIELD = "h-11 w-full rounded-lg border border-line bg-paper px-3 text-base text-ink placeholder:text-ink-3 hover:border-lake focus:border-lake md:h-9 md:text-sm";
 /** A dropdown: the site's select (its own chevron, the phone's native picker) at the admin's control height. */
 export const SELECT = "field h-11 py-0 text-base md:h-9 md:text-sm";
+/** The same dropdown in a row of table filters: as tall as the CSV button beside it, and only as wide as its words. */
+export const SELECT_SM = "field h-11 py-0 text-base md:h-8 md:w-auto md:pr-8 md:pl-2.5 md:text-[13px]";
 export const TEXTAREA = "w-full rounded-lg border border-line bg-paper px-3 py-2 text-base text-ink placeholder:text-ink-3 hover:border-lake focus:border-lake md:text-sm";
 export const FIELD_LABEL = "flex flex-col gap-1 text-xs text-ink-3";
 

@@ -5,8 +5,8 @@ import { num } from "@/components/admin/ui";
 import type { DbOrTx } from "@/db";
 import type { AttentionFlag } from "@/lib/admin-attention";
 import { countChip, rateChip, share } from "@/lib/admin-delta";
-import { rangeQuery, type ResolvedRange } from "@/lib/admin-range";
-import { TREND_WINDOW, type TrendMode, type TrendPoint, trendMode, trendRange, trendSeries } from "@/lib/admin-trend";
+import { rangeQuery, type ResolvedRange, weekStart } from "@/lib/admin-range";
+import { type BarBucket, TREND_WINDOW, type TrendPoint, trendMode, trendRange, trendSeries } from "@/lib/admin-trend";
 import { easternDate } from "@/lib/dates";
 import { VIEWER_SEGMENTS, type ViewerSegment } from "@/lib/viewer-segment";
 import { adminPosts, listingRows } from "@/server/data/admin-listings";
@@ -19,7 +19,7 @@ const SEGMENT_KEYS = VIEWER_SEGMENTS.map((s) => s.key) as ViewerSegment[];
 const sumOf = (xs: number[]) => xs.reduce((t, x) => t + x, 0);
 
 export interface OverviewView {
-  mode: TrendMode;
+  bucket: BarBucket;
   points: TrendPoint[];
   kpis: Kpi[];
   groups: StatGroup[];
@@ -30,29 +30,40 @@ export interface OverviewView {
   query: string;
 }
 
+/** A day's contact rate needs this many signed-in views, or one person's tap is a 50% day. */
+const RATE_MIN_VIEWS = 5;
+const pct = (contacts: number, views: number) => (views >= RATE_MIN_VIEWS ? Math.min(100, Math.round((contacts / views) * 100)) : null);
+
 /**
  * The Overview's numbers, shaped for the page. The queries are phase 32's;
- * what is added is each headline number's shape over the range: the daily
- * series as trailing 7-day totals (src/lib/admin-trend.ts), with contacts
- * counted once per person and listing across each window by the query, new
- * listings per day counted here from the listings' own dates, and the
- * contact rate per point. Views are split by whatever VIEWER_SEGMENTS lists; the contact
- * rate and the funnel are about signed-in and signed-out by name.
+ * what is added is each headline number over the range, three ways
+ * (src/lib/admin-trend.ts): a bar per day with that day's own count, the
+ * 7-day average over the bars, and the card's sparkline (trailing 7-day
+ * totals, with contacts counted once per person and listing across each
+ * window by the query). New listings per day are counted here from the
+ * listings' own dates; the contact rate is contacts over signed-in views,
+ * per bar and, for the line, over the 7 days together. Views are split by
+ * whatever VIEWER_SEGMENTS lists; the contact rate and the funnel are about
+ * signed-in and signed-out by name.
  */
 export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<OverviewView> {
-  const [o, daily, st, posts, numbers] = await Promise.all([overviewMetrics(db, r), activitySeries(db, trendRange(r), trendMode(r) === "rolling" ? TREND_WINDOW : 1), sourcesAndTargets(db, r), adminPosts(db), listingNumbers(db, r)]);
+  const asked = trendRange(r);
+  const [o, series, st, posts, numbers] = await Promise.all([overviewMetrics(db, r), activitySeries(db, asked, trendMode(r) === "rolling" ? TREND_WINDOW : 1), sourcesAndTargets(db, r), adminPosts(db), listingNumbers(db, r)]);
 
   const postedOn = new Map<string, number>();
   for (const p of posts) {
     if (p.legacyImport) continue;
     const day = easternDate(p.postedAt);
-    postedOn.set(day, (postedOn.get(day) ?? 0) + 1);
+    // Only the days the series covers: a week's bar must not pick up the days of that week outside the range.
+    if (day < asked.chartFrom || day > r.to) continue;
+    const key = asked.bucket === "week" ? weekStart(day) : day;
+    postedOn.set(key, (postedOn.get(key) ?? 0) + 1);
   }
   const t = trendSeries(
     r,
-    daily.map((d) => ({ day: d.day, ...d.views, contacts: d.contactsWindow, listings: postedOn.get(d.day) ?? 0 })),
-    [...SEGMENT_KEYS, "contacts", "listings"],
-    ["contacts"],
+    series.map((d) => ({ day: d.day, ...d.views, views: sumOf(SEGMENT_KEYS.map((k) => d.views[k])), contacts: d.contacts, listings: postedOn.get(d.day) ?? 0 })),
+    [...SEGMENT_KEYS, "views", "contacts", "listings"],
+    { contacts: series.map((d) => d.contactsWindow) },
   );
 
   const out = o.views.signed_out;
@@ -69,9 +80,12 @@ export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<Overvi
       value: num(views),
       chip: countChip(views, viewsPrev),
       tip: "A view is one person opening one listing on one Eastern day.",
-      series: t.points.map((_, i) => sumOf(SEGMENT_KEYS.map((k) => t.values[k][i]))),
+      series: t.spark.views,
+      bars: t.bars.views,
+      avg: t.avg?.views ?? null,
+      noun: ["view", "views"],
       split: VIEWER_SEGMENTS.map((s) => ({ label: s.label.toLowerCase(), n: o.views[s.key].cur })),
-      extra: VIEWER_SEGMENTS.map((s) => ({ label: s.label.toLowerCase(), values: t.values[s.key] })),
+      extra: VIEWER_SEGMENTS.map((s) => ({ label: s.label.toLowerCase(), values: t.bars[s.key] })),
     },
     {
       key: "contacts",
@@ -79,7 +93,11 @@ export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<Overvi
       value: num(o.contacts.cur),
       chip: countChip(o.contacts.cur, o.contacts.prev),
       tip: `People who got in touch about a listing, counted once per listing. ${num(o.taps.cur)} taps in all (copy, call, text, mail app).`,
-      series: t.values.contacts,
+      series: t.spark.contacts,
+      bars: t.bars.contacts,
+      avg: t.avg?.contacts ?? null,
+      noun: ["got in touch", "got in touch"],
+      seriesNote: "Someone who got in touch about one listing in two bars is in both, so the bars can add up to more than the card.",
     },
     {
       key: "rate",
@@ -87,8 +105,16 @@ export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<Overvi
       value: rate === null ? "—" : `${Math.round(rate)}%`,
       chip: rateChip(rate, ratePrev, o.signedInViewers.prev),
       tip: `${num(o.contacts.cur)} of ${num(o.signedInViewers.cur)} signed-in viewers got in touch. Signed-out visitors can't, so they aren't in it. The chart divides by signed-in views.`,
-      series: t.values.contacts.map((c, i) => (t.values.signed_in[i] > 0 ? Math.min(100, Math.round((c / t.values.signed_in[i]) * 100)) : null)),
-      seriesNote: "The chart divides contacts by signed-in views (people-days); the card divides by signed-in viewers, so the two can differ.",
+      series: t.spark.contacts.map((c, i) => (t.spark.signed_in[i] > 0 ? Math.min(100, Math.round((c / t.spark.signed_in[i]) * 100)) : null)),
+      bars: t.bars.contacts.map((c, i) => pct(c, t.bars.signed_in[i])),
+      avg: t.totals ? t.totals.contacts.map((c, i) => pct(c, t.totals!.signed_in[i])) : null,
+      noun: ["got in touch", "got in touch"],
+      gap: `under ${RATE_MIN_VIEWS} signed-in views`,
+      extra: [
+        { label: "got in touch", values: t.bars.contacts },
+        { label: "signed-in views", values: t.bars.signed_in },
+      ],
+      seriesNote: `A bar is drawn only with ${RATE_MIN_VIEWS} or more signed-in views (a stub on the axis is a real 0%); the line is the 7 days' contacts over their signed-in views. Both divide by signed-in views (people-days), the card by signed-in viewers, so they can differ.`,
       unit: "percent",
     },
     {
@@ -97,7 +123,10 @@ export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<Overvi
       value: num(o.newListings.cur),
       chip: countChip(o.newListings.cur, o.newListings.prev),
       tip: "Posted in the range. Listings carried over from the old site aren't counted.",
-      series: t.values.listings,
+      series: t.spark.listings,
+      bars: t.bars.listings,
+      avg: t.avg?.listings ?? null,
+      noun: ["new listing", "new listings"],
     },
   ];
 
@@ -107,7 +136,7 @@ export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<Overvi
   const filled = share(o.outcomes.throughSite.cur, o.outcomes.answered.cur);
 
   return {
-    mode: t.mode,
+    bucket: t.bucket,
     points: t.points,
     kpis,
     groups: [
