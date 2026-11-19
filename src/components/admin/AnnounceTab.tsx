@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { adminBroadcastCount, adminSendBroadcast, adminSetAnnouncement, adminSetReadOnly } from "@/server/actions/admin";
 import type { Announcement, ReadOnly } from "@/server/data/settings";
 import type { Audience } from "@/server/services/admin";
@@ -10,7 +10,6 @@ import type { NoticeAdminRow } from "@/server/data/notices";
 import { Card } from "./Card";
 import { NoticesSection } from "./NoticesSection";
 import { Pill } from "./Pill";
-import { Tip } from "./Tip";
 import type { PersonDto, SemesterRowDto } from "./types";
 import { BTN, BTN_PRIMARY, CHOICE, FIELD, FIELD_LABEL, LINK, MUTED, SELECT, TEXTAREA } from "./ui";
 
@@ -148,7 +147,6 @@ export function Maintenance({ readOnly }: { readOnly: ReadOnly }) {
 
 /** A broadcast: to posters on the board, every account, posters in a semester, people yet to answer the survey, or named people. */
 function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people: PersonDto[] }) {
-  const bodyId = useId();
   const [kind, setKind] = useState<Audience["kind"]>("all");
   const [code, setCode] = useState(semesters.find((s) => s.active)?.code ?? "");
   const [ids, setIds] = useState<Set<string>>(new Set());
@@ -246,12 +244,14 @@ function EmailForm({ semesters, people }: { semesters: SemesterRowDto[]; people:
         Subject
         <input className={FIELD} value={subject} onChange={(e) => setSubject(e.target.value)} required maxLength={150} />
       </label>
-      <div className={FIELD_LABEL}>
-        <Tip flat label="About this field" text="{name} is the person's name; without it a greeting is added. {survey} is their own survey link. Blank lines separate paragraphs. The sign-off is added for you." className="self-start">
-          <label htmlFor={bodyId}>Message</label>
-        </Tip>
-        <textarea id={bodyId} className={TEXTAREA} rows={8} value={body} onChange={(e) => setBody(e.target.value)} required maxLength={10000} />
-      </div>
+      <label className={FIELD_LABEL}>
+        Message
+        <textarea className={TEXTAREA} rows={8} value={body} onChange={(e) => setBody(e.target.value)} required maxLength={10000} />
+        {/* In sight, not behind an ⓘ: these are what you type, and nobody guesses a placeholder. */}
+        <span>
+          {"{name}"} is the person&apos;s name; without it a greeting is added. {"{survey}"} is their own survey link. Blank lines separate paragraphs. The sign-off is added for you.
+        </span>
+      </label>
       <button type="submit" className={`${BTN_PRIMARY} self-start`} disabled={pending || !subject.trim() || !body.trim() || !count}>
         {pending ? "Sending…" : "Send"}
       </button>

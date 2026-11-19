@@ -8,7 +8,6 @@ import { ADMIN_MAIL_LIMITS, adminMailContent, type AdminMailResolution, type Adm
 import { adminPreviewMail, adminSendMail } from "@/server/actions/admin";
 import { Empty } from "./Card";
 import { Pill, type PillTone } from "./Pill";
-import { Tip } from "./Tip";
 import { BTN, BTN_PRIMARY, FIELD, FIELD_LABEL, LABEL, SELECT, TEXTAREA } from "./ui";
 
 /** A one-off email as the admin pages show it. */
@@ -172,7 +171,7 @@ export function MailComposer({ request, onDone }: { request?: ReplyTarget; onDon
       <Field id={`${uid}-subject`} label="Subject" error={errors.subject}>
         <input id={`${uid}-subject`} className={FIELD} value={subject} onChange={(e) => edit(setSubject)(e.target.value)} maxLength={ADMIN_MAIL_LIMITS.subject} disabled={busy} />
       </Field>
-      <Field id={`${uid}-body`} label="Message" error={errors.body} tip="Plain text. A blank line starts a paragraph; web and email addresses become links. The sign-off and footer are added for you.">
+      <Field id={`${uid}-body`} label="Message" error={errors.body} hint="Plain text. A blank line starts a paragraph; web and email addresses become links. The sign-off and footer are added for you.">
         <textarea id={`${uid}-body`} className={TEXTAREA} rows={10} value={body} onChange={(e) => edit(setBody)(e.target.value)} maxLength={ADMIN_MAIL_LIMITS.body} disabled={busy} />
       </Field>
       {request && (
@@ -225,23 +224,13 @@ export function MailComposer({ request, onDone }: { request?: ReplyTarget; onDon
   );
 }
 
-/**
- * A labelled field with its error under it. The label points at the control
- * by id instead of wrapping it, so a `tip` (whose ⓘ is a button) can sit
- * beside the label without becoming the thing the label names.
- */
-function Field({ id, label, error, tip, children }: { id: string; label: string; error?: string; tip?: string; children: ReactNode }) {
-  const name = <label htmlFor={id}>{label}</label>;
+/** A labelled field with, under it, how to write it (`hint`, in sight while there is no error) or its error. */
+function Field({ id, label, error, hint, children }: { id: string; label: string; error?: string; hint?: string; children: ReactNode }) {
   return (
     <div className={FIELD_LABEL}>
-      {tip ? (
-        <Tip text={tip} flat label="About this field" className="self-start">
-          {name}
-        </Tip>
-      ) : (
-        name
-      )}
+      <label htmlFor={id}>{label}</label>
       {children}
+      {hint && !error && <span>{hint}</span>}
       {error && <span className="text-error-ink">{error}</span>}
     </div>
   );

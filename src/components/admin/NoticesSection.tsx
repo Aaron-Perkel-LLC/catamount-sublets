@@ -10,7 +10,6 @@ import { NoticeCard } from "../notices/NoticeDialog";
 import { NoticeMarkdown } from "../notices/NoticeMarkdown";
 import { Card, Empty } from "./Card";
 import { Pill } from "./Pill";
-import { Tip } from "./Tip";
 import { BTN, BTN_DANGER, BTN_PRIMARY, CARD_TITLE, FIELD, FIELD_LABEL, LABEL, MUTED, SELECT, TEXTAREA } from "./ui";
 
 const EMPTY: NoticeInput = { title: "", bodyMd: "", audience: "posters", ctaLabel: "", ctaHref: "", endsOn: "" };
@@ -197,14 +196,13 @@ function NoticeForm({ id, initial, live, onDone, onCancel }: { id: number | null
       </label>
       <div className={FIELD_LABEL}>
         <span className="flex items-center justify-between gap-3">
-          <Tip flat label="About this field" text="**bold**, *italic*, [links](/browse), lists, ### headings, > quotes. No images or HTML.">
-            <label htmlFor={bodyId}>Body (Markdown)</label>
-          </Tip>
+          <label htmlFor={bodyId}>Body (Markdown)</label>
           <span className="tabular-nums">
             {v.bodyMd.length}/{NOTICE_LIMITS.body}
           </span>
         </span>
         <textarea id={bodyId} className={`${TEXTAREA} font-mono`} rows={8} value={v.bodyMd} onChange={(e) => set({ bodyMd: e.target.value })} />
+        <span>**bold**, *italic*, [links](/browse), lists, ### headings, &gt; quotes. No images or HTML.</span>
         {fieldError("bodyMd")}
       </div>
       <div className="grid items-start gap-3 sm:grid-cols-2">

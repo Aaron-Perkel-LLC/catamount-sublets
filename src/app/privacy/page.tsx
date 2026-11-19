@@ -79,7 +79,8 @@ export default function PrivacyPage() {
         <p>
           When someone who is not signed in opens a listing, the view is counted under a code made from their IP address and browser
           name with a secret that changes every day. The IP address itself is never stored, and the code cannot be turned back into it
-          or matched across days. Search engines and link previews are not counted.
+          or matched across days. Arriving at a listing from a share link without being signed in is counted the same way, under that
+          day&apos;s code, with no name or email. Search engines and link previews are not counted.
         </p>
         <p>Page-view counts through Vercel Web Analytics, which sets no cookies and keeps no record of who you are.</p>
       </section>
