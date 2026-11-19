@@ -6,20 +6,16 @@ import { CONTACT_EVENT_TYPES, LISTING_STATUS_VALUES, type ListingStatus } from "
 import { easternDate, easternDayStart } from "@/lib/dates";
 import { formatAddress } from "@/lib/format";
 import { escapeLike } from "@/lib/people-search";
-import { posterFirstName } from "@/lib/person-name";
 import { orderSemesterCodes, sortSemesters } from "@/lib/semesters";
-import { countAdminMessagesTo, deleteAdminMessagesTo } from "@/server/data/admin-messages";
+import { countEmailsTo, forgetRecipient } from "@/server/data/emails";
 import { listingActivity } from "@/server/data/events";
 import { deleteListing, listingFileUrls, photoFileUrls, setListingStatus, setListingVisibility } from "@/server/data/my-listing";
 import { posterColumns, shownName } from "@/server/data/names";
 import { listingCountForSemester, setListingSemesters } from "@/server/data/semesters";
 import { listingSnapshot, noticeDeleted, noticeStatus } from "@/server/email/notices";
-import { sendBroadcast, SURVEY_PLACEHOLDER, type Recipient } from "@/server/email/broadcast";
-import { surveyUnanswered } from "@/server/data/survey";
-import { surveySecret } from "@/server/survey-token";
 import { log } from "@/server/log";
 import { deleteMedia, deleteRawUpload, isMediaUrl, listMediaFiles, listRawUploads } from "@/server/storage";
-import { publicListingWhere, visibleSemesterWhere } from "@/server/data/visibility";
+import { visibleSemesterWhere } from "@/server/data/visibility";
 
 /** The admin's operations, without the request. src/server/actions/admin.ts authenticates and calls these. */
 
@@ -389,7 +385,7 @@ export interface DeletionReport {
   /** The listing's activity events. They are kept (no foreign key), so this is informational. */
   events: number;
   sessions: number;
-  /** One-off emails the admin sent to this address (admin_messages); deleted with the account. */
+  /** Emails the admin wrote to this one address; deleted with the account (their rows in group emails stay, without the address). */
   messages: number;
 }
 
@@ -408,10 +404,10 @@ export async function deletePerson(db: Db, userId: string, actingAdminId: string
   const urls = l ? await listingFileUrls(db, l.id) : [];
   const [{ events }] = l ? await db.select({ events: count() }).from(listingEvents).where(eq(listingEvents.listingId, l.id)) : [{ events: 0 }];
   const [{ sessions }] = await db.select({ sessions: count() }).from(session).where(eq(session.userId, userId));
-  const messages = await countAdminMessagesTo(db, u.email);
+  const messages = await countEmailsTo(db, u.email);
   const report: DeletionReport = { email: u.email, listingId: l?.id ?? null, photos: urls.length / 3, files: urls.length, events: Number(events), sessions: Number(sessions), messages };
   if (dryRun) return ok(report);
-  await deleteAdminMessagesTo(db, u.email);
+  await forgetRecipient(db, u.email);
   await db.delete(user).where(eq(user.id, userId));
   await deleteMedia(urls);
   return ok(report);
@@ -486,72 +482,16 @@ export async function bulkDeletePhotos(db: Db, photoIds: number[]): Promise<Resu
   return ok({ deleted: toDelete.length, kept });
 }
 
-/** Opt a person out of broadcasts (an unsubscribe request), or back in. Sign-in codes are not affected. */
+/** Mark a person Stop email (left out of every group email; one written to them alone needs "send anyway"), or lift it. Sign-in codes are not affected. */
 export async function setNoEmail(db: Db, userId: string, noEmail: boolean): Promise<Result> {
-  const updated = await db.update(user).set({ noEmail }).where(eq(user.id, userId)).returning({ id: user.id });
+  const updated = await db
+    .update(user)
+    .set({ noEmail, noEmailAt: noEmail ? new Date() : null, noEmailSource: noEmail ? "admin" : null })
+    .where(eq(user.id, userId))
+    .returning({ id: user.id });
   if (updated.length === 0) return fail("No such person.");
   log.info("admin.no_email_set", { userId, noEmail });
   return ok(undefined);
-}
-
-/* ------------------------------------------------------------ broadcast */
-
-export type Audience = { kind: "all" } | { kind: "accounts" } | { kind: "semester"; code: string } | { kind: "individual"; userIds: string[] } | { kind: "survey" };
-
-/**
- * Who a broadcast goes to: posters of public listings, every account (with or
- * without a listing), every poster in a semester, named people, or everyone
- * invited to the survey who has not answered it (which also leaves out admins
- * and test addresses). Banned people and people who asked for no email are
- * left out of every audience, named or not.
- */
-export async function broadcastRecipients(db: Db, audience: Audience): Promise<Recipient[]> {
-  if (audience.kind === "individual" && audience.userIds.length === 0) return [];
-  if (audience.kind === "survey") return (await surveyUnanswered(db)).map((r) => ({ id: r.id, email: r.email, name: r.firstName, posted: r.posted }));
-  const columns = { id: user.id, email: user.email, displayName: listings.displayName, firstName: user.firstName, lastName: user.lastName, name: user.name, legacyNetid: user.legacyNetid, listingId: listings.id };
-  const notBanned = and(sql`coalesce(${user.banned}, false) = false`, eq(user.noEmail, false));
-  const rows =
-    audience.kind === "semester"
-      ? await db
-          .select(columns)
-          .from(listingSemesters)
-          .innerJoin(listings, eq(listings.id, listingSemesters.listingId))
-          .innerJoin(user, eq(user.id, listings.userId))
-          .where(and(notBanned, eq(listingSemesters.semesterCode, audience.code)))
-      : audience.kind === "all"
-        ? await db.select(columns).from(listings).innerJoin(user, eq(user.id, listings.userId)).where(and(notBanned, publicListingWhere()))
-        : await db
-            .select(columns)
-            .from(user)
-            .leftJoin(listings, eq(listings.userId, user.id))
-            .where(audience.kind === "individual" ? and(notBanned, inArray(user.id, audience.userIds)) : notBanned)
-            .orderBy(asc(user.createdAt));
-  const seen = new Set<string>();
-  return rows
-    .filter((r) => !seen.has(r.email) && seen.add(r.email))
-    .map((r) => ({ id: r.id, email: r.email, name: posterFirstName({ ...r, legacyNames: [r.displayName, r.name] }), posted: r.listingId !== null }));
-}
-
-const broadcastInput = z.object({ subject: z.string().trim().min(1).max(150).refine((s) => !/[\r\n]/.test(s)), body: z.string().trim().min(1).max(10_000) });
-const audienceInput: z.ZodType<Audience> = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("all") }),
-  z.object({ kind: z.literal("accounts") }),
-  z.object({ kind: z.literal("semester"), code: z.string().min(1) }),
-  z.object({ kind: z.literal("individual"), userIds: z.array(z.string().uuid()).max(5000) }),
-  z.object({ kind: z.literal("survey") }),
-]);
-
-export async function sendBroadcastTo(db: Db, audience: Audience, raw: { subject: string; body: string }): Promise<Result<{ sent: number; failed: number }>> {
-  const parsed = broadcastInput.safeParse(raw);
-  if (!parsed.success) return fail("Subject and message are required.");
-  const to = audienceInput.safeParse(audience);
-  if (!to.success) return fail("Pick who to send to.");
-  const linked = parsed.data.body.includes(SURVEY_PLACEHOLDER);
-  if (to.data.kind === "survey" && !linked) return fail(`Add ${SURVEY_PLACEHOLDER} where the survey link should go.`);
-  if (linked && !surveySecret()) return fail("SURVEY_SECRET is not set on this deployment, so survey links cannot be made.");
-  const recipients = await broadcastRecipients(db, to.data);
-  if (recipients.length === 0) return fail("Nobody to send to.");
-  return ok(await sendBroadcast(recipients, parsed.data.subject, parsed.data.body, { pauseMs: 600 }));
 }
 
 /* ------------------------------------------------------------ inventory */

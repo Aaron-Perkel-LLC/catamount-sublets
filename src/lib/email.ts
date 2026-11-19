@@ -2,53 +2,96 @@ import { z } from "zod";
 import { ACCESS, SITE } from "@/config/site";
 
 /**
- * The admin's one-off email: one recipient, a subject, and a plain-text body
- * that the template turns into paragraphs with links. One schema for the
- * composer (inline messages) and the Server Actions (the truth).
+ * Email the admin writes from the console: one email, to one address or to a
+ * group, with a plain-text body that the template turns into paragraphs with
+ * links. One set of schemas for the composer (inline messages) and the
+ * Server Actions (the truth). Safe on both sides.
  */
 
-export const ADMIN_MAIL_LIMITS = { email: 254, subject: 200, body: 10_000 } as const;
-export const ADMIN_MAIL_RESOLUTIONS = ["approve", "decline"] as const;
-export type AdminMailResolution = (typeof ADMIN_MAIL_RESOLUTIONS)[number];
-export const ADMIN_MAIL_STATUSES = ["pending", "sent", "failed"] as const;
-export type AdminMailStatus = (typeof ADMIN_MAIL_STATUSES)[number];
+export const EMAIL_LIMITS = { email: 254, subject: 200, body: 10_000, people: 5000 } as const;
+export const EMAIL_STATUSES = ["draft", "sending", "sent"] as const;
+export type EmailStatus = (typeof EMAIL_STATUSES)[number];
+/** What happened to one recipient. `left_out` never had a send tried: banned, or marked Stop email. */
+export const DELIVERY_STATUSES = ["queued", "sending", "sent", "failed", "left_out"] as const;
+export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
+export const EMAIL_RESOLUTIONS = ["approve", "decline"] as const;
+export type EmailResolution = (typeof EMAIL_RESOLUTIONS)[number];
+export const EMAIL_SENDERS = ["personal", "group"] as const;
+export type EmailSender = (typeof EMAIL_SENDERS)[number];
+export const LEFT_OUT_REASONS = { stop_email: "Stop email", banned: "Banned" } as const;
+export type LeftOutReason = keyof typeof LEFT_OUT_REASONS;
+
+/** In a body: the person's first name, and (accounts only) their own signed link to the survey. */
+export const NAME_PLACEHOLDER = "{name}";
+export const SURVEY_PLACEHOLDER = "{survey}";
 
 const EMAIL = /^[^\s@,;<>"]+@[^\s@,;<>"]+\.[^\s@,;<>"]+$/;
+export const isEmailAddress = (v: string) => EMAIL.test(v);
 
-/** What the email says and who it goes to: the part a preview is bound to. */
-export const adminMailContent = z.object({
-  to: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .max(ADMIN_MAIL_LIMITS.email, "That address is too long.")
-    .refine((v) => EMAIL.test(v), "Enter one valid email address."),
+/**
+ * Who an email is for, as chosen (not who that resolved to): one address, or
+ * a group worked out again when it is sent. An address may be half-typed in
+ * a draft; emailToSend below is what Send requires.
+ */
+export const emailAudience = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("address"), email: z.string().trim().toLowerCase().max(EMAIL_LIMITS.email, "That address is too long.") }),
+  z.object({ kind: z.literal("board") }),
+  z.object({ kind: z.literal("semester"), code: z.string().trim().min(1).max(40) }),
+  z.object({ kind: z.literal("everyone") }),
+  z.object({ kind: z.literal("survey") }),
+  z.object({ kind: z.literal("people"), userIds: z.array(z.string().uuid()).max(EMAIL_LIMITS.people) }),
+]);
+export type EmailAudience = z.infer<typeof emailAudience>;
+export const isGroup = (a: EmailAudience): boolean => a.kind !== "address";
+
+const body = z.string().transform((v) => v.replace(/\r\n?/g, "\n"));
+
+/** A draft as it is saved while being written: nothing is required yet. */
+export const emailDraft = z.object({
+  subject: z.string().max(EMAIL_LIMITS.subject, `Keep the subject under ${EMAIL_LIMITS.subject} characters.`),
+  body: body.pipe(z.string().max(EMAIL_LIMITS.body, `Keep the message under ${EMAIL_LIMITS.body.toLocaleString("en-US")} characters.`)),
+  audience: emailAudience,
+  resolve: z.enum(EMAIL_RESOLUTIONS).nullable().default(null),
+});
+export type EmailDraft = z.infer<typeof emailDraft>;
+
+/** What Send requires of that draft. */
+export const emailToSend = z
+  .object({
   subject: z
     .string()
     .trim()
     .min(1, "Write a subject.")
-    .max(ADMIN_MAIL_LIMITS.subject, `Keep the subject under ${ADMIN_MAIL_LIMITS.subject} characters.`)
+    .max(EMAIL_LIMITS.subject, `Keep the subject under ${EMAIL_LIMITS.subject} characters.`)
     .refine((v) => !/[\r\n]/.test(v), "The subject is one line."),
-  body: z
-    .string()
-    .transform((v) => v.replace(/\r\n?/g, "\n").trim())
-    .pipe(
-      z
-        .string()
-        .min(1, "Write the message.")
-        .max(ADMIN_MAIL_LIMITS.body, `Keep the message under ${ADMIN_MAIL_LIMITS.body.toLocaleString("en-US")} characters.`),
-    ),
-});
-export type AdminMailContent = z.infer<typeof adminMailContent>;
-
-/** The whole send: the content, plus the access request it answers and what to do with that request once sent. */
-export const adminMailInput = adminMailContent
-  .extend({
-    accessRequestId: z.number().int().positive().nullable().default(null),
-    resolve: z.enum(ADMIN_MAIL_RESOLUTIONS).nullable().default(null),
+  body: body.pipe(
+    z
+      .string()
+      .trim()
+      .min(1, "Write the message.")
+      .max(EMAIL_LIMITS.body, `Keep the message under ${EMAIL_LIMITS.body.toLocaleString("en-US")} characters.`),
+  ),
+    audience: emailAudience,
   })
-  .refine((v) => !v.resolve || v.accessRequestId, { path: ["resolve"], message: "Only a reply to a request can approve or decline it." });
-export type AdminMailInput = z.infer<typeof adminMailInput>;
+  .refine((v) => v.audience.kind !== "address" || isEmailAddress(v.audience.email), { path: ["email"], message: "Enter one valid email address." });
+
+/** A group as the log and the composer name it; a semester by its name when there is one to hand. */
+export function audienceLabel(a: EmailAudience, semesterNames: ReadonlyMap<string, string> = new Map()): string {
+  switch (a.kind) {
+    case "address":
+      return a.email;
+    case "board":
+      return "Posters on the board";
+    case "semester":
+      return `${semesterNames.get(a.code) ?? a.code} posters`;
+    case "everyone":
+      return "Everyone with an account";
+    case "survey":
+      return "Haven't answered the survey";
+    case "people":
+      return a.userIds.length === 1 ? "1 hand-picked person" : `${a.userIds.length} hand-picked people`;
+  }
+}
 
 /** The first message for each field, keyed by field name. */
 export function fieldErrors(error: z.ZodError): Record<string, string> {

@@ -5,7 +5,7 @@ import { siteSettings } from "@/db/schema";
 import { log } from "@/server/log";
 import type { CronRun } from "./settings";
 
-export const CRON_NAMES = ["sweep", "digest", "go-public"] as const;
+export const CRON_NAMES = ["sweep", "digest", "email", "go-public"] as const;
 export type CronName = (typeof CRON_NAMES)[number];
 
 /**

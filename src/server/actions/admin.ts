@@ -12,7 +12,6 @@ import { setSetting, type Announcement } from "@/server/data/settings";
 import { noticeInput, type NoticeInput } from "@/lib/notices";
 import { createNotice, deleteNotice, duplicateNotice, setNoticeActive, updateNotice } from "@/server/data/notices";
 import * as admin from "@/server/services/admin";
-import { type AdminMailPreview, type MailResult, previewAdminMessage, sendAdminMessage, type SendOutcome } from "@/server/services/admin-mail";
 import { type AskPreview, askPreview, sendAsks, sendAskTest } from "@/server/services/listing-outcome";
 import { photoOpFor, type PhotoOp, type PhotosResult } from "@/server/services/listing";
 import { type DigestOverview, type DigestRender, digestOverview, renderDigestFor, sendDigestTest, setDigestSwitch } from "@/server/services/digest";
@@ -186,16 +185,6 @@ export async function adminDeleteOrphans(urls: string[], confirm: number): Promi
   return admin.deleteOrphans(await getDb(), z.array(z.string().max(500)).max(2000).parse(urls), z.number().int().nonnegative().parse(confirm));
 }
 
-export async function adminSendBroadcast(audience: admin.Audience, subject: string, body: string): Promise<admin.Result<{ sent: number; failed: number }>> {
-  await requireAdmin();
-  return admin.sendBroadcastTo(await getDb(), audience, { subject, body });
-}
-
-export async function adminBroadcastCount(audience: admin.Audience): Promise<number> {
-  await requireAdmin();
-  return (await admin.broadcastRecipients(await getDb(), audience)).length;
-}
-
 const requestId = z.number().int().positive();
 
 /** Approve an access request: its address may sign in from now on. */
@@ -213,20 +202,6 @@ export async function adminDismissAccessRequest(id: number): Promise<admin.Resul
   if (!(await dismissAccessRequest(await getDb(), requestId.parse(id)))) return { ok: false, error: "That request was already handled." };
   revalidatePath("/admin");
   return { ok: true, data: undefined };
-}
-
-/** Render a one-off email exactly as it will arrive, and the token that lets that exact text be sent. */
-export async function adminPreviewMail(input: unknown): Promise<MailResult<AdminMailPreview>> {
-  const me = await requireAdmin();
-  return previewAdminMessage(await getDb(), me.id, input);
-}
-
-/** Send a previewed one-off email; a reply to an access request can approve or decline it in the same step. */
-export async function adminSendMail(input: unknown, token: string): Promise<MailResult<SendOutcome>> {
-  const me = await requireAdmin();
-  const r = await sendAdminMessage(await getDb(), me.id, input, z.string().max(200).parse(token));
-  revalidatePath("/admin");
-  return r;
 }
 
 /** Stop new sign-ins for an approved address. */

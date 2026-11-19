@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreHorizontal, Search, X } from "lucide-react";
+import { Mail, MoreHorizontal, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import { shortDate } from "@/lib/dates";
@@ -8,11 +8,13 @@ import { formatMoney } from "@/lib/format";
 import { LISTING_STATUSES, type ListingStatus } from "@/lib/options";
 import { highlightParts, PEOPLE_QUERY_MAX } from "@/lib/people-search";
 import { adminDeletePerson, adminSearchPeople, adminSetBanned, adminSetNoEmail } from "@/server/actions/admin";
+import { adminEmailNew } from "@/server/actions/admin-email";
+import { useAdmin } from "./AdminShell";
 import { type Column, DataTable } from "./DataTable";
 import { Pill } from "./Pill";
 import type { SortDir } from "./sort";
 import type { PersonDto } from "./types";
-import { FIELD, LINK, MUTED, SELECT } from "./ui";
+import { BTN, BTN_PRIMARY, FIELD, LINK, MUTED, SELECT } from "./ui";
 import { useSort } from "./useSort";
 
 type Key = "name" | "joined" | "lastIn" | "post";
@@ -40,6 +42,9 @@ export function PeopleTab({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [note, setNote] = useState<string | null>(null);
+  // People ticked to be emailed together: another way into Email's composer.
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
+  const { href } = useAdmin();
   const { sorted, sort, setSort, onSort } = useSort<PersonDto, Key>(people, value, { key: "joined", dir: "desc" });
   const { q, setQ, matchedQ, matches, busy, error, inputRef, clear } = usePeopleSearch(initialSearch);
   const shown = matches ? sorted.filter((p) => matches.has(p.id)) : sorted;
@@ -78,7 +83,31 @@ export function PeopleTab({
       if (r.ok) router.refresh();
     });
 
+  const emailable = (p: PersonDto) => !p.banned && !p.noEmail;
+  const tick = (id: string, on: boolean) =>
+    setTicked((t) => {
+      const next = new Set(t);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  const emailTicked = () =>
+    start(async () => {
+      const r = await adminEmailNew({ audience: { kind: "people", userIds: [...ticked] } });
+      if (r.ok) router.push(href(`/admin/email/${r.data.id}`));
+      else setNote(r.error);
+    });
+
   const columns: Column<PersonDto, Key>[] = [
+    {
+      key: "tick",
+      header: "Tick to email",
+      srHeader: true,
+      // With a pointer only: on a phone, hand-pick people in Email's composer instead.
+      desktopOnly: true,
+      className: "w-px md:pr-0",
+      cell: (p) => <input type="checkbox" className="h-4 w-4 align-middle" aria-label={`Tick ${p.name ?? p.email} to email`} checked={ticked.has(p.id)} disabled={!emailable(p)} title={emailable(p) ? undefined : p.banned ? "Banned: never emailed" : "Marked Stop email"} onChange={(e) => tick(p.id, e.target.checked)} />,
+    },
     {
       key: "name",
       header: "Name",
@@ -199,6 +228,24 @@ export function PeopleTab({
           {note}
         </p>
       )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 max-md:hidden">
+        {ticked.size > 0 ? (
+          <>
+            <button type="button" className={BTN_PRIMARY} disabled={pending} onClick={emailTicked}>
+              <Mail className="h-3.5 w-3.5" aria-hidden />
+              Email these {ticked.size}
+            </button>
+            <button type="button" className={BTN} onClick={() => setTicked(new Set())}>
+              Untick all
+            </button>
+            <span className={MUTED}>Opens a draft to them in Email. Nothing is sent from here.</span>
+          </>
+        ) : (
+          <button type="button" className={`${LINK} font-normal`} onClick={() => setTicked(new Set(shown.filter(emailable).map((p) => p.id)))}>
+            Tick {matches ? "everyone shown" : "everyone"} to email them
+          </button>
+        )}
+      </div>
       <DataTable
         label="People"
         columns={columns}

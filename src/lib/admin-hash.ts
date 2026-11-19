@@ -9,13 +9,13 @@
 const SAME: Record<string, string> = {
   people: "/admin/people",
   requests: "/admin/requests",
-  mail: "/admin/mail",
+  mail: "/admin/email",
   digest: "/admin/digest",
   survey: "/admin/survey",
   semesters: "/admin/semesters",
   announce: "/admin/announce",
-  // #email was the broadcast's home before the one-off Mail section took #mail.
-  email: "/admin/announce",
+  // #mail and #email were the one-off Mail section and the broadcast: both are Email now.
+  email: "/admin/email",
   announcement: "/admin/announce",
   images: "/admin/photos",
   posts: "/admin/people",

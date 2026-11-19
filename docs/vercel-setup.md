@@ -77,6 +77,8 @@ The weekly saved-search digest sends from `digest@updates.catamountsublets.com` 
 
 `/api/cron/digest` every hour on the hour (needs Pro, which the project has been on since 12 Oct). Vercel runs in UTC, so the route itself decides: it acts only on the digest morning (`DIGEST.weekday`, `DIGEST.hour` Eastern, then `DIGEST.catchUpHours` catch-up hours) and only while Admin → Digest is on and nothing blocks it (`MAILING_ADDRESS`, `RESEND_DIGEST_API_KEY` and `SURVEY_SECRET` set). Every other firing returns `{acted: false}` at once. The full send runs only where `VERCEL_ENV` is `production`: a preview (or a laptop with a live key) answers `{reason: "not_production"}` and logs `digest.not_production`, whatever its database and switch say, so a preview can only send **Send a test to me** (to the signed-in admin; it also needs `SURVEY_SECRET` and `RESEND_DIGEST_API_KEY` set for Preview). A blocked run during the digest hour logs `digest.blocked` with the missing variable names.
 
+`/api/cron/email` every hour at half past: it finishes an email of the admin's that was cut off mid-send or has a recipient waiting for another try, and returns at once when nothing is sending. The admin's group email goes out from `SITE.mailFromGroup` on the `updates.` subdomain with `RESEND_DIGEST_API_KEY` (the key is scoped to the domain, so the new address needs no DNS and no new key) and needs `MAILING_ADDRESS` wherever it is to be sent or checked, Preview included.
+
 ## 7. Silk (legacy) — only at cutover prep, on explicit go-ahead
 
 Deployed 8 October: legacy `main` carries the prep commits (root `.htaccess` `.sql` refusal, move-notice fixes, Instagram handle, the freeze rule commented out, the shim). Nothing else on Silk changes until cutover day.

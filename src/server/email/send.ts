@@ -15,11 +15,11 @@ import { log } from "@/server/log";
  * production logs.
  *
  * One-time codes are sent directly and synchronously from the auth hook;
- * broadcasts go through src/server/email/broadcast.ts, which paces itself, so
- * a code is never queued behind a bulk send.
+ * the admin's group email goes through src/server/services/email.ts, which
+ * paces itself, so a code is never queued behind a bulk send.
  */
 
-export type MailKind = "login_code" | "admin_notice" | "access_request" | "welcome" | "broadcast" | "broadcast_copy" | "survey_invite" | "admin_message" | "outcome_ask" | "stale_notice" | "digest";
+export type MailKind = "login_code" | "admin_notice" | "access_request" | "welcome" | "survey_invite" | "email_direct" | "email_group" | "outcome_ask" | "stale_notice" | "digest";
 
 /**
  * Print instead of send only on a developer's machine. On Vercel (preview or
@@ -59,7 +59,8 @@ export const sentInTests: { to: string; subject: string; kind: MailKind; text: s
  */
 export function senderFor(kind: MailKind): string {
   if (kind === "digest") return SITE.mailFromDigest;
-  if (kind === "broadcast" || kind === "broadcast_copy" || kind === "welcome" || kind === "survey_invite" || kind === "admin_message" || kind === "outcome_ask" || kind === "stale_notice") return SITE.mailFromPersonal;
+  if (kind === "email_group") return SITE.mailFromGroup;
+  if (kind === "welcome" || kind === "survey_invite" || kind === "email_direct" || kind === "outcome_ask" || kind === "stale_notice") return SITE.mailFromPersonal;
   if (kind === "admin_notice" || kind === "access_request") return SITE.mailFromNotices;
   return SITE.mailFrom;
 }
@@ -73,7 +74,7 @@ export function senderFor(kind: MailKind): string {
  * digest key itself.)
  */
 export function apiKeyFor(kind: MailKind, digestKey: string | undefined): { key: string | undefined; name: string } {
-  return kind === "digest" ? { key: digestKey, name: "RESEND_DIGEST_API_KEY" } : { key: process.env.RESEND_API_KEY, name: "RESEND_API_KEY" };
+  return kind === "digest" || kind === "email_group" ? { key: digestKey, name: "RESEND_DIGEST_API_KEY" } : { key: process.env.RESEND_API_KEY, name: "RESEND_API_KEY" };
 }
 
 const clients = new Map<string, Resend>();
@@ -102,7 +103,7 @@ export interface SendMailArgs {
    * List-Unsubscribe-Post, so mail clients can offer one-click unsubscribe.
    */
   oneClickUnsubscribeUrl?: string;
-  /** Kind "digest" only: the digest's own sending key (digestResendKey()). Required there; ignored otherwise. */
+  /** Kinds "digest" and "email_group" only: the bulk subdomain's sending key (digestResendKey()). Required there; ignored otherwise. */
   apiKey?: string;
 }
 
@@ -111,7 +112,7 @@ export function unsubscribeHeaders(kind: MailKind, oneClickUrl?: string): Record
   const mailto = `<mailto:${SITE.supportEmail}?subject=unsubscribe>`;
   if (oneClickUrl) return { "List-Unsubscribe": `<${oneClickUrl}>, ${mailto}`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" };
   // Relationship mail still says how to stop it; a code does not need the header.
-  if (kind === "welcome" || kind === "broadcast" || kind === "survey_invite" || kind === "outcome_ask" || kind === "stale_notice") return { "List-Unsubscribe": mailto };
+  if (kind === "welcome" || kind === "survey_invite" || kind === "outcome_ask" || kind === "stale_notice") return { "List-Unsubscribe": mailto };
   return {};
 }
 

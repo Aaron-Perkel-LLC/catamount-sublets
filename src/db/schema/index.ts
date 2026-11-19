@@ -8,7 +8,7 @@ export * from "./otp";
 export * from "./rate-limits";
 export * from "./access-requests";
 export * from "./survey-responses";
-export * from "./admin-messages";
+export * from "./emails";
 export * from "./listing-outcomes";
 export * from "./digest";
 export * from "./notices";

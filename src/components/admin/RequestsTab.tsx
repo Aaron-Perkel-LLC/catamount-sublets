@@ -1,13 +1,27 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { shortDate } from "@/lib/dates";
+import type { DeliveryStatus } from "@/lib/email";
 import { adminApproveAccessRequest, adminDismissAccessRequest, adminRevokeApprovedEmail } from "@/server/actions/admin";
+import { adminEmailNew } from "@/server/actions/admin-email";
+import { useAdmin } from "./AdminShell";
 import { Card, Empty } from "./Card";
-import { type AdminMessageDto, MailComposer, MailHistory } from "./MailComposer";
-import { Pill } from "./Pill";
-import { BTN, BTN_DANGER, BTN_PRIMARY, CARD_TITLE, GROUP, LABEL, MUTED } from "./ui";
+import { Pill, type PillTone } from "./Pill";
+import { BTN, BTN_DANGER, BTN_PRIMARY, CARD_TITLE, GROUP, LABEL, LINK, MUTED } from "./ui";
+
+/** A reply written to a request from Email: a draft still being written, or what happened to it once sent. */
+export interface RequestReplyDto {
+  id: number;
+  subject: string;
+  /** Null while it is still a draft. */
+  status: DeliveryStatus | null;
+  reason: string | null;
+  at: string;
+}
+const REPLY: Record<DeliveryStatus, [PillTone, string]> = { sent: ["good", "Sent"], failed: ["bad", "Failed"], queued: ["warn", "Sending"], sending: ["warn", "Sending"], left_out: ["outline", "Not sent"] };
 
 export interface AccessRequestDto {
   id: number;
@@ -17,8 +31,8 @@ export interface AccessRequestDto {
   school: string | null;
   message: string;
   createdAt: string;
-  /** Replies sent from the console, newest first. */
-  messages: AdminMessageDto[];
+  /** Replies written to it in Email, newest first. */
+  replies: RequestReplyDto[];
 }
 export interface RequestsDto {
   pending: AccessRequestDto[];
@@ -27,15 +41,23 @@ export interface RequestsDto {
 
 /**
  * The front page's "Request access" and "Request your school", waiting for an
- * answer, a card each. Reply writes to them from here and can approve or
- * decline in the same step; Approve and Dismiss do it without a message.
+ * answer, a card each. Reply opens an email to them in Email, with its
+ * starting text, which can approve or decline the request once it has gone;
+ * Approve and Dismiss do it without a message.
  * Beside them on a wide screen, the addresses already let in.
  */
 export function RequestsTab({ requests }: { requests: RequestsDto }) {
   const router = useRouter();
+  const { href } = useAdmin();
   const [pending, start] = useTransition();
   const [note, setNote] = useState<string | null>(null);
-  const [replying, setReplying] = useState<number | null>(null);
+
+  const reply = (requestId: number) =>
+    start(async () => {
+      const r = await adminEmailNew({ requestId });
+      if (r.ok) router.push(href(`/admin/email/${r.data.id}`));
+      else setNote(r.error);
+    });
 
   const run = (fn: () => Promise<{ ok: true } | { ok: false; error: string }>, done: string) =>
     start(async () => {
@@ -79,14 +101,26 @@ export function RequestsTab({ requests }: { requests: RequestsDto }) {
                     )}
                     {r.message && <p className="whitespace-pre-line text-ink-2">{r.message}</p>}
                   </div>
-                  {r.messages.length > 0 && (
-                    <div className="-mx-4 flex flex-col gap-1.5">
-                      <h3 className={`${GROUP} px-4`}>Replies</h3>
-                      <MailHistory messages={r.messages} showRecipient={false} />
+                  {r.replies.length > 0 && (
+                    <div className="flex flex-col gap-1">
+                      <h3 className={GROUP}>Replies</h3>
+                      <ul className="flex flex-col">
+                        {r.replies.map((m) => (
+                          <li key={m.id} className="flex min-h-11 items-center justify-between gap-3 md:min-h-8">
+                            <Link href={href(`/admin/email/${m.id}`)} className={`${LINK} min-w-0 font-normal`} title={m.reason ?? undefined}>
+                              <span className="truncate">{m.subject || "No subject yet"}</span>
+                            </Link>
+                            <span className="flex shrink-0 items-center gap-2">
+                              <span className={`${LABEL} tabular-nums`}>{shortDate(new Date(m.at))}</span>
+                              <Pill tone={m.status ? REPLY[m.status][0] : "muted"}>{m.status ? REPLY[m.status][1] : "Draft"}</Pill>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                   <div className="flex flex-wrap gap-2">
-                    <button type="button" className={BTN_PRIMARY} disabled={pending} aria-expanded={replying === r.id} onClick={() => setReplying(replying === r.id ? null : r.id)}>
+                    <button type="button" className={BTN_PRIMARY} disabled={pending} onClick={() => reply(r.id)}>
                       Reply
                     </button>
                     <button
@@ -102,11 +136,6 @@ export function RequestsTab({ requests }: { requests: RequestsDto }) {
                     </button>
                   </div>
                   {r.kind === "school" && <p className={LABEL}>Approve lets this one address in. Opening a whole school is a code change.</p>}
-                  {replying === r.id && (
-                    <div className="-mx-4 border-t border-line-light px-4 pt-4">
-                      <MailComposer request={r} onDone={() => setReplying(null)} />
-                    </div>
-                  )}
                 </Card>
               </li>
             ))}

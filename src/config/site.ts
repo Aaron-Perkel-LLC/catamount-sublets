@@ -29,6 +29,13 @@ export const SITE = {
    */
   mailDigestDomain: "updates.catamountsublets.com",
   mailFromDigest: "Catamount Sublets <digest@updates.catamountsublets.com>",
+  /**
+   * Sender for an email the admin writes to a group (src/server/services/email.ts):
+   * signed by the author like his notes to one person, but from the bulk
+   * subdomain, so a complaint about an announcement can't touch the root
+   * domain either. Replies go to mailReplyTo.
+   */
+  mailFromGroup: "Aaron at Catamount Sublets <aaron@updates.catamountsublets.com>",
   /*
    * The digest footer's postal address is not here: it is the MAILING_ADDRESS
    * env var, read only by src/server/digest-config.ts (server-only), because

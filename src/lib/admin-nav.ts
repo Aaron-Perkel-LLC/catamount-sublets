@@ -44,8 +44,8 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     id: "comms",
     label: "Comms",
     items: [
-      { id: "announce", href: "/admin/announce", label: "Announce", keywords: "banner popup notice broadcast email", range: true },
-      { id: "mail", href: "/admin/mail", label: "Mail", keywords: "one-off email message", range: true },
+      { id: "announce", href: "/admin/announce", label: "Announce", keywords: "banner popup notice", range: true },
+      { id: "email", href: "/admin/email", label: "Email", keywords: "mail message reply broadcast send sent outbox draft unsubscribe", range: true },
       { id: "digest", href: "/admin/digest", label: "Digest", keywords: "weekly saved search alerts", range: true },
       { id: "survey", href: "/admin/survey", label: "Survey", keywords: "feedback" },
     ],

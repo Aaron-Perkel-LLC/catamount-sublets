@@ -2,7 +2,8 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { DbOrTx } from "@/db";
 import {
-  adminMessages,
+  emailDeliveries,
+  emails,
   digestSends,
   digestSubscriptions,
   listingEvents,
@@ -448,27 +449,33 @@ export async function digestWeeks(db: DbOrTx, r: ResolvedRange): Promise<DigestW
   return [...weeks.values()].sort((a, b) => b.week.localeCompare(a.week));
 }
 
-export interface MailBucket {
-  day: string;
-  sent: number;
+export interface EmailNumbers {
+  /** Emails sent from the console in the range (a group email is one). */
+  emails: number;
+  /** Recipients an email reached, tests aside. */
+  reached: number;
   failed: number;
-  pending: number;
+  /** People who used a group email's unsubscribe link in the range. */
+  unsubscribed: number;
+  accounts: number;
+  stopEmail: number;
+  banned: number;
 }
 
-/** The admin's one-off emails (Mail and request replies) per bucket in the range. */
-export async function mailNumbers(db: DbOrTx, r: ResolvedRange): Promise<MailBucket[]> {
-  const rows = await all<{ b: string; status: string; n: number }>(
+/** The admin's own email in the range, and who can be emailed at all right now. */
+export async function emailNumbers(db: DbOrTx, r: ResolvedRange): Promise<EmailNumbers> {
+  const row = await one<Record<keyof EmailNumbers, number>>(
     db,
-    sql`select ${easternBucketSql(adminMessages.createdAt, r.bucket)} as b, ${adminMessages.status} as status, count(*)::int as n
-        from ${adminMessages} where ${within(adminMessages.createdAt, r)} group by 1, 2`,
+    sql`select
+          (select count(*) from ${emails} where ${emails.status} <> 'draft' and ${within(emails.sentAt, r)})::int as emails,
+          (select count(*) from ${emailDeliveries} d join ${emails} e on e.id = d.email_id where not d.test and d.status = 'sent' and ${within(sql`e.sent_at`, r)})::int as reached,
+          (select count(*) from ${emailDeliveries} d join ${emails} e on e.id = d.email_id where not d.test and d.status = 'failed' and ${within(sql`e.sent_at`, r)})::int as failed,
+          (select count(*) from ${user} where ${user.noEmail} and ${user.noEmailSource} = 'unsubscribe' and ${within(user.noEmailAt, r)})::int as unsubscribed,
+          (select count(*) from ${user})::int as accounts,
+          (select count(*) from ${user} where ${user.noEmail} and not coalesce(${user.banned}, false))::int as "stopEmail",
+          (select count(*) from ${user} where coalesce(${user.banned}, false))::int as banned`,
   );
-  const map = new Map<string, MailBucket>();
-  for (const row of rows) {
-    const m = map.get(row.b) ?? { day: row.b, sent: 0, failed: 0, pending: 0 };
-    if (row.status === "sent" || row.status === "failed" || row.status === "pending") m[row.status] += Number(row.n);
-    map.set(row.b, m);
-  }
-  return [...map.values()].sort((a, b) => b.day.localeCompare(a.day));
+  return { emails: Number(row.emails), reached: Number(row.reached), failed: Number(row.failed), unsubscribed: Number(row.unsubscribed), accounts: Number(row.accounts), stopEmail: Number(row.stopEmail), banned: Number(row.banned) };
 }
 
 /* ---------------------------------------------------------------- system */
@@ -490,7 +497,8 @@ export async function tableCounts(db: DbOrTx): Promise<TableCounts> {
           (select count(*) from ${noticeEvents})::int as notice_events,
           (select count(*) from ${savedSearches})::int as saved_searches,
           (select count(*) from ${digestSends})::int as digest_sends,
-          (select count(*) from ${adminMessages})::int as admin_messages`,
+          (select count(*) from ${emails})::int as emails,
+          (select count(*) from ${emailDeliveries})::int as email_deliveries`,
   );
   const { bytes, ...rest } = row;
   return { databaseBytes: Number(bytes), rows: Object.entries(rest).map(([table, n]) => ({ table, n: Number(n) })) };

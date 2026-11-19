@@ -16,10 +16,15 @@ import type { PersonDto, SemesterRowDto } from "./types";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const ACTIONS = [
-  "adminPreviewMail",
-  "adminSendMail",
-  "adminBroadcastCount",
-  "adminSendBroadcast",
+  "adminEmailNew",
+  "adminEmailSave",
+  "adminEmailCheck",
+  "adminEmailDelete",
+  "adminEmailTest",
+  "adminEmailSend",
+  "adminEmailRetry",
+  "adminEmailCopy",
+  "adminEmailCopyFor",
   "adminSetAnnouncement",
   "adminSetReadOnly",
   "adminApproveAccessRequest",
@@ -48,9 +53,11 @@ const ACTIONS = [
 ] as const;
 type Action = (typeof ACTIONS)[number];
 
-const h = vi.hoisted(() => ({ a: {} as Record<string, ReturnType<typeof vi.fn>>, refresh: vi.fn() }));
+const h = vi.hoisted(() => ({ a: {} as Record<string, ReturnType<typeof vi.fn>>, refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }));
 vi.mock("@/server/actions/admin", () => h.a);
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh, push: vi.fn(), replace: vi.fn() }), usePathname: () => "/admin", useSearchParams: () => new URLSearchParams() }));
+vi.mock("@/server/actions/admin-email", () => h.a);
+vi.mock("./AdminShell", () => ({ useAdmin: () => ({ href: (path: string) => path, openPost: async () => {} }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh, push: h.push, replace: h.replace }), usePathname: () => "/admin", useSearchParams: () => new URLSearchParams() }));
 for (const name of ACTIONS) h.a[name] = vi.fn();
 const a = h.a as Record<Action, ReturnType<typeof vi.fn>>;
 
@@ -100,6 +107,8 @@ function field<T extends HTMLElement = HTMLInputElement>(words: string, within: 
 beforeEach(() => {
   for (const name of ACTIONS) a[name].mockReset().mockResolvedValue({ ok: true, data: {} });
   h.refresh.mockReset();
+  h.push.mockReset();
+  h.replace.mockReset();
   confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
   promptSpy = vi.spyOn(window, "prompt").mockReturnValue(null);
   // jsdom has the element but not its modal behaviour.
@@ -127,67 +136,167 @@ const SEMESTERS: SemesterRowDto[] = [
   { code: "summer25", name: "Summer 2025", active: false, archivedAt: null, postCount: 0 },
 ];
 
-describe("Mail: one email to one address", () => {
-  const preview = (token: string) => ({ ok: true, data: { html: "<p>Rendered</p>", text: "Rendered, plain", token, warning: null } });
-  async function write() {
-    const { MailComposer } = await import("./MailComposer");
-    await mount(MailComposer, {});
-    await type(field("To"), "someone@example.com");
-    await type(field("Subject"), "Hello");
-    await type(field<HTMLTextAreaElement>("Message"), "A note.");
+describe("Email: write, check, send", () => {
+  const person = { from: "Aaron <aaron@example.org>", replyTo: "aaron@example.org", to: "Sam <sam@example.com>", subject: "Hello", html: "<p>Rendered for Sam</p>", text: "Rendered for Sam, plain" };
+  const check = (patch: object = {}) => ({ check: "a".repeat(32), group: false, recipients: [{ name: "Sam", email: "sam@example.com" }], total: 1, leftOut: [], index: 0, shown: person, warning: null, blockers: [], problems: {}, ...patch });
+  const groupCheck = (patch: object = {}) =>
+    check({
+      group: true,
+      recipients: [
+        { name: "Sam", email: "sam@example.com" },
+        { name: "Priya", email: "priya@example.com" },
+      ],
+      total: 2,
+      leftOut: [{ name: "Jordan", email: "jordan@example.com", reason: "stop_email" }],
+      ...patch,
+    });
+  const initial = { subject: "Hello", body: "A note.", audience: { kind: "address", email: "sam@example.com" } as const, resolve: null };
+  async function open(c: object, draft: object = initial, request: object | null = null) {
+    const { EmailComposer } = await import("./EmailComposer");
+    await mount(EmailComposer, { id: 12, initial: draft, initialCheck: c, semesters: [{ code: "fall26", name: "Fall 2026", posters: 3 }], people: [], request } as never);
   }
+  const dialog = () => document.querySelector("dialog")!;
 
-  it("can't send until it has been previewed, and the preview is the rendered email with its plain text", async () => {
-    a.adminPreviewMail.mockResolvedValue(preview("tok-1"));
-    await write();
-    expect(button("Send")!.disabled).toBe(true);
-    expect(document.querySelector("iframe")).toBeNull();
-    expect(a.adminSendMail).not.toHaveBeenCalled();
-
-    await click(button("Preview"));
-    expect(a.adminPreviewMail).toHaveBeenCalledWith({ to: "someone@example.com", subject: "Hello", body: "A note." });
+  it("shows the email exactly as the server rendered it for a named recipient, with its plain text, before anything can be sent", async () => {
+    await open(check());
     const frame = document.querySelector<HTMLIFrameElement>('iframe[title="Email preview"]')!;
-    expect(frame.getAttribute("srcdoc")).toBe("<p>Rendered</p>");
+    expect(frame.getAttribute("srcdoc")).toBe("<p>Rendered for Sam</p>");
     expect(frame.getAttribute("sandbox")).toBe("");
-    expect(document.querySelector("pre")!.textContent).toBe("Rendered, plain");
-    expect(button("Send")!.disabled).toBe(false);
+    expect(document.querySelector("pre")!.textContent).toBe("Rendered for Sam, plain");
+    expect(host.textContent).toContain("Sam <sam@example.com>");
+    expect(host.textContent).toContain("a blank line starts a paragraph");
+    expect(dialog().hasAttribute("open")).toBe(false); // Send lives behind Review, which is closed
+    expect(a.adminEmailSend).not.toHaveBeenCalled();
   });
 
-  it("throws the preview away on any edit, and sends under the token of the preview just looked at", async () => {
-    a.adminPreviewMail.mockResolvedValueOnce(preview("tok-1")).mockResolvedValueOnce(preview("tok-2"));
-    a.adminSendMail.mockResolvedValue({ ok: true, data: { duplicate: false, resolved: null } });
-    await write();
-    await click(button("Preview"));
+  it("an edit closes the way to Send until the draft is saved and checked again; Send hands back that check", async () => {
+    a.adminEmailSave.mockResolvedValue({ ok: true, data: check({ check: "b".repeat(32) }) });
+    a.adminEmailSend.mockResolvedValue({ ok: true, data: { already: false, queued: 1, leftOut: 0 } });
+    await open(check());
+    expect(button("Review and send…")!.disabled).toBe(false);
     await type(field("Subject"), "Hello again");
-    expect(document.querySelector("iframe")).toBeNull();
-    expect(button("Send")!.disabled).toBe(true);
-
-    await click(button("Preview"));
-    await click(button("Send"));
-    expect(a.adminSendMail).toHaveBeenCalledTimes(1);
-    expect(a.adminSendMail).toHaveBeenCalledWith({ to: "someone@example.com", subject: "Hello again", body: "A note.", accessRequestId: null, resolve: null }, "tok-2");
+    expect(button("Review and send…")!.disabled).toBe(true);
+    expect(button("Send test to me")!.disabled).toBe(true);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 700));
+    });
+    expect(a.adminEmailSave).toHaveBeenCalledWith(12, { ...initial, subject: "Hello again" }, 0);
+    expect(button("Review and send…")!.disabled).toBe(false);
+    await click(button("Review and send…"));
+    await click(button("Send", dialog()));
+    expect(a.adminEmailSend).toHaveBeenCalledTimes(1);
+    expect(a.adminEmailSend).toHaveBeenCalledWith(12, { check: "b".repeat(32), typed: null, sendAnyway: false });
   });
 
-  it("says how to write the message under the field", async () => {
-    await write();
-    expect(host.textContent).toContain("A blank line starts a paragraph");
+  it("can't reach Send with an unfinished email or with something blocking it", async () => {
+    await open(check({ problems: { subject: "Write a subject." } }));
+    expect(button("Review and send…")!.disabled).toBe(true);
+    act(() => root.unmount());
+    root = createRoot(host);
+    await open(groupCheck({ blockers: ["MAILING_ADDRESS is not set on this deployment, and a group email needs it in its footer."] }), { ...initial, audience: { kind: "everyone" } });
+    expect(button("Review and send…")!.disabled).toBe(true);
+    expect(host.textContent).toContain("MAILING_ADDRESS is not set");
+  });
+
+  it("a group says who is left out and why, and sends only once the number of recipients is typed back", async () => {
+    a.adminEmailSend.mockResolvedValue({ ok: true, data: { already: false, queued: 2, leftOut: 1 } });
+    await open(groupCheck(), { ...initial, audience: { kind: "semester", code: "fall26" } });
+    expect(host.textContent).toContain("2 will get it. 1 left out: 1 Stop email.");
+    expect(host.textContent).toContain("{survey} their own survey link");
+    expect(host.textContent).toContain("Jordan");
+    await click(button("Review and send…"));
+    const send = button("Send 2 emails", dialog())!;
+    expect(send.disabled).toBe(true);
+    await type(field("Type 2 to send", dialog()), "3");
+    expect(send.disabled).toBe(true);
+    await type(field("Type 2 to send", dialog()), "2");
+    expect(send.disabled).toBe(false);
+    expect(a.adminEmailSend).not.toHaveBeenCalled();
+    await click(send);
+    expect(a.adminEmailSend).toHaveBeenCalledWith(12, { check: "a".repeat(32), typed: 2, sendAnyway: false });
+  });
+
+  it("one person on Stop email needs Send anyway ticked, which is off to begin with; a banned account can't be sent to at all", async () => {
+    a.adminEmailSend.mockResolvedValue({ ok: true, data: { already: false, queued: 1, leftOut: 0 } });
+    await open(check({ warning: "stop_email" }));
+    await click(button("Review and send…"));
+    const send = button("Send", dialog())!;
+    const anyway = dialog().querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(anyway.checked).toBe(false);
+    expect(send.disabled).toBe(true);
+    await click(anyway);
+    expect(send.disabled).toBe(false);
+    await click(send);
+    expect(a.adminEmailSend).toHaveBeenCalledWith(12, { check: "a".repeat(32), typed: null, sendAnyway: true });
+    act(() => root.unmount());
+    root = createRoot(host);
+    await open(check({ warning: "banned", total: 0 }));
+    expect(button("Review and send…")!.disabled).toBe(true);
+    expect(host.textContent).toContain("Nothing is sent to a banned account.");
+  });
+
+  it("a test goes through its own action, for the recipient being shown, and deleting a draft asks first", async () => {
+    a.adminEmailCheck.mockResolvedValue({ ok: true, data: groupCheck({ index: 1 }) });
+    a.adminEmailTest.mockResolvedValue({ ok: true, data: { to: "me@example.com", as: "Priya" } });
+    await open(groupCheck(), { ...initial, audience: { kind: "everyone" } });
+    await click(document.querySelector('button[aria-label="Next recipient"]'));
+    expect(a.adminEmailCheck).toHaveBeenCalledWith(12, 1);
+    await click(button("Send test to me"));
+    expect(a.adminEmailTest).toHaveBeenCalledWith(12, 1);
+    expect(host.textContent).toContain("Test sent to me@example.com, as Priya would get it.");
+    expect(a.adminEmailSend).not.toHaveBeenCalled();
+    await click(button("Delete draft"));
+    expect(confirmSpy).toHaveBeenLastCalledWith("Delete this draft?");
+    expect(a.adminEmailDelete).not.toHaveBeenCalled();
+  });
+
+  it("a reply names its request and says what sending does to it", async () => {
+    await open(check(), { ...initial, resolve: "approve" }, { id: 7, kind: "access", name: "Dana", email: "dana@example.com", school: null });
+    expect(host.textContent).toContain("Access request #7");
+    expect(field<HTMLSelectElement>("When it's sent").value).toBe("approve");
+    await click(button("Review and send…"));
+    expect(dialog().textContent).toContain("the request is approved: they can sign in");
+  });
+});
+
+describe("Email: a sent email", () => {
+  it("Retry reaches only the ones that failed, through its own action", async () => {
+    a.adminEmailRetry.mockResolvedValue({ ok: true, data: { queued: 1 } });
+    const { EmailDetail } = await import("./EmailDetail");
+    await mount(EmailDetail, {
+      email: { id: 12, status: "sent", subject: "Hello", to: "Fall 2026 posters", group: true, from: "Aaron <aaron@example.org>", sentAt: "2026-11-19T14:10:00.000Z", requestId: null, resolve: null },
+      recipients: [
+        { id: 1, name: "Sam", address: "sam@example.com", status: "sent", reason: null, test: false, overridden: false, at: "2026-11-19T14:10:01.000Z" },
+        { id: 2, name: "Alex", address: "alex@example.com", status: "failed", reason: "Mailbox full", test: false, overridden: false, at: "2026-11-19T14:10:02.000Z" },
+        { id: 3, name: "Jordan", address: "jordan@example.com", status: "left_out", reason: "stop_email", test: false, overridden: false, at: null },
+        { id: 4, name: "Sam", address: "me@example.com", status: "sent", reason: null, test: true, overridden: false, at: "2026-11-19T14:00:00.000Z" },
+      ],
+      first: null,
+    } as never);
+    expect(host.textContent).toContain("1 sent · 1 failed");
+    expect(host.textContent).toContain("Mailbox full");
+    expect(host.textContent).toContain("Stop email");
+    await click(button("Retry 1 failed"));
+    expect(a.adminEmailRetry).toHaveBeenCalledWith(12);
   });
 });
 
 describe("Requests: reply, approve, dismiss", () => {
-  const requests = { pending: [{ id: 7, kind: "access", name: "Dana", email: "dana@example.com", school: null, message: "Please", createdAt: "2026-11-10T15:00:00.000Z", messages: [] }], approved: ["let-in@example.com"] };
+  const requests = { pending: [{ id: 7, kind: "access", name: "Dana", email: "dana@example.com", school: null, message: "Please", createdAt: "2026-11-10T15:00:00.000Z", replies: [{ id: 30, subject: "Your access request", status: null, reason: null, at: "2026-11-11T15:00:00.000Z" }] }], approved: ["let-in@example.com"] };
   async function open() {
     const { RequestsTab } = await import("./RequestsTab");
     await mount(RequestsTab, { requests });
   }
 
-  it("Reply is the same write, preview, send", async () => {
+  it("Reply starts a draft to them in Email and opens it there; nothing is sent from this page", async () => {
+    a.adminEmailNew.mockResolvedValue({ ok: true, data: { id: 31 } });
     await open();
-    expect(button("Preview")).toBeUndefined();
+    expect(host.textContent).toContain("Your access request");
+    expect(host.textContent).toContain("Draft");
     await click(button("Reply"));
-    expect(button("Preview")).toBeTruthy();
-    expect(button("Send")!.disabled).toBe(true);
-    expect(field("To").value).toBe("dana@example.com");
+    expect(a.adminEmailNew).toHaveBeenCalledWith({ requestId: 7 });
+    expect(h.push).toHaveBeenCalledWith("/admin/email/31");
+    expect(a.adminEmailSend).not.toHaveBeenCalled();
   });
 
   it("Approve and Remove ask first; Dismiss, which lets nobody in and sends nothing, doesn't", async () => {
@@ -207,15 +316,12 @@ describe("Requests: reply, approve, dismiss", () => {
   });
 });
 
-describe("Announce: banner, popups, broadcast email", () => {
+describe("Announce: banner and popups", () => {
   const notice = (patch: Partial<NoticeAdminRow>): NoticeAdminRow => ({ id: 1, title: "Live one", bodyMd: "Body", audience: "everyone" as NoticeAdminRow["audience"], ctaLabel: null, ctaHref: null, active: true, endsOn: null, ended: false, updatedAt: "2026-11-10T15:00:00.000Z", views: 0, dismissals: 0, ctaClicks: 0, ...patch });
   async function open() {
-    a.adminBroadcastCount.mockResolvedValue(3);
     const { AnnounceTab } = await import("./AnnounceTab");
     await mount(AnnounceTab, {
       announcement: { active: true, message: "Up now", style: "info" as const },
-      semesters: SEMESTERS,
-      people: [person(), person({ id: "u2", email: "noname@example.com", name: null })],
       notices: [notice({}), notice({ id: 2, title: "Draft", active: false })],
     });
   }
@@ -246,30 +352,6 @@ describe("Announce: banner, popups, broadcast email", () => {
     await click(button("New popup"));
     expect(document.querySelector('[aria-label="Preview of the popup"]')).toBeTruthy();
     expect(card("Popups").textContent).toContain("**bold**, *italic*");
-  });
-
-  it("email: names its placeholders in sight, offers named people, and asks with the count before it sends", async () => {
-    await open();
-    const email = card("Email");
-    expect(email.textContent).toContain("{name} is the person's name");
-    expect(email.textContent).toContain("{survey} is their own survey link");
-    expect(email.textContent).toContain("3 recipients");
-
-    const named = all<HTMLLabelElement>("label", email).find((l) => l.textContent?.trim() === "Named people")!;
-    await click(named.querySelector("input"));
-    expect(email.textContent).toContain("Sam · sam@example.com");
-    await click(all<HTMLLabelElement>("label", email).find((l) => l.textContent?.trim() === "Everyone with a listing on the board")!.querySelector("input"));
-
-    await type(field("Subject", email), "News");
-    await type(field<HTMLTextAreaElement>("Message", email), "Hello {name}. {survey}");
-    await click(button("Send", email));
-    expect(confirmSpy).toHaveBeenLastCalledWith("Send to 3 people?");
-    expect(a.adminSendBroadcast).not.toHaveBeenCalled();
-
-    confirmSpy.mockReturnValue(true);
-    a.adminSendBroadcast.mockResolvedValue({ ok: true, data: { sent: 3, failed: 0 } });
-    await click(button("Send", email));
-    expect(a.adminSendBroadcast).toHaveBeenCalledWith({ kind: "all" }, "News", "Hello {name}. {survey}");
   });
 });
 

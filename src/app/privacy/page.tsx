@@ -45,8 +45,12 @@ export default function PrivacyPage() {
         <h2 className="text-lg font-bold text-ink">What we keep</h2>
         <p>Your {domains} email address, used to sign you in with a one-time code. No password is ever stored.</p>
         <p>
-          {SITE.operator} may occasionally email you about this site, such as a feedback survey, or about another product it makes. Reply
-          &quot;unsubscribe&quot; to stop.
+          {SITE.operator} may occasionally email you about this site, such as a feedback survey, or about another product it makes. Every
+          email like that has an unsubscribe link, and one click stops them all. Sign-in codes still come, because you ask for those.
+        </p>
+        <p>
+          A record of each email the admin sends you from the site: what it said, when, and whether it arrived. If you unsubscribe, that
+          and the date are kept so you are not emailed again.
         </p>
         <p>
           If you post a listing: the address and map pin, rent, semesters, description, photos, and the
@@ -118,7 +122,7 @@ export default function PrivacyPage() {
       <section className="flex flex-col gap-3 text-ink-2">
         <h2 className="text-lg font-bold text-ink">Getting rid of it</h2>
         <p>
-          Delete your listing from your post page, or your whole account from the <Link href="/account" className="link">account page</Link>: listing, photos and account go at once, with any email the admin sent you from the site (the activity records above stay, with no name or email). Or email{" "}
+          Delete your listing from your post page, or your whole account from the <Link href="/account" className="link">account page</Link>: listing, photos and account go at once, with any email the admin wrote to you alone (the activity records above stay, with no name or email, and so does the fact that an email sent to a group reached one more person, without your address or name). Or email{" "}
           <a href={`mailto:${SITE.supportEmail}`} className="link">
             {SITE.supportEmail}
           </a>{" "}

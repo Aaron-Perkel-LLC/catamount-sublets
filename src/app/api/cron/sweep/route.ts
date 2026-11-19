@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { otpSends, rateLimit, rateLimitBuckets, verification } from "@/db/schema";
 import { expiredBucketsBefore } from "@/server/rate-limit";
-import { failStalePending } from "@/server/data/admin-messages";
 import { failStaleDigestSends } from "@/server/data/digest";
 import { recordCronRun } from "@/server/data/cron-runs";
 import { fillMissingAreas } from "@/server/data/my-listing";
@@ -43,10 +42,9 @@ async function sweep(db: Awaited<ReturnType<typeof getDb>>) {
   const limits = await db.delete(rateLimit).where(sql`${rateLimit.lastRequest} < ${dayAgo.getTime()}`).returning({ key: rateLimit.key });
   const sends = await db.delete(otpSends).where(lt(otpSends.sentAt, dayAgo)).returning({ id: otpSends.id });
   const buckets = await db.delete(rateLimitBuckets).where(lt(rateLimitBuckets.windowStart, expiredBucketsBefore(new Date()))).returning({ key: rateLimitBuckets.key });
-  const interrupted = await failStalePending(db, new Date(Date.now() - 3_600_000));
   const digestInterrupted = await failStaleDigestSends(db, dayAgo);
   const areas = await fillMissingAreas(db);
-  const summary = { raw, codes: codes.length, limits: limits.length, sends: sends.length, buckets: buckets.length, interrupted, digestInterrupted, areas };
+  const summary = { raw, codes: codes.length, limits: limits.length, sends: sends.length, buckets: buckets.length, digestInterrupted, areas };
   log.info("cron.sweep", summary);
   return summary;
 }

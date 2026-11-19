@@ -20,18 +20,21 @@ describe("senderFor", () => {
     expect(senderFor("login_code")).toBe(SITE.mailFrom);
     expect(senderFor("admin_notice")).toBe(SITE.mailFromNotices);
     expect(senderFor("access_request")).toBe(SITE.mailFromNotices);
-    for (const kind of ["broadcast", "broadcast_copy", "welcome"] as const) expect(senderFor(kind), kind).toBe(SITE.mailFromPersonal);
+    for (const kind of ["email_direct", "welcome"] as const) expect(senderFor(kind), kind).toBe(SITE.mailFromPersonal);
+    expect(senderFor("email_group")).toBe(SITE.mailFromGroup);
   });
 });
 
 describe("apiKeyFor", () => {
-  it("sends the digest, and only the digest, with the key scoped to its subdomain, never falling back to the root key", () => {
+  it("sends the digest and the admin's group email, and only those, with the key scoped to the bulk subdomain, never falling back to the root key", () => {
     vi.stubEnv("RESEND_API_KEY", "re_root");
     try {
       expect(senderFor("digest")).toBe(SITE.mailFromDigest);
       expect(apiKeyFor("digest", "re_updates")).toEqual({ key: "re_updates", name: "RESEND_DIGEST_API_KEY" });
       expect(apiKeyFor("digest", undefined)).toEqual({ key: undefined, name: "RESEND_DIGEST_API_KEY" });
-      for (const kind of ["login_code", "admin_notice", "access_request", "welcome", "broadcast", "broadcast_copy", "survey_invite", "admin_message", "outcome_ask", "stale_notice"] as const)
+      expect(senderFor("email_group")).toContain(`@${SITE.mailDigestDomain}>`);
+      expect(apiKeyFor("email_group", "re_updates")).toEqual({ key: "re_updates", name: "RESEND_DIGEST_API_KEY" });
+      for (const kind of ["login_code", "admin_notice", "access_request", "welcome", "survey_invite", "email_direct", "outcome_ask", "stale_notice"] as const)
         expect(apiKeyFor(kind, "re_updates"), kind).toEqual({ key: "re_root", name: "RESEND_API_KEY" });
     } finally {
       vi.unstubAllEnvs();

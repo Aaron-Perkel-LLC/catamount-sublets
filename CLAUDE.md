@@ -36,7 +36,8 @@ npm run email:dev    # react-email preview on :3001
 ## Conventions
 
 - Server-only modules under `src/server/`; `src/lib/` is safe for both sides.
-- Mutations are Server Actions in `src/server/actions/`; Route Handlers only for the beacon, uploads, auth, the share-card image, the crons and the digest's RFC 8058 one-click unsubscribe (a POST from the mail provider, so it can't be a Server Action).
+- Mutations are Server Actions in `src/server/actions/`; Route Handlers only for the beacon, uploads, auth, the share-card image, the crons and the two RFC 8058 one-click unsubscribes, the digest's and the admin's group email's (a POST from the mail provider, so it can't be a Server Action).
+- The admin's email goes through `src/server/services/email.ts` and nowhere else: a draft is checked, then `startSend()` freezes its recipients into `email_deliveries` (an email leaves `draft` once, under a row lock) and `drain()` sends one message per recipient under its own provider idempotency key. Nothing is ever sent to a banned account; nobody marked Stop email is in a group email, and one written to them alone needs the recorded "Send anyway". A group email always carries the one-click unsubscribe and the postal address and goes from `SITE.mailFromGroup`. Never add a second way to send.
 - The weekly digest matches through `newBoardListings()`, which is Browse's own query narrowed by date and owner, and saved searches store Browse's query string. Never add a second filter path or format, or the email and the site disagree. Digest listings show `shareCardLines()` fields only.
 - Data access in `src/server/data/`, one module per table family, returning DTOs that never include another user's email or id.
 - Tests next to the code as `*.test.ts`; data tests boot PGlite and run the real migrations (`src/db/test-db.ts`).

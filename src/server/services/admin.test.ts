@@ -9,9 +9,8 @@ process.env.UPLOADS_DIR = uploadsDir;
 
 const { createTestDb } = await import("@/db/test-db");
 const s = await import("@/db/schema");
-const { eq, inArray } = await import("drizzle-orm");
+const { eq } = await import("drizzle-orm");
 const { sentInTests } = await import("@/server/email/send");
-const { verifySurveyToken } = await import("@/server/survey-token");
 const { saveRawUploadLocal, putMedia } = await import("@/server/storage");
 const { attachPhotoFor } = await import("@/server/services/listing");
 const admin = await import("@/server/services/admin");
@@ -180,85 +179,4 @@ describe("orphans and broadcast", () => {
     expect((await admin.orphanReport(db)).media).toHaveLength(0);
   });
 
-  it("addresses a broadcast to the right people and sends one message each plus a copy", async () => {
-    // Fresh listing for a (a's old one was archived) so "all" has someone.
-    const [l] = await db.insert(s.listings).values({ userId: people.a.id, price: 500, address: "x", lat: 44.47, lon: -73.2 }).returning({ id: s.listings.id });
-    await db.insert(s.listingSemesters).values({ listingId: l.id, semesterCode: "spring27", position: 0 });
-    expect(await admin.broadcastRecipients(db, { kind: "all" })).toEqual([]); // no photo yet: not on the board
-    const ref = await saveRawUploadLocal(await sharp({ create: { width: 400, height: 300, channels: 3, background: "#000" } }).jpeg().toBuffer());
-    expect((await attachPhotoFor(db, people.a, ref)).ok).toBe(true);
-    expect(await admin.broadcastRecipients(db, { kind: "all" })).toEqual([{ id: people.a.id, email: "a@uvm.edu", name: null, posted: true }]);
-    expect(await admin.broadcastRecipients(db, { kind: "semester", code: "spring27" })).toEqual([{ id: people.a.id, email: "a@uvm.edu", name: null, posted: true }]);
-    // First names greet; without one, the account name does unless it is the login.
-    await db.update(s.user).set({ firstName: "Avery", lastName: "Ames" }).where(eq(s.user.id, people.a.id));
-    expect(await admin.broadcastRecipients(db, { kind: "all" })).toEqual([{ id: people.a.id, email: "a@uvm.edu", name: "Avery", posted: true }]);
-    const n = sentInTests.length;
-    const r = await admin.sendBroadcastTo(db, { kind: "individual", userIds: [people.a.id, people.viewer.id] }, { subject: "Hello", body: "Hi {name}, spring is coming.\n\nSee you." });
-    expect(r).toEqual({ ok: true, data: { sent: 2, failed: 0 } });
-    expect(sentInTests.length - n).toBe(3);
-    expect(sentInTests[n].text).toContain("Hi Avery, spring is coming.");
-    expect(sentInTests[n].text).toContain("because you posted a listing");
-    expect(sentInTests[n + 1].text).toContain("Hi viewer, spring is coming."); // the account name, which is not the login
-    expect(sentInTests[n + 1].text).toContain("because you have an account");
-    expect(sentInTests[n + 2]).toMatchObject({ to: "aaron@catamountsublets.com", subject: "[Copy] Hello" });
-    expect((await admin.sendBroadcastTo(db, { kind: "individual", userIds: [] }, { subject: "x", body: "y" })).ok).toBe(false);
-    expect((await admin.sendBroadcastTo(db, { kind: "nobody" } as never, { subject: "x", body: "y" })).ok).toBe(false);
-  });
-
-  it("reaches every account, posters or not, and never a banned one", async () => {
-    const everyone = await admin.broadcastRecipients(db, { kind: "accounts" });
-    expect(everyone).toContainEqual({ id: people.viewer.id, email: "v@uvm.edu", name: "viewer", posted: false });
-    expect(everyone).toContainEqual({ id: people.a.id, email: "a@uvm.edu", name: "Avery", posted: true });
-    await db.update(s.user).set({ banned: true }).where(eq(s.user.id, people.viewer.id));
-    expect((await admin.broadcastRecipients(db, { kind: "accounts" })).map((r) => r.email)).not.toContain("v@uvm.edu");
-    expect(await admin.broadcastRecipients(db, { kind: "individual", userIds: [people.viewer.id] })).toEqual([]);
-    await db.update(s.user).set({ banned: true }).where(eq(s.user.id, people.a.id));
-    expect(await admin.broadcastRecipients(db, { kind: "all" })).toEqual([]);
-    expect(await admin.broadcastRecipients(db, { kind: "semester", code: "spring27" })).toEqual([]);
-    await db.update(s.user).set({ banned: false }).where(inArray(s.user.id, [people.a.id, people.viewer.id]));
-  });
-
-  it("sends the survey to those who have not answered, each with their own link", async () => {
-    await db.insert(s.surveyResponses).values({ userId: people.b.id, used: "both", overall: 4 });
-    // Admins are never in the survey audience; b has answered.
-    expect((await admin.broadcastRecipients(db, { kind: "survey" })).map((r) => r.email)).toEqual(["a@uvm.edu", "v@uvm.edu"]);
-    const n = sentInTests.length;
-    const missing = await admin.sendBroadcastTo(db, { kind: "survey" }, { subject: "A quick question", body: "Could you spare two minutes?" });
-    expect(missing).toMatchObject({ ok: false, error: expect.stringContaining("{survey}") });
-    expect(sentInTests.length).toBe(n);
-
-    const r = await admin.sendBroadcastTo(db, { kind: "survey" }, { subject: "A quick question", body: "Could you spare two minutes?\n\n{survey}" });
-    expect(r).toEqual({ ok: true, data: { sent: 2, failed: 0 } });
-    expect(sentInTests.length - n).toBe(3);
-    for (const [i, who] of [people.a, people.viewer].entries()) {
-      const mail = sentInTests[n + i];
-      expect(mail.to).toBe(who.email);
-      const token = /\/survey\?t=([0-9a-f.-]+)/.exec(mail.text)?.[1];
-      expect(verifySurveyToken(token ?? "")).toEqual({ userId: who.id });
-      expect(mail.text).not.toContain("{survey}");
-    }
-    expect(sentInTests[n + 2]).toMatchObject({ subject: "[Copy] A quick question" });
-    expect(sentInTests[n + 2].text).toContain("{survey}");
-
-    // The link also works for named people, which is how a message is tried on one inbox first.
-    const one = await admin.sendBroadcastTo(db, { kind: "individual", userIds: [people.admin.id] }, { subject: "Try", body: "{survey}" });
-    expect(one).toEqual({ ok: true, data: { sent: 1, failed: 0 } });
-    expect(verifySurveyToken(/\/survey\?t=([0-9a-f.-]+)/.exec(sentInTests.at(-2)?.text ?? "")?.[1] ?? "")).toEqual({ userId: people.admin.id });
-    await db.delete(s.surveyResponses);
-  });
-
-  it("leaves out anyone marked no email, from every audience, until they are let back in", async () => {
-    expect(await admin.setNoEmail(db, people.viewer.id, true)).toEqual({ ok: true, data: undefined });
-    expect((await admin.listPeople(db)).find((p) => p.id === people.viewer.id)?.noEmail).toBe(true);
-    expect((await admin.broadcastRecipients(db, { kind: "accounts" })).map((r) => r.email)).not.toContain("v@uvm.edu");
-    expect((await admin.broadcastRecipients(db, { kind: "survey" })).map((r) => r.email)).not.toContain("v@uvm.edu");
-    expect(await admin.broadcastRecipients(db, { kind: "individual", userIds: [people.viewer.id] })).toEqual([]);
-    await admin.setNoEmail(db, people.a.id, true);
-    expect(await admin.broadcastRecipients(db, { kind: "all" })).toEqual([]);
-    expect(await admin.broadcastRecipients(db, { kind: "semester", code: "spring27" })).toEqual([]);
-    await admin.setNoEmail(db, people.a.id, false);
-    expect(await admin.setNoEmail(db, people.viewer.id, false)).toEqual({ ok: true, data: undefined });
-    expect((await admin.broadcastRecipients(db, { kind: "accounts" })).map((r) => r.email)).toContain("v@uvm.edu");
-    expect((await admin.setNoEmail(db, "00000000-0000-4000-8000-000000000000", true)).ok).toBe(false);
-  });
 });

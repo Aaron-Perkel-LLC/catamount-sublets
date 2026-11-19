@@ -39,6 +39,9 @@ export const user = pgTable(
     lastName: text("last_name"),
     /** They asked to stop getting mail: left out of every broadcast. Sign-in codes, which they ask for, still go. */
     noEmail: boolean("no_email").default(false).notNull(),
+    /** When Stop email was last turned on, and how: `admin`, or `unsubscribe` (the one-click link in a group email). Null while it is off. */
+    noEmailAt: timestamp("no_email_at", { withTimezone: true, mode: "date" }),
+    noEmailSource: text("no_email_source"),
   },
   (table) => [check("user_email_lowercase_check", sql`${table.email} = lower(${table.email})`)],
 );
