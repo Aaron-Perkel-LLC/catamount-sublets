@@ -82,6 +82,33 @@ describe("who an audience comes to", () => {
     expect((await email.resolveAudience(db, { kind: "board" })).to).toEqual([]);
   });
 
+  it("the not-signed-in group is migrated posters who never signed in here and still have a listing: the cleanup's own list", async () => {
+    const add = async (key: string, values: Partial<typeof s.user.$inferInsert>, listing = true) => {
+      const [u] = await db.insert(s.user).values({ email: `${key}@uvm.edu`, name: key, firstName: key[0].toUpperCase() + key.slice(1), lastName: "Old", legacyNetid: key, ...values }).returning({ id: s.user.id });
+      if (listing) await db.insert(s.listings).values({ userId: u.id, price: 700, address: `${key} st`, lat: 44.47, lon: -73.2 });
+      return u.id;
+    };
+    const never = await add("never", {});
+    await add("silent", { noEmail: true });
+    await add("back", { lastLoginAt: new Date() }); // signed in since the move
+    await add("verified", { emailVerified: true }); // another sign of a sign-in
+    await add("nolisting", {}, false);
+    await add("barred", { banned: true });
+    const r = await email.resolveAudience(db, { kind: "stale" });
+    // priya and the others in this file were never migrated, so they are not in it either.
+    expect(r.to).toEqual([{ userId: never, email: "never@uvm.edu", name: "Never", posted: true, banned: false, stopEmail: false }]);
+    expect(r.leftOut.map((x) => [x.email, x.reason])).toEqual([["silent@uvm.edu", "stop_email"]]);
+    const c = await email.checkEmail(db, await draft({ kind: "stale" }));
+    expect(c.ok && c.data).toMatchObject({ group: true, total: 1, blockers: [] });
+    expect(c.ok && c.data.shown?.text).toContain("Hi Never,");
+    const id = await draft({ kind: "stale" });
+    expect(await send(id, { typed: 1 })).toMatchObject({ ok: true, data: { queued: 1, leftOut: 1 } });
+    expect(await getEmail(db, id)).toMatchObject({ toLabel: "Posters who haven't signed in since the move" });
+    await go(id);
+    expect(sentInTests.map((m) => m.to)).toEqual(["never@uvm.edu"]);
+    await db.delete(s.user).where(sql`${s.user.legacyNetid} is not null`);
+  });
+
   it("an address with no account is still one recipient; one with an account brings its name and its flags", async () => {
     expect((await email.resolveAudience(db, { kind: "address", email: "dana@example.org" })).to).toEqual([{ userId: null, email: "dana@example.org", name: null, posted: false, banned: false, stopEmail: false }]);
     expect((await email.resolveAudience(db, { kind: "address", email: "quiet@uvm.edu" })).leftOut[0]).toMatchObject({ name: "Quiet", reason: "stop_email" });

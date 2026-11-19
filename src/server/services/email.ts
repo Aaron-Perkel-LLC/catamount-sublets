@@ -11,6 +11,7 @@ import { posterFirstName } from "@/lib/person-name";
 import { approveAccessRequest, dismissAccessRequest } from "@/server/data/access-requests";
 import { claimDelivery, type EmailRow, finishIfDone, getEmail, listDeliveries, lockEmail, type NewDelivery, reached, recordTest, requeueFailed, requeueStale, RETRY_AFTER_MS, sendingEmailIds, settleDelivery, startSending } from "@/server/data/emails";
 import { posterColumns } from "@/server/data/names";
+import { staleAudience } from "@/server/data/stale";
 import { surveyUnanswered } from "@/server/data/survey";
 import { publicListingWhere } from "@/server/data/visibility";
 import { digestMailingAddress, digestResendKey } from "@/server/digest-config";
@@ -69,12 +70,18 @@ const PERSON = { id: user.id, email: user.email, ...posterColumns, banned: user.
  * who is left out and why. One row per address. The survey group is the
  * survey's own definition of who is asked (src/server/data/survey.ts), which
  * already leaves out banned and Stop email accounts, so it reports nobody
- * left out.
+ * left out. The not-signed-in group is the stale-listing cleanup's own
+ * (src/server/data/stale.ts): migrated, never signed in here, still with a
+ * listing.
  */
 export async function resolveAudience(db: DbOrTx, audience: EmailAudience): Promise<{ to: Recipient[]; leftOut: LeftOut[] }> {
   let all: Recipient[];
   if (audience.kind === "survey") {
     all = (await surveyUnanswered(db)).map((r) => ({ userId: r.id, email: r.email, name: r.firstName, posted: r.posted, banned: false, stopEmail: false }));
+  } else if (audience.kind === "stale") {
+    // The cleanup's own list, so a warning goes to exactly the people it would remove. It leaves out banned accounts, admins and test addresses itself.
+    const stale = await staleAudience(db);
+    all = [...stale.mail.map((r) => ({ ...r, stopEmail: false })), ...stale.noEmail.map((r) => ({ ...r, stopEmail: true }))].map((r) => ({ userId: r.id, email: r.email, name: r.firstName, posted: true, banned: false, stopEmail: r.stopEmail }));
   } else if (audience.kind === "address") {
     if (!audience.email) return { to: [], leftOut: [] };
     const rows = await db.select(PERSON).from(user).leftJoin(listings, eq(listings.userId, user.id)).where(eq(user.email, audience.email));
