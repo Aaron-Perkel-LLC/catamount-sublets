@@ -9,7 +9,9 @@ import { dayLabel } from "./chart";
  * current week that always looks like a fall, and an average turns whole
  * people into fractions. A trailing total has none of those problems; what
  * it gives up is that the points no longer add up to the range's total,
- * which the big number beside the chart carries instead. Pure.
+ * which the big number beside the chart carries instead. Counts of events
+ * are summed here; a count of distinct people over the window has to come
+ * from the query (activitySeries' `window`). Pure.
  */
 export const TREND_WINDOW = 7;
 export const TREND_DAILY_MAX = 14;
@@ -55,15 +57,16 @@ export interface TrendPoint {
 /**
  * Daily rows (from trendRange's start) as chart points from the range's own
  * first day: each named series summed over the trailing window, or left
- * daily.
+ * daily. A series in `windowed` is already per window (people counted once
+ * across it, which a sum of days can't give), so it is taken as it comes.
  */
-export function trendSeries<K extends string>(r: Pick<ResolvedRange, "days" | "chartFrom">, days: readonly ({ day: string } & Record<K, number>)[], keys: readonly K[]): { mode: TrendMode; points: TrendPoint[]; values: Record<K, number[]> } {
+export function trendSeries<K extends string>(r: Pick<ResolvedRange, "days" | "chartFrom">, days: readonly ({ day: string } & Record<K, number>)[], keys: readonly K[], windowed: readonly K[] = []): { mode: TrendMode; points: TrendPoint[]; values: Record<K, number[]> } {
   const mode = trendMode(r);
   const keep = days.map((d) => d.day >= r.chartFrom);
   const values = {} as Record<K, number[]>;
   for (const k of keys) {
     const raw = days.map((d) => d[k]);
-    values[k] = (mode === "rolling" ? trailingTotals(raw, TREND_WINDOW) : raw).filter((_, i) => keep[i]);
+    values[k] = (mode === "rolling" && !windowed.includes(k) ? trailingTotals(raw, TREND_WINDOW) : raw).filter((_, i) => keep[i]);
   }
   const points = days.filter((_, i) => keep[i]).map((d) => ({ day: d.day, when: mode === "rolling" ? `${TREND_WINDOW} days to ${dayLabel(d.day)}` : dayLabel(d.day, true), tick: dayLabel(d.day) }));
   return { mode, points, values };

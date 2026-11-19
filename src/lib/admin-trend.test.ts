@@ -30,6 +30,7 @@ describe("trend", () => {
     expect(t.mode).toBe("rolling");
     expect(t.values.n).toEqual([7, 7]);
     expect(t.points.map((p) => p.when)).toEqual(["7 days to Nov 17", "7 days to Nov 18"]);
+    expect(trendSeries(r, days, ["n"], ["n"]).values.n).toEqual([1, 1]); // already per window: not summed again
     const daily = trendSeries({ days: 7, chartFrom: "2026-11-17" }, days, ["n"]);
     expect(daily.values.n).toEqual([1, 1]);
     expect(daily.points[1].when).toBe("Wed, Nov 18");

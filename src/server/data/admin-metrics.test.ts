@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDb } from "@/db/test-db";
 import * as s from "@/db/schema";
 import { resolveRange } from "@/lib/admin-range";
+import { trendRange } from "@/lib/admin-trend";
+import { CONTACT_EVENT_TYPES } from "@/lib/options";
 import { accountMetrics, activitySeries, demandBySemester, digestWeeks, listingNumbers, noticeNumbers, overviewMetrics, sourcesAndTargets, tableCounts } from "./admin-metrics";
 
 type Db = Awaited<ReturnType<typeof createTestDb>>["db"];
@@ -134,5 +136,53 @@ describe("accounts, comms and system", () => {
     expect(await digestWeeks(db, r7)).toEqual([{ week: "2026-11-16", sent: 1, empty: 0, failed: 0, pending: 0, leftByLink: 1, leftFromAccount: 0 }]);
     const t = await tableCounts(db);
     expect(t.rows.find((x) => x.table === "listing_events")?.n).toBe(11);
+  });
+});
+
+describe("activitySeries over a trailing window", () => {
+  let wdb: Db;
+  let wclose: () => Promise<void>;
+  const r30 = trendRange(resolveRange({ range: "30d" }, NOW)); // 20 Oct–18 Nov, asked for from 14 Oct
+  const contact = (listingId: number, actor: string, at: string, type: string = CONTACT_EVENT_TYPES[0]) =>
+    wdb.insert(s.listingEvents).values({ listingId, actorKey: actor.padEnd(16, "0"), type, createdAt: new Date(at), semesterCode: "spring27" });
+
+  beforeAll(async () => {
+    ({ db: wdb, close: wclose } = await createTestDb());
+    await contact(1, "a", "2026-11-10T15:00:00Z");
+    await contact(1, "a", "2026-11-10T15:05:00Z", CONTACT_EVENT_TYPES[1]); // a second tap the same day
+    await contact(1, "a", "2026-11-12T15:00:00Z"); // the same person, the same listing, two days later
+    await contact(2, "a", "2026-11-12T16:00:00Z"); // the same person, another listing
+    await contact(1, "b", "2026-11-11T15:00:00Z"); // someone else, the first listing
+    await contact(3, "c", "2026-11-04T04:30:00Z"); // 11:30 pm Eastern on the 3rd
+    await contact(4, "d", "2026-10-15T15:00:00Z"); // before the range, inside the first window
+  });
+  afterAll(async () => {
+    await wclose();
+  });
+
+  it("counts a person once per listing across a window, however many of its days they got in touch", async () => {
+    const by = Object.fromEntries((await activitySeries(wdb, r30, 7)).map((d) => [d.day, d]));
+    expect(by["2026-11-10"]).toMatchObject({ contacts: 1, contactsWindow: 1 });
+    expect(by["2026-11-12"]).toMatchObject({ contacts: 2, contactsWindow: 3 }); // a:1 once, b:1, a:2
+    expect(by["2026-11-12"].contactsWindow).toBeLessThan(by["2026-11-10"].contacts + by["2026-11-11"].contacts + by["2026-11-12"].contacts);
+    expect(by["2026-11-16"].contactsWindow).toBe(3); // 10–16 Nov still holds all three
+    expect(by["2026-11-17"].contactsWindow).toBe(3); // 11–17 Nov: a:1 from the 12th, b:1, a:2
+    expect(by["2026-11-18"].contactsWindow).toBe(2); // 12–18 Nov: b:1 has left
+  });
+
+  it("windows are Eastern days and reach back before the range's first day", async () => {
+    const by = Object.fromEntries((await activitySeries(wdb, r30, 7)).map((d) => [d.day, d]));
+    expect(by["2026-11-03"].contacts).toBe(1);
+    expect(by["2026-11-09"].contactsWindow).toBe(1); // 3–9 Nov
+    expect(by["2026-11-10"].contactsWindow).toBe(1); // 4–10 Nov: only a:1 now
+    expect(by["2026-10-20"]).toMatchObject({ contacts: 0, contactsWindow: 1 }); // 14–20 Oct holds the 15th
+    expect(by["2026-10-22"].contactsWindow).toBe(0);
+  });
+
+  it("is the day's own count with no window, and with weekly buckets", async () => {
+    for (const d of await activitySeries(wdb, r30)) expect(d.contactsWindow).toBe(d.contacts);
+    const weekly = await activitySeries(wdb, resolveRange({ range: "custom", from: "2026-10-09", to: "2026-12-31" }, new Date("2027-01-02T17:00:00Z")), 7);
+    for (const w of weekly) expect(w.contactsWindow).toBe(w.contacts);
+    expect(weekly.find((w) => w.day === "2026-11-09")?.contacts).toBe(3); // a week's own count is already once per person and listing
   });
 });

@@ -176,27 +176,64 @@ export interface SeriesPoint {
   day: string;
   views: BySegment;
   contacts: number;
+  /**
+   * People who got in touch about a listing in the `window` Eastern days
+   * ending this day, each counted once per listing however many of those
+   * days they did. The same as `contacts` when the window is one day or the
+   * buckets are weeks.
+   */
+  contactsWindow: number;
 }
 
-/** Views by segment and contacts per bucket, from the chart's first day (never before cutover), empty buckets filled. */
-export async function activitySeries(db: DbOrTx, r: ResolvedRange): Promise<SeriesPoint[]> {
+/**
+ * Views by segment and contacts per bucket, from the chart's first day (never before cutover), empty buckets filled.
+ * With daily buckets and a `window` of more than a day, each day also carries the contacts over the window ending on it,
+ * counted across the window (a sum of the daily counts would count someone twice who got in touch about one listing on
+ * two of its days). Windows only see events from the chart's first day on, so ask for a window's worth of days before
+ * the first one that matters (trendRange() in src/lib/admin-trend.ts does).
+ */
+export async function activitySeries(db: DbOrTx, r: ResolvedRange, window = 1): Promise<SeriesPoint[]> {
   const b = easternBucketSql(listingEvents.createdAt, r.bucket);
-  const rows = await all<{ b: string; seg: ViewerSegment; views: number; contacts: number }>(
-    db,
-    sql`select ${b} as b, ${segmentSql()} as seg,
-          count(*) filter (where ${listingEvents.type} = 'listing_open')::int as views,
-          count(distinct ${listingEvents.listingId} || ':' || ${listingEvents.actorKey}) filter (where ${listingEvents.type} in (${contactIn}))::int as contacts
-        from ${listingEvents}
-        where ${listingEvents.createdAt} >= ${ts(easternDayStart(r.chartFrom))} and ${listingEvents.createdAt} < ${ts(r.end)}
-        group by 1, 2`,
-  );
-  const map = new Map(bucketKeys(r.chartFrom, r.to, r.bucket).map((day) => [day, { day, views: emptySegments(), contacts: 0 } as SeriesPoint]));
+  const inChart = sql`${listingEvents.createdAt} >= ${ts(easternDayStart(r.chartFrom))} and ${listingEvents.createdAt} < ${ts(r.end)}`;
+  const windowed = r.bucket === "day" && window > 1;
+  const [rows, trailing] = await Promise.all([
+    all<{ b: string; seg: ViewerSegment; views: number; contacts: number }>(
+      db,
+      sql`select ${b} as b, ${segmentSql()} as seg,
+            count(*) filter (where ${listingEvents.type} = 'listing_open')::int as views,
+            count(distinct ${listingEvents.listingId} || ':' || ${listingEvents.actorKey}) filter (where ${listingEvents.type} in (${contactIn}))::int as contacts
+          from ${listingEvents}
+          where ${inChart}
+          group by 1, 2`,
+    ),
+    windowed
+      ? all<{ b: string; n: number }>(
+          db,
+          sql`with c as (
+                select distinct ${listingEvents.listingId} || ':' || ${listingEvents.actorKey} as who, (${listingEvents.createdAt} at time zone ${TZ})::date as day
+                from ${listingEvents}
+                where ${listingEvents.type} in (${contactIn}) and ${inChart}
+              )
+              select d.day::text as b, count(distinct c.who)::int as n
+              from (select generate_series(${r.chartFrom}::date, ${r.to}::date, interval '1 day')::date as day) d
+              join c on c.day > d.day - ${window}::int and c.day <= d.day
+              group by 1`,
+        )
+      : [],
+  ]);
+  const map = new Map(bucketKeys(r.chartFrom, r.to, r.bucket).map((day) => [day, { day, views: emptySegments(), contacts: 0, contactsWindow: 0 } as SeriesPoint]));
   for (const row of rows) {
     const p = map.get(row.b);
     if (!p) continue;
     if (row.seg in p.views) p.views[row.seg] += Number(row.views);
     p.contacts += Number(row.contacts);
   }
+  if (windowed) {
+    for (const row of trailing) {
+      const p = map.get(row.b);
+      if (p) p.contactsWindow = Number(row.n);
+    }
+  } else for (const p of map.values()) p.contactsWindow = p.contacts;
   return [...map.values()];
 }
 

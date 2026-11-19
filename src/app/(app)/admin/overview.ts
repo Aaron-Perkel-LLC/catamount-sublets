@@ -6,7 +6,7 @@ import type { DbOrTx } from "@/db";
 import type { AttentionFlag } from "@/lib/admin-attention";
 import { countChip, rateChip, share } from "@/lib/admin-delta";
 import { rangeQuery, type ResolvedRange } from "@/lib/admin-range";
-import { type TrendMode, type TrendPoint, trendRange, trendSeries } from "@/lib/admin-trend";
+import { TREND_WINDOW, type TrendMode, type TrendPoint, trendMode, trendRange, trendSeries } from "@/lib/admin-trend";
 import { easternDate } from "@/lib/dates";
 import { VIEWER_SEGMENTS, type ViewerSegment } from "@/lib/viewer-segment";
 import { adminPosts, listingRows } from "@/server/data/admin-listings";
@@ -33,13 +33,14 @@ export interface OverviewView {
 /**
  * The Overview's numbers, shaped for the page. The queries are phase 32's;
  * what is added is each headline number's shape over the range: the daily
- * series as trailing 7-day totals (src/lib/admin-trend.ts), new listings
- * per day counted here from the listings' own dates, and the contact rate
- * per point. Views are split by whatever VIEWER_SEGMENTS lists; the contact
+ * series as trailing 7-day totals (src/lib/admin-trend.ts), with contacts
+ * counted once per person and listing across each window by the query, new
+ * listings per day counted here from the listings' own dates, and the
+ * contact rate per point. Views are split by whatever VIEWER_SEGMENTS lists; the contact
  * rate and the funnel are about signed-in and signed-out by name.
  */
 export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<OverviewView> {
-  const [o, daily, st, posts, numbers] = await Promise.all([overviewMetrics(db, r), activitySeries(db, trendRange(r)), sourcesAndTargets(db, r), adminPosts(db), listingNumbers(db, r)]);
+  const [o, daily, st, posts, numbers] = await Promise.all([overviewMetrics(db, r), activitySeries(db, trendRange(r), trendMode(r) === "rolling" ? TREND_WINDOW : 1), sourcesAndTargets(db, r), adminPosts(db), listingNumbers(db, r)]);
 
   const postedOn = new Map<string, number>();
   for (const p of posts) {
@@ -49,8 +50,9 @@ export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<Overvi
   }
   const t = trendSeries(
     r,
-    daily.map((d) => ({ day: d.day, ...d.views, contacts: d.contacts, listings: postedOn.get(d.day) ?? 0 })),
+    daily.map((d) => ({ day: d.day, ...d.views, contacts: d.contactsWindow, listings: postedOn.get(d.day) ?? 0 })),
     [...SEGMENT_KEYS, "contacts", "listings"],
+    ["contacts"],
   );
 
   const out = o.views.signed_out;
@@ -78,7 +80,6 @@ export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<Overvi
       chip: countChip(o.contacts.cur, o.contacts.prev),
       tip: `People who got in touch about a listing, counted once per listing. ${num(o.taps.cur)} taps in all (copy, call, text, mail app).`,
       series: t.values.contacts,
-      seriesNote: "The chart counts a person once per listing per day, so someone who got in touch about the same listing on two days is in a 7-day point twice; the card counts them once.",
     },
     {
       key: "rate",
