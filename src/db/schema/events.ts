@@ -27,7 +27,7 @@ export const listingEvents = pgTable(
      * which changes every day and from which the IP cannot be recovered.
      */
     actorKey: char({ length: 16 }).notNull(),
-    /** A signed-out visitor's listing view (the only event a signed-out visitor can record). */
+    /** A signed-out visitor's event: a listing view or a share-link arrival, the only two a signed-out visitor can record. */
     signedOut: boolean().notNull().default(false),
     /** The listing's first semester at the time, so archiving can count by semester. */
     semesterCode: text(),

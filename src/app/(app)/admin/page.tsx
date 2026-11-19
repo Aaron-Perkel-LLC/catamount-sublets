@@ -54,7 +54,7 @@ export default async function AdminOverview({ searchParams }: { searchParams: Ad
       <RangePicker range={rangeDto(r)} />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-        <StatTile label="On the board now" value={o.board.open} sub={`${o.board.public} public · ${o.board.studentsOnly} students only`} />
+        <StatTile label="On the board now" value={o.board.open} sub={`${o.board.public} public · ${o.board.studentsOnly} students only`} title="Public means on the signed-out board too (it also needs its approximate area)" />
         <StatTile label="New listings" value={o.newListings.cur} prev={o.newListings.prev} />
         <StatTile label="New accounts" value={o.newAccounts.cur} prev={o.newAccounts.prev} title="Not counting migrated accounts or the admin" />
         {views.map((v) => (
@@ -62,7 +62,13 @@ export default async function AdminOverview({ searchParams }: { searchParams: Ad
         ))}
         <StatTile label="Got in touch" value={o.contacts.cur} prev={o.contacts.prev} sub={`${o.taps.cur} taps`} title="People who got in touch about a listing (each counts once per listing); taps are every copy, call, text and mail-app tap" />
         <StatTile label="View → contact" value={contactRate} sub={`${o.contacts.cur} of ${o.signedInViewers.cur} signed-in viewers`} title="Signed-out visitors can't get in touch, so this divides by signed-in viewers (a person per listing)" />
-        <StatTile label="Share arrivals" value={totalArrivals} prev={totalArrivalsPrev} sub={arrivals.map((a) => `${a.cur} ${a.label.toLowerCase()}`).join(" · ")} />
+        <StatTile
+          label="Share arrivals"
+          value={totalArrivals}
+          prev={totalArrivalsPrev}
+          sub={arrivals.map((a) => `${a.cur} ${a.label.toLowerCase()}`).join(" · ")}
+          title="People-days arriving by a share link. Someone who arrives signed out and then signs in counts once in each."
+        />
         <StatTile label="Saved searches added" value={o.savedSearches.added.cur} prev={o.savedSearches.added.prev} sub={`${o.savedSearches.total} saved in all`} />
         <StatTile label="Digest subscribers" value={o.digest.subscribed} sub={`+${o.digest.joined.cur} joined · −${o.digest.left.cur} left`} title="Now; joined and left are in the range (left is each subscription's current state)" />
         <StatTile label="Outcomes answered" value={o.outcomes.answered.cur} prev={o.outcomes.answered.prev} sub={filledPct === null ? "none filled yet" : `${filledPct}% filled through us`} />

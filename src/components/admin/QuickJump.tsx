@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { ADMIN_NAV } from "@/lib/admin-nav";
 import { adminQuickFind } from "@/server/actions/admin";
 import type { QuickFind } from "@/server/services/admin";
+import { goAdmin } from "./go";
 
 type Hit = { kind: "section"; key: string; label: string; detail: string; href: string } | { kind: "listing"; key: string; label: string; detail: string; id: number } | { kind: "person"; key: string; label: string; detail: string; id: string };
 
@@ -89,9 +90,9 @@ export function QuickJump({ href, openPost }: { href: (p: string) => string; ope
   const go = (hit: Hit | undefined) => {
     if (!hit) return;
     dialog.current?.close();
-    if (hit.kind === "section") router.push(href(hit.href));
+    if (hit.kind === "section") goAdmin(router, href(hit.href));
     else if (hit.kind === "listing") void openPost(hit.id);
-    else router.push(href(`/admin/people#people:${hit.id}`));
+    else goAdmin(router, href(`/admin/people#people:${hit.id}`));
   };
 
   return (

@@ -1,5 +1,5 @@
 import { Link, Text } from "@react-email/components";
-import { ALLOWED_EMAIL_DOMAINS } from "@/config/site";
+import { ALLOWED_EMAIL_DOMAINS, SITE } from "@/config/site";
 import { EMAIL_COLOURS, EmailLayout, muted, paragraph } from "./layout";
 
 export interface NoticeRow {
@@ -54,5 +54,5 @@ AdminNoticeEmail.PreviewProps = {
     { label: "Price", before: "$950/mo", after: "$900/mo (or best offer)" },
     { label: "Semesters", before: "Spring 2027", after: "Spring & Summer 2027" },
   ],
-  links: { listing: "https://catamountsublets.com/listing/187", admin: "https://catamountsublets.com/admin/listings#post:187" },
+  links: { listing: `${SITE.url}/listing/187`, admin: `${SITE.url}/admin/listings#post:187` },
 };

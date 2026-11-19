@@ -2,6 +2,7 @@
 
 import { Download } from "lucide-react";
 import { type CsvValue, toCsv } from "@/lib/csv";
+import { easternDate } from "@/lib/dates";
 
 export interface CsvColumn {
   key: string;
@@ -20,7 +21,7 @@ export function CsvButton({ name, columns, rows }: { name: string; columns: CsvC
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${name}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `${name}-${easternDate(new Date())}.csv`;
     document.body.append(a);
     a.click();
     a.remove();

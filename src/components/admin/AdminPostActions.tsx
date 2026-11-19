@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { LISTING_STATUSES, LISTING_STATUS_VALUES, type ListingStatus } from "@/lib/options";
 import { adminDeleteListing, adminSetListingStatus, adminSetListingVisibility } from "@/server/actions/admin";
 import type { ListingDto } from "@/server/data/listings";
+import { goAdmin } from "./go";
 
 /**
  * The admin's strip at the top of a listing view: its status, who can see
@@ -78,7 +79,7 @@ export function AdminPostActions({ listing, close }: { listing: ListingDto; clos
           <option value="signed-in">Signed-in only</option>
         </select>
       </label>
-      <button type="button" className="link text-sm" onClick={() => leave(() => router.push(`/admin/photos#images:${listing.id}`))}>
+      <button type="button" className="link text-sm" onClick={() => leave(() => goAdmin(router, `/admin/photos#images:${listing.id}`))}>
         {photos} photo{photos === 1 ? "" : "s"}
       </button>
       <button

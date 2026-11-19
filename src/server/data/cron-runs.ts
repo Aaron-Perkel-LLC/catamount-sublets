@@ -10,8 +10,9 @@ export type CronName = (typeof CRON_NAMES)[number];
 
 /**
  * The summary's counts and short state words, flattened one level
- * ("skipped.banned"): numbers, booleans, and strings of up to 40 characters
- * that are plain words (a reason, a week), so nothing personal can ride along.
+ * ("skipped.banned"): numbers, booleans, and strings that are plain words
+ * (a reason) or a date (a week). No digits otherwise, so no id or address
+ * can ride along.
  */
 export function cronSummary(value: unknown, prefix = ""): CronRun["summary"] {
   const out: CronRun["summary"] = {};
@@ -19,7 +20,7 @@ export function cronSummary(value: unknown, prefix = ""): CronRun["summary"] {
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
     const key = `${prefix}${k}`;
     if (typeof v === "number" || typeof v === "boolean") out[key] = v;
-    else if (typeof v === "string" && v.length <= 40 && /^[\w .:-]*$/.test(v) && !v.includes("@")) out[key] = v;
+    else if (typeof v === "string" && (/^[a-z_ -]{1,40}$/i.test(v) || /^\d{4}-\d{2}-\d{2}$/.test(v))) out[key] = v;
     else if (v && typeof v === "object" && !Array.isArray(v) && !prefix) Object.assign(out, cronSummary(v, `${key}.`));
     else if (Array.isArray(v)) out[`${key}.count`] = v.length;
   }
@@ -33,7 +34,10 @@ export function cronSummary(value: unknown, prefix = ""): CronRun["summary"] {
  */
 export async function recordCronRun(db: DbOrTx, name: CronName, ok: boolean, summary: unknown, at: Date = new Date()): Promise<void> {
   const run: CronRun = { at: at.toISOString(), ok, summary: cronSummary(summary) };
-  const patch = JSON.stringify({ [name]: run });
+  // The latest run, plus the last that failed and the last that did something
+  // (the digest fires hourly and acts on Monday mornings), so neither is lost an hour later.
+  const acted = typeof summary === "object" && summary !== null && (summary as { acted?: unknown }).acted === true;
+  const patch = JSON.stringify({ [name]: run, ...(ok ? {} : { [`${name}:failed`]: run }), ...(acted ? { [`${name}:acted`]: run } : {}) });
   try {
     await db.execute(sql`
       insert into ${siteSettings} (key, value) values ('cron_runs', ${patch}::jsonb)

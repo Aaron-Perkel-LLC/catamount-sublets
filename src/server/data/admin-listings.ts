@@ -80,7 +80,7 @@ export async function adminPosts(db: DbOrTx): Promise<AdminPost[]> {
 
 /** All listings' rows for the admin table (and the Overview's needs-attention list), with a row for each deleted listing that still has events. */
 export function listingRows(posts: AdminPost[], numbers: Map<number, ListingNumbers>, now: Date = new Date()): ListingRowDto[] {
-  const zero: ListingNumbers = { views: 0, contacts: 0, converted: 0, shares: 0, arrivals: 0, views14: 0, lastView: null };
+  const zero: ListingNumbers = { views: 0, contacts: 0, converted: 0, shares: 0, arrivals: 0, views14: 0 };
   const today = easternDate(now);
   const live = new Set(posts.map((p) => p.id));
   const rows: ListingRowDto[] = posts.map((p) => {

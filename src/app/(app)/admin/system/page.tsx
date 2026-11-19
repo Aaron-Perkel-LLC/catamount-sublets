@@ -11,7 +11,7 @@ import { getSetting } from "@/server/data/settings";
 import { adminStats } from "@/server/services/admin";
 
 const CRON_WHAT: Record<(typeof CRON_NAMES)[number], { when: string; what: string }> = {
-  sweep: { when: "Daily, 4:20 am Eastern", what: "Clears stale uploads, codes and limits; fails stuck sends; fills missing areas." },
+  sweep: { when: "Daily at 09:20 UTC (4:20 am Eastern in winter, 5:20 in summer)", what: "Clears stale uploads, codes and limits; fails stuck sends; fills missing areas." },
   digest: { when: "Hourly; acts Monday mornings", what: "The weekly saved-search email, while its switch is on." },
   "go-public": { when: "00:05 Eastern, 21 Nov", what: "One-off: makes public every listing whose poster never chose." },
 };
@@ -53,6 +53,20 @@ export default async function AdminSystem() {
                   {CRON_WHAT[name].when}. {CRON_WHAT[name].what}
                 </span>
                 {facts.length > 0 && <span className="text-xs text-ink-2 tabular-nums">{facts.map(([k, v]) => `${k} ${v}`).join(" · ")}</span>}
+                {[
+                  ["Last did something", runs[`${name}:acted`]],
+                  ["Last failed", runs[`${name}:failed`]],
+                ].map(([label, r]) =>
+                  r && typeof r === "object" && r.at !== run?.at ? (
+                    <span key={String(label)} className={`text-xs ${label === "Last failed" ? "text-error-ink" : "text-ink-2"}`}>
+                      {String(label)} {clock(r.at)}
+                      {Object.entries(r.summary)
+                        .filter(([, v]) => v !== 0 && v !== false && v !== "")
+                        .map(([k, v]) => ` · ${k} ${v}`)
+                        .join("")}
+                    </span>
+                  ) : null,
+                )}
               </li>
             );
           })}

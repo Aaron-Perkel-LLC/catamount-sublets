@@ -19,7 +19,7 @@ import { easternDayStart, SITE_TIME_ZONE } from "@/lib/dates";
 import { FINAL_OUTCOMES } from "@/lib/listing-outcome";
 import { CONTACT_EVENT_TYPES } from "@/lib/options";
 import { type BySegment, emptySegments, type ViewerSegment } from "@/lib/viewer-segment";
-import { publicListingWhere } from "./visibility";
+import { publicListingWhere, signedOutAudienceWhere } from "./visibility";
 import { segmentSql } from "./viewer-segment";
 
 /**
@@ -98,7 +98,7 @@ export async function overviewMetrics(db: DbOrTx, r: ResolvedRange): Promise<Ove
   const [board, posted, accounts, events, segments, searches, digest, outcomes] = await Promise.all([
     one<{ open: number; public: number; students: number }>(
       db,
-      sql`select count(*)::int as open, count(*) filter (where not ${listings.signedInOnly})::int as public, count(*) filter (where ${listings.signedInOnly})::int as students
+      sql`select count(*)::int as open, count(*) filter (where ${signedOutAudienceWhere()})::int as public, count(*) filter (where ${listings.signedInOnly})::int as students
           from ${listings} where ${publicListingWhere()}`,
     ),
     one<{ c: number; p: number }>(db, sql`select count(*) filter (where ${cur(listings.postedAt)})::int as c, count(*) filter (where ${prev(listings.postedAt)})::int as p from ${listings} where not ${listings.legacyImport}`),
@@ -230,44 +230,41 @@ export interface ListingNumbers {
   arrivals: number;
   /** Views in the last 14 days, whatever the range. */
   views14: number;
-  /** The last view ever, ISO, or null. */
-  lastView: string | null;
 }
 
-/** Per listing id, including deleted listings that still have events (their events outlive them). */
+/**
+ * Per listing id, including deleted listings that still have events (their
+ * events outlive them). Reads only the range and the last 14 days; who
+ * converted is worked out once per (listing, person), then joined.
+ */
 export async function listingNumbers(db: DbOrTx, r: ResolvedRange): Promise<Map<number, ListingNumbers>> {
-  const rows = await all<{ id: number; views: number; contacts: number; shares: number; arrivals: number; views14: number; last_view: string | null; converted: number }>(
+  const rows = await all<{ id: number; views: number; contacts: number; shares: number; arrivals: number; views14: number; converted: number | null }>(
     db,
     sql`with e as (
           select ${listingEvents.listingId} as id, ${listingEvents.actorKey} as actor, ${listingEvents.type} as type, ${listingEvents.createdAt} as at,
                  ${within(listingEvents.createdAt, r)} as cur
           from ${listingEvents}
-        ), people as (
-          select id, actor, bool_or(type = 'listing_open') as viewed, bool_or(type in (${contactIn})) as contacted
-          from e where cur group by id, actor
+          where ${listingEvents.createdAt} >= least(${ts(r.start)}, now() - interval '14 days')
+        ), conv as (
+          select id, count(*)::int as n from (
+            select id, actor from e where cur group by id, actor
+            having bool_or(type = 'listing_open') and bool_or(type in (${contactIn}))
+          ) x group by id
+        ), agg as (
+          select id,
+            count(*) filter (where cur and type = 'listing_open')::int as views,
+            count(distinct actor) filter (where cur and type in (${contactIn}))::int as contacts,
+            count(*) filter (where cur and type = 'share_target')::int as shares,
+            count(distinct actor) filter (where cur and type = 'share_arrival')::int as arrivals,
+            count(*) filter (where type = 'listing_open' and at >= now() - interval '14 days')::int as views14
+          from e group by id
         )
-        select e.id,
-          count(*) filter (where cur and type = 'listing_open')::int as views,
-          count(distinct actor) filter (where cur and type in (${contactIn}))::int as contacts,
-          count(*) filter (where cur and type = 'share_target')::int as shares,
-          count(distinct actor) filter (where cur and type = 'share_arrival')::int as arrivals,
-          count(*) filter (where type = 'listing_open' and at >= now() - interval '14 days')::int as views14,
-          max(at) filter (where type = 'listing_open')::text as last_view,
-          coalesce((select count(*) from people p where p.id = e.id and p.viewed and p.contacted), 0)::int as converted
-        from e group by e.id`,
+        select agg.*, conv.n as converted from agg left join conv on conv.id = agg.id`,
   );
   return new Map(
     rows.map((x) => [
       Number(x.id),
-      {
-        views: Number(x.views),
-        contacts: Number(x.contacts),
-        converted: Number(x.converted),
-        shares: Number(x.shares),
-        arrivals: Number(x.arrivals),
-        views14: Number(x.views14),
-        lastView: x.last_view ? new Date(x.last_view).toISOString() : null,
-      },
+      { views: Number(x.views), contacts: Number(x.contacts), converted: Number(x.converted ?? 0), shares: Number(x.shares), arrivals: Number(x.arrivals), views14: Number(x.views14) },
     ]),
   );
 }
