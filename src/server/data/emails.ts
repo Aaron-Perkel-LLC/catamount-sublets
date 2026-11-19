@@ -148,11 +148,6 @@ export async function listEmails(db: DbOrTx, limit = 300): Promise<EmailListRow[
   return rows.map((r) => ({ ...asEmail(r), sent: Number(r.sent), failed: Number(r.failed), leftOut: Number(r.leftOut), waiting: Number(r.waiting), firstReason: r.firstReason }));
 }
 
-export async function emailCounts(db: DbOrTx, id: number): Promise<EmailCounts> {
-  const [r] = await db.select({ sent: countOf("sent"), failed: countOf("failed"), leftOut: countOf("left_out"), waiting: countOf("waiting") }).from(emails).where(eq(emails.id, id));
-  return { sent: Number(r?.sent ?? 0), failed: Number(r?.failed ?? 0), leftOut: Number(r?.leftOut ?? 0), waiting: Number(r?.waiting ?? 0) };
-}
-
 /** An email's recipients (tests last), each with the account's current name where there still is one. */
 export async function listDeliveries(db: DbOrTx, emailId: number): Promise<(DeliveryRow & { name: string | null })[]> {
   const rows = await db
@@ -162,11 +157,6 @@ export async function listDeliveries(db: DbOrTx, emailId: number): Promise<(Deli
     .where(eq(emailDeliveries.emailId, emailId))
     .orderBy(asc(emailDeliveries.test), asc(emailDeliveries.id));
   return rows.map(({ firstName, lastName, ...r }) => ({ ...asDelivery(r), name: [firstName, lastName].filter(Boolean).join(" ") || r.greetedAs || null }));
-}
-
-export async function getDelivery(db: DbOrTx, id: number): Promise<DeliveryRow | null> {
-  const [row] = await db.select(DELIVERY_COLUMNS).from(emailDeliveries).where(eq(emailDeliveries.id, id));
-  return row ? asDelivery(row) : null;
 }
 
 export interface NewDelivery {
@@ -241,12 +231,29 @@ export async function requeueStale(db: DbOrTx, before: Date): Promise<number> {
   return rows.length;
 }
 
-/** "Retry failed": the failed recipients of one email go back to the queue with their tries counted afresh. */
-export async function requeueFailed(db: DbOrTx, emailId: number): Promise<number> {
+/** How long the mail provider remembers an idempotency key, less an hour's margin: inside it, a second try can't deliver twice. */
+export const PROVIDER_KEY_MS = 23 * 3_600_000;
+
+/**
+ * "Retry failed": the failed recipients of one email go back to the queue
+ * with their tries counted afresh. Not the ones whose failure was never
+ * confirmed (their reason starts with `unconfirmed`) once the provider has
+ * forgotten the key: that try may have arrived, and another would be a
+ * second copy. Those stay failed, for the admin to decide about.
+ */
+export async function requeueFailed(db: DbOrTx, emailId: number, unconfirmed: string, now: Date = new Date()): Promise<number> {
+  const stale = new Date(now.getTime() - PROVIDER_KEY_MS).toISOString();
   const rows = await db
     .update(emailDeliveries)
     .set({ status: "queued", attempts: 0, reason: null })
-    .where(and(eq(emailDeliveries.emailId, emailId), eq(emailDeliveries.status, "failed"), eq(emailDeliveries.test, false)))
+    .where(
+      and(
+        eq(emailDeliveries.emailId, emailId),
+        eq(emailDeliveries.status, "failed"),
+        eq(emailDeliveries.test, false),
+        sql`not (coalesce(${emailDeliveries.reason}, '') like ${`${unconfirmed}%`} and ${emailDeliveries.lastAttemptAt} < ${stale}::timestamptz)`,
+      ),
+    )
     .returning({ id: emailDeliveries.id });
   if (rows.length > 0) await db.update(emails).set({ status: "sending", finishedAt: null }).where(eq(emails.id, emailId));
   return rows.length;
@@ -260,6 +267,12 @@ export async function finishIfDone(db: DbOrTx, emailId: number, now: Date): Prom
     .where(and(eq(emails.id, emailId), eq(emails.status, "sending"), sql`not exists (select 1 from ${emailDeliveries} d where d.email_id = ${EMAIL_ID} and not d.test and d.status in ('queued', 'sending'))`))
     .returning({ id: emails.id });
   return rows.length > 0;
+}
+
+/** Whether an email reached anyone: what decides that a reply settles its request. */
+export async function reached(db: DbOrTx, emailId: number): Promise<boolean> {
+  const [row] = await db.select({ id: emailDeliveries.id }).from(emailDeliveries).where(and(eq(emailDeliveries.emailId, emailId), eq(emailDeliveries.status, "sent"), eq(emailDeliveries.test, false))).limit(1);
+  return Boolean(row);
 }
 
 export async function sendingEmailIds(db: DbOrTx): Promise<number[]> {
@@ -293,23 +306,22 @@ export async function repliesForRequests(db: DbOrTx, requestIds: number[]): Prom
   return out;
 }
 
+/** An email written to this one address, sent or still a draft. */
+const writtenTo = (address: string) => and(sql`${emails.audience}->>'kind' = 'address'`, sql`${emails.audience}->>'email' = ${address.toLowerCase()}`);
+
 /** How many emails written to this one address would be deleted with their account (for the admin's delete confirmation). */
 export async function countEmailsTo(db: DbOrTx, address: string): Promise<number> {
-  const [r] = await db
-    .select({ n: sql<number>`count(distinct ${emails.id})::int` })
-    .from(emails)
-    .innerJoin(emailDeliveries, eq(emailDeliveries.emailId, emails.id))
-    .where(and(sql`${emails.audience}->>'kind' = 'address'`, eq(emailDeliveries.address, address.toLowerCase()), eq(emailDeliveries.test, false)));
+  const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(emails).where(writtenTo(address));
   return Number(r?.n ?? 0);
 }
 
 /**
  * An account is being deleted. An email written to that one person goes
- * with them; their row in a group email stays, so its totals still add up,
- * but loses the address and the name. Call it before the account row goes.
+ * with them, drafts included; their row in a group email stays, so its
+ * totals still add up, but loses the address and the name. Call it before
+ * the account row goes.
  */
 export async function forgetRecipient(db: DbOrTx, address: string): Promise<void> {
-  const a = address.toLowerCase();
-  await db.delete(emails).where(and(sql`${emails.audience}->>'kind' = 'address'`, sql`exists (select 1 from ${emailDeliveries} d where d.email_id = ${EMAIL_ID} and d.address = ${a} and not d.test)`));
-  await db.update(emailDeliveries).set({ address: null, greetedAs: null }).where(eq(emailDeliveries.address, a));
+  await db.delete(emails).where(writtenTo(address));
+  await db.update(emailDeliveries).set({ address: null, greetedAs: null }).where(eq(emailDeliveries.address, address.toLowerCase()));
 }

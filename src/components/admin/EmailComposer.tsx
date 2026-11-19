@@ -96,6 +96,18 @@ export function EmailComposer({ id, initial, initialCheck, semesters, people, re
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [edits]);
 
+  // Leaving with a change not yet saved (inside the save's short wait): save it on the way out.
+  const unsaved = useRef<Draft | null>(null);
+  useEffect(() => {
+    unsaved.current = dirty ? draft : null;
+  }, [dirty, draft]);
+  useEffect(
+    () => () => {
+      if (unsaved.current) void adminEmailSave(id, unsaved.current, 0).catch(() => {});
+    },
+    [id],
+  );
+
   const step = (to: number) =>
     start(async () => {
       const r = await adminEmailCheck(id, to);
@@ -149,7 +161,16 @@ export function EmailComposer({ id, initial, initialCheck, semesters, people, re
       if (!check) return;
       const r = await adminEmailSend(id, { check: check.check, typed: group ? Number(typed) : null, sendAnyway: anyway });
       dialog.current?.close();
-      if (!r.ok) return setNote({ tone: "error", text: r.error });
+      if (!r.ok) {
+        setNote({ tone: "error", text: r.error });
+        // Refused: the group or the email may have moved on. Look again, so the next review shows what is true now.
+        const again = await adminEmailCheck(id, at).catch(() => null);
+        if (again?.ok) {
+          setCheck(again.data);
+          setAt(again.data.index);
+        }
+        return;
+      }
       router.replace(href(`/admin/email/${id}`));
       router.refresh();
     });
@@ -194,7 +215,7 @@ export function EmailComposer({ id, initial, initialCheck, semesters, people, re
             </fieldset>
           )}
           <div className={FIELD_LABEL}>
-            <label htmlFor={`${uid}-to`}>To</label>
+            {request ? <span>To</span> : <label htmlFor={`${uid}-to`}>To</label>}
             {request ? (
               <p className="text-[13px] break-all text-ink">{request.email}</p>
             ) : (
@@ -360,7 +381,7 @@ export function EmailComposer({ id, initial, initialCheck, semesters, people, re
                         <span className="truncate text-[13px] font-bold">{p.name ?? p.email}</span>
                         {p.name && <span className="truncate text-xs text-ink-3">{p.email}</span>}
                       </span>
-                      <button type="button" className={`${LINK} font-normal`} disabled={busy || dirty || i === at} onClick={() => step(i)}>
+                      <button type="button" className={`${LINK} font-normal`} aria-label={i === at ? undefined : `Preview what ${p.name ?? p.email} gets`} disabled={busy || dirty || i === at} onClick={() => step(i)}>
                         {i === at ? "Showing" : "Preview"}
                       </button>
                     </li>

@@ -91,7 +91,7 @@ export interface SendMailArgs {
   kind: MailKind;
   /** Defaults to the support address on every message; null sends none. */
   replyTo?: string | null;
-  /** Correlation id for the log line (a listing id, a broadcast id); never an email. */
+  /** Correlation id for the log line (a listing id, an email and delivery id); never an address. */
   ref?: string | number;
   /** The plain-text part, when the template writes its own; otherwise it is rendered from `react`. */
   text?: string;
@@ -121,6 +121,8 @@ export interface SendMailResult {
   id?: string;
   /** Why it was not sent, for the admin's screen and the record; never logged with the address. */
   error?: string;
+  /** The provider's name for the failure ("rate_limit_exceeded", "validation_error"…), or "threw" when the request itself failed. */
+  code?: string;
 }
 
 export async function sendMail(args: SendMailArgs): Promise<SendMailResult> {
@@ -174,12 +176,12 @@ export async function sendMail(args: SendMailArgs): Promise<SendMailResult> {
     }
     if (error) {
       log.error("mail.send_failed", new Error(error.message), { kind: args.kind, ref: args.ref });
-      return { ok: false, error: error.message || error.name || "Resend refused the message." };
+      return { ok: false, error: error.message || error.name || "Resend refused the message.", code: error.name };
     }
     log.info("mail.sent", { kind: args.kind, ref: args.ref, id: data?.id });
     return { ok: true, id: data?.id };
   } catch (error) {
     log.error("mail.send_threw", error, { kind: args.kind, ref: args.ref });
-    return { ok: false, error: error instanceof Error ? error.message : "The send failed." };
+    return { ok: false, error: error instanceof Error ? error.message : "The send failed.", code: "threw" };
   }
 }

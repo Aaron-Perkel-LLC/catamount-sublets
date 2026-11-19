@@ -44,9 +44,8 @@ type Which = "all" | "failed" | "left_out";
 /**
  * An email that has gone, or is going: its result, the email itself as one
  * recipient got it, and a row per recipient. Picking a recipient shows their
- * copy. "Retry failed" sends again only to the ones it didn't reach, and
- * can't reach anyone twice. While it is still sending the page refreshes
- * itself.
+ * copy. "Retry failed" sends again only to the ones it didn't reach. While
+ * it is still sending the page refreshes itself.
  */
 export function EmailDetail({ email, recipients, first }: { email: DetailEmail; recipients: DetailRecipient[]; first: { id: number; copy: Rendered } | null }) {
   const router = useRouter();
@@ -59,7 +58,7 @@ export function EmailDetail({ email, recipients, first }: { email: DetailEmail; 
   const n = (s: DeliveryStatus) => real.filter((r) => r.status === s).length;
   const counts = { sent: n("sent"), failed: n("failed"), leftOut: n("left_out"), waiting: n("queued") + n("sending") };
   const [tone, words] = resultPill({ status: email.status, group: email.group, ...counts });
-  const rows = useMemo(() => recipients.filter((r) => which === "all" || r.status === which), [recipients, which]);
+  const rows = useMemo(() => recipients.filter((r) => which === "all" || (!r.test && r.status === which)), [recipients, which]);
 
   useEffect(() => {
     if (email.status !== "sending") return;
@@ -150,7 +149,7 @@ export function EmailDetail({ email, recipients, first }: { email: DetailEmail; 
         <KpiRow
           kpis={[
             { key: "sent", label: "Sent", value: String(counts.sent), of: `/ ${counts.sent + counts.failed + counts.waiting}` },
-            { key: "failed", label: "Failed", value: String(counts.failed), tip: "Each was tried up to three times. Retry sends only to these, and can't reach anyone twice." },
+            { key: "failed", label: "Failed", value: String(counts.failed), tip: "Each was tried up to three times. Retry sends only to these. One whose failure was never confirmed is not retried after a day, since it may have arrived." },
             { key: "out", label: "Left out", value: String(counts.leftOut), tip: "In the group when it was sent, but banned or marked Stop email." },
             { key: "waiting", label: "Still to go", value: String(counts.waiting), tip: "Queued, or waiting to be tried again. The hourly job finishes anything left." },
           ]}

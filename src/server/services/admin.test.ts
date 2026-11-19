@@ -169,7 +169,7 @@ describe("posts and people", () => {
   });
 });
 
-describe("orphans and broadcast", () => {
+describe("orphans", () => {
   it("finds files no row names and deletes only with the right count", async () => {
     await putMedia("listings/999/" + "f".repeat(32) + "_thumb.webp", Buffer.from("x"), "image/webp");
     const report = await admin.orphanReport(db, true);

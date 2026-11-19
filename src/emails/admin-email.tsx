@@ -21,7 +21,7 @@ import { EMAIL_COLOURS, EmailLayout, muted, paragraph } from "./layout";
 export interface GroupFooter {
   /** The visible link: the confirm page, where unsubscribing takes a tap. */
   unsubscribeUrl: string;
-  /** From emailMailingAddress() (server-only); the template never reads the environment. */
+  /** From digestMailingAddress() (server-only); the template never reads the environment. */
   mailingAddress: string;
   /** Whether they have a listing, which is why they are getting it. */
   posted: boolean;

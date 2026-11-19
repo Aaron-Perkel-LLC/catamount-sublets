@@ -9,7 +9,7 @@ import { appUrl } from "@/env";
 import { audienceLabel, type EmailAudience, emailToSend, fieldErrors, isGroup, type LeftOutReason, NAME_PLACEHOLDER, SURVEY_PLACEHOLDER } from "@/lib/email";
 import { posterFirstName } from "@/lib/person-name";
 import { approveAccessRequest, dismissAccessRequest } from "@/server/data/access-requests";
-import { claimDelivery, type EmailRow, finishIfDone, getEmail, listDeliveries, lockEmail, type NewDelivery, recordTest, requeueFailed, requeueStale, RETRY_AFTER_MS, sendingEmailIds, settleDelivery, startSending } from "@/server/data/emails";
+import { claimDelivery, type EmailRow, finishIfDone, getEmail, listDeliveries, lockEmail, type NewDelivery, reached, recordTest, requeueFailed, requeueStale, RETRY_AFTER_MS, sendingEmailIds, settleDelivery, startSending } from "@/server/data/emails";
 import { posterColumns } from "@/server/data/names";
 import { surveyUnanswered } from "@/server/data/survey";
 import { publicListingWhere } from "@/server/data/visibility";
@@ -117,10 +117,15 @@ function asRecipient(r: { id: string; email: string; firstName: string | null; l
 type Content = Pick<EmailRow, "subject" | "body" | "audience" | "resolve">;
 type To = Pick<Recipient, "userId" | "email" | "name" | "posted">;
 
-/** The body made out to one person. {survey} stays as typed where there is no account or no secret to sign with; blockers() refuses to send that. */
-export function personalise(body: string, r: To): string {
+/**
+ * The body made out to one person. {survey} stays as typed where there is
+ * no account or no secret to sign with; blockers() refuses to send that.
+ * Links are signed as of `at`, so the same email to the same person comes
+ * out the same however often it is put together.
+ */
+export function personalise(body: string, r: To, at: Date = new Date()): string {
   const named = body.replaceAll(NAME_PLACEHOLDER, r.name?.trim() || "there");
-  return r.userId && linkSecret() ? named.replaceAll(SURVEY_PLACEHOLDER, `${SITE.url}/survey?t=${signSurveyToken(r.userId)}`) : named;
+  return r.userId && linkSecret() ? named.replaceAll(SURVEY_PLACEHOLDER, `${SITE.url}/survey?t=${signSurveyToken(r.userId, at)}`) : named;
 }
 
 export interface Rendered {
@@ -134,15 +139,22 @@ export interface Rendered {
 
 /**
  * One recipient's email, exactly: the check shows what this returns and
- * send() sends what this returns. `unsubscribeAs` makes the unsubscribe
+ * drain() sends what this returns. `unsubscribeAs` makes the unsubscribe
  * links someone else's (a test's are the admin's own, so pressing one in a
  * test can't unsubscribe the person it was written as).
+ *
+ * `at` is when its links are signed from. A send passes the moment the
+ * email was sent (emails.sent_at), never the clock: a second try at one
+ * recipient must be byte for byte the first, or the mail provider, seeing
+ * the same idempotency key with different content, refuses it instead of
+ * recognising it.
  */
-async function compose(e: Content, r: To, opts: { unsubscribeAs?: string | null; subjectPrefix?: string } = {}) {
+function compose(e: Content, r: To, opts: { unsubscribeAs?: string | null; subjectPrefix?: string; at?: Date } = {}) {
   const group = isGroup(e.audience);
-  const body = personalise(e.body, r);
+  const at = opts.at ?? new Date();
+  const body = personalise(e.body, r, at);
   const who = opts.unsubscribeAs ?? r.userId;
-  const token = group && who && linkSecret() ? signAnnounceUnsubscribe(who) : null;
+  const token = group && who && linkSecret() ? signAnnounceUnsubscribe(who, at) : null;
   const footer: GroupFooter | null = group ? { unsubscribeUrl: `${appUrl()}/unsubscribe?t=${token ?? ""}`, mailingAddress: digestMailingAddress(), posted: r.posted } : null;
   return {
     group,
@@ -153,8 +165,8 @@ async function compose(e: Content, r: To, opts: { unsubscribeAs?: string | null;
   };
 }
 
-async function rendered(e: Content, r: To): Promise<Rendered> {
-  const m = await compose(e, r);
+async function rendered(e: Content, r: To, at?: Date): Promise<Rendered> {
+  const m = compose(e, r, { at });
   return { from: m.group ? SITE.mailFromGroup : SITE.mailFromPersonal, replyTo: SITE.mailReplyTo, to: r.name ? `${r.name} <${r.email}>` : r.email, subject: m.subject, html: await render(m.react), text: m.text };
 }
 
@@ -166,6 +178,7 @@ export function blockers(e: Content, to: readonly To[]): string[] {
     if (!linkSecret()) out.push("SURVEY_SECRET is not set on this deployment, so the unsubscribe links can't be signed.");
     if (!digestMailingAddress()) out.push("MAILING_ADDRESS is not set on this deployment, and a group email needs it in its footer.");
   }
+  if (e.audience.kind === "survey" && !survey) out.push(`Add ${SURVEY_PLACEHOLDER} where their survey link should go: this group is the people who haven't answered it.`);
   if (survey && !linkSecret()) out.push(`SURVEY_SECRET is not set on this deployment, so ${SURVEY_PLACEHOLDER} links can't be signed.`);
   if (survey && to.some((r) => !r.userId)) out.push(`${SURVEY_PLACEHOLDER} only works for someone with an account, and this address has none.`);
   return out;
@@ -223,7 +236,7 @@ export async function sentCopy(db: DbOrTx, emailId: number, deliveryId: number):
   const e = await getEmail(db, emailId);
   const d = (await listDeliveries(db, emailId)).find((x) => x.id === deliveryId);
   if (!e || !d || !d.address) return fail("That copy is gone.");
-  return ok(await rendered(e, { userId: d.userId, email: d.address, name: d.greetedAs, posted: d.posted }));
+  return ok(await rendered(e, { userId: d.userId, email: d.address, name: d.greetedAs, posted: d.posted }, e.sentAt ?? undefined));
 }
 
 /* ------------------------------------------------------------ a test to the admin */
@@ -246,7 +259,7 @@ export async function sendTest(db: DbOrTx, admin: { id: string; email: string },
   if (stop.length > 0) return fail(stop[0]);
   const limit = await takeRateLimit(db, RATE_LIMITS.adminMailPerUser, admin.id);
   if (!limit.allowed) return fail(`That's ${RATE_LIMITS.adminMailPerUser.limit} emails this hour. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} min.`);
-  const m = await compose(e, r, { unsubscribeAs: admin.id, subjectPrefix: "[Test] " });
+  const m = compose(e, r, { unsubscribeAs: admin.id, subjectPrefix: "[Test] " });
   const sent = await sendMail({ to: admin.email, subject: m.subject, react: m.react, text: m.text, kind: m.group ? "email_group" : "email_direct", ref: id, oneClickUnsubscribeUrl: m.oneClickUnsubscribeUrl, apiKey: m.group ? digestResendKey() : undefined });
   await recordTest(db, id, { address: admin.email, greetedAs: r.name, ok: sent.ok, providerId: sent.id ?? null, error: sent.ok ? null : (sent.error ?? "The send failed."), now: new Date() });
   log.info("email.test", { ref: id, ok: sent.ok });
@@ -309,52 +322,85 @@ export async function startSend(db: Db, adminId: string, id: number, input: Send
       deliveries.push({ userId: r.userId, address: r.email, greetedAs: r.name, posted: r.posted, status: "queued", overridden: r.stopEmail });
     }
     const names = new Map((await tx.select({ code: semesters.code, name: semesters.name }).from(semesters)).map((s) => [s.code, s.name]));
-    await startSending(tx, id, { sender: group ? "group" : "personal", toLabel: audienceLabel(e.audience, names), deliveries, now: new Date() });
+    // Hand-picked people are named by how many it actually goes to, not how many were ticked.
+    const toLabel = e.audience.kind === "people" ? `${to.length} hand-picked ${to.length === 1 ? "person" : "people"}` : audienceLabel(e.audience, names);
+    await startSending(tx, id, { sender: group ? "group" : "personal", toLabel, deliveries, now: new Date() });
     log.info("email.send_started", { ref: id, queued: deliveries.filter((d) => d.status === "queued").length, leftOut: leftOut.length, group });
     return ok({ already: false, queued: deliveries.filter((d) => d.status === "queued").length, leftOut: deliveries.filter((d) => d.status === "left_out").length });
   });
 }
 
-/** A failure worth another try: the provider or the network, not the address. */
-const TEMPORARY = /rate.?limit|timeout|timed out|network|fetch failed|socket|ECONN|EAI_AGAIN|temporar|unavailable|internal server|bad gateway|\b5\d\d\b/i;
+/**
+ * What a failed send means, from the provider's own name for it (or "threw"
+ * when the request never got an answer) and, failing that, its words.
+ * - not sent, worth another try: the rate limit or a quota;
+ * - unknown: the provider or the network gave no clear answer, so it may
+ *   have gone. Another try under the same key is safe, and is how we find out;
+ * - already sent: the provider has this key with other content, so an
+ *   earlier try was accepted;
+ * - anything else is a refusal: the address, the sender, the key.
+ */
+const NOT_SENT = new Set(["rate_limit_exceeded", "daily_quota_exceeded", "monthly_quota_exceeded", "concurrent_idempotent_requests"]);
+const UNKNOWN = new Set(["application_error", "internal_server_error", "threw"]);
+const UNKNOWN_WORDS = /timeout|timed out|network|fetch|socket|ECONN|EAI_AGAIN|temporar|unavailable|internal server|bad gateway|\b5\d\d\b/i;
+export const UNCONFIRMED = "Couldn't confirm it went";
+
+function classify(r: { error?: string; code?: string }): "retry" | "unknown" | "already_sent" | "refused" {
+  if (r.code === "invalid_idempotent_request") return "already_sent";
+  if (r.code && NOT_SENT.has(r.code)) return "retry";
+  if ((r.code && UNKNOWN.has(r.code)) || UNKNOWN_WORDS.test(r.error ?? "")) return "unknown";
+  return "refused";
+}
 
 /**
  * Sends to an email's queued recipients, one message each, until none is
  * ready or the time is up. Safe to run twice at once (claimDelivery skips a
- * row another drain holds). A temporary failure goes back to the queue for
- * a later drain, up to MAX_ATTEMPTS tries; anything else is a failure the
- * admin sees. When nobody is left waiting the email is `sent`, and a reply
- * that reached its one recipient settles the access request it answers.
+ * row another drain holds). A try that wasn't a clear refusal goes back to
+ * the queue for a later drain, up to MAX_ATTEMPTS; a clear refusal is a
+ * failure the admin sees at once. One recipient going wrong, even by an
+ * exception, never stops the rest. When nobody is left waiting the email is
+ * `sent`, and a reply that reached its one recipient settles the access
+ * request it answers (decided from the rows, so it holds whichever drain
+ * finishes it).
  */
-export async function drain(db: Db, id: number, opts: { pauseMs?: number; budgetMs?: number } = {}): Promise<{ sent: number; failed: number; finished: boolean }> {
+export async function drain(db: Db, id: number, opts: { pauseMs?: number; budgetMs?: number; until?: number } = {}): Promise<{ sent: number; failed: number; finished: boolean }> {
   const e = await getEmail(db, id);
   if (!e || e.status !== "sending") return { sent: 0, failed: 0, finished: false };
-  const started = Date.now();
+  const until = opts.until ?? Date.now() + (opts.budgetMs ?? 600_000);
   const pauseMs = opts.pauseMs ?? 500;
   const group = isGroup(e.audience);
   let sent = 0;
   let failed = 0;
-  while (Date.now() - started < (opts.budgetMs ?? 600_000)) {
+  while (Date.now() < until) {
     const d = await claimDelivery(db, id, new Date());
     if (!d) break;
-    if (d.banned || (d.stopEmail && !d.overridden)) {
-      await settleDelivery(db, d.id, { status: "left_out", reason: d.banned ? "banned" : "stop_email" });
-      continue;
-    }
-    if (!d.address) {
-      await settleDelivery(db, d.id, { status: "failed", reason: "Their account was deleted before it went." });
-      failed++;
-      continue;
-    }
-    const m = await compose(e, { userId: d.userId, email: d.address, name: d.greetedAs, posted: d.posted });
-    const r = await sendMail({ to: d.address, subject: m.subject, react: m.react, text: m.text, kind: group ? "email_group" : "email_direct", ref: `${id}.${d.id}`, idempotencyKey: `email/${id}/${d.id}`, oneClickUnsubscribeUrl: m.oneClickUnsubscribeUrl, apiKey: group ? digestResendKey() : undefined });
-    if (r.ok) {
-      await settleDelivery(db, d.id, { status: "sent", providerId: r.id ?? null, now: new Date() });
-      sent++;
-    } else {
-      const reason = r.error ?? "The send failed.";
-      const again = TEMPORARY.test(reason) && d.attempts < MAX_ATTEMPTS;
-      await settleDelivery(db, d.id, { status: again ? "queued" : "failed", reason });
+    try {
+      if (d.banned || (d.stopEmail && !d.overridden)) {
+        await settleDelivery(db, d.id, { status: "left_out", reason: d.banned ? "banned" : "stop_email" });
+        continue;
+      }
+      if (!d.address) {
+        await settleDelivery(db, d.id, { status: "failed", reason: "Their account was deleted before it went." });
+        failed++;
+        continue;
+      }
+      const m = compose(e, { userId: d.userId, email: d.address, name: d.greetedAs, posted: d.posted }, { at: e.sentAt ?? e.createdAt });
+      const r = await sendMail({ to: d.address, subject: m.subject, react: m.react, text: m.text, kind: group ? "email_group" : "email_direct", ref: `${id}.${d.id}`, idempotencyKey: `email/${id}/${d.id}`, oneClickUnsubscribeUrl: m.oneClickUnsubscribeUrl, apiKey: group ? digestResendKey() : undefined });
+      const what = r.ok ? "sent" : classify(r);
+      if (what === "sent" || what === "already_sent") {
+        await settleDelivery(db, d.id, { status: "sent", providerId: r.id ?? null, now: new Date() });
+        sent++;
+      } else {
+        const reason = r.error ?? "The send failed.";
+        const again = what !== "refused" && d.attempts < MAX_ATTEMPTS;
+        await settleDelivery(db, d.id, { status: again ? "queued" : "failed", reason: !again && what === "unknown" ? `${UNCONFIRMED}: ${reason}` : reason });
+        if (!again) failed++;
+      }
+    } catch (error) {
+      // Putting it together or recording it threw. Leave the row able to end: back in the queue while it has tries left, a failure after.
+      log.error("email.delivery_threw", error, { ref: `${id}.${d.id}` });
+      const again = d.attempts < MAX_ATTEMPTS;
+      await settleDelivery(db, d.id, { status: again ? "queued" : "failed", reason: `${UNCONFIRMED}: something went wrong here while sending.` }).catch(() => {});
       if (!again) failed++;
     }
     if (pauseMs > 0) await new Promise((res) => setTimeout(res, pauseMs));
@@ -362,7 +408,7 @@ export async function drain(db: Db, id: number, opts: { pauseMs?: number; budget
   const finished = await finishIfDone(db, id, new Date());
   if (finished) {
     log.info("email.finished", { ref: id, sent, failed });
-    if (!group && e.accessRequestId && e.resolve && sent === 1) {
+    if (!group && e.accessRequestId && e.resolve && (await reached(db, id))) {
       const done = e.resolve === "approve" ? Boolean(e.createdBy && (await approveAccessRequest(db, e.accessRequestId, e.createdBy))) : await dismissAccessRequest(db, e.accessRequestId);
       log.info("email.request_resolved", { ref: id, request: e.accessRequestId, resolve: e.resolve, done });
     }
@@ -372,21 +418,27 @@ export async function drain(db: Db, id: number, opts: { pauseMs?: number; budget
 
 /** "Retry failed": puts an email's failed recipients back in the queue. The caller drains. */
 export async function retryFailed(db: DbOrTx, id: number): Promise<Result<{ queued: number }>> {
-  const queued = await requeueFailed(db, id);
-  if (queued === 0) return fail("Nothing failed to retry.");
+  const queued = await requeueFailed(db, id, UNCONFIRMED);
+  if (queued === 0) return fail("Nothing here can be retried safely.");
   log.info("email.retry_failed", { ref: id, queued });
   return ok({ queued });
 }
 
-/** The hourly cron's part: recipients dropped mid-send go back to the queue, and every email still sending is drained. Counts only. */
+/**
+ * The hourly cron's part: recipients dropped mid-send go back to the queue,
+ * and every email still sending is drained, all within one budget so the
+ * run ends before the platform ends it mid-send. Counts only.
+ */
 export async function resumeSending(db: Db, opts: { pauseMs?: number; budgetMs?: number; now?: Date } = {}): Promise<{ emails: number; requeued: number; sent: number; failed: number }> {
   const now = opts.now ?? new Date();
+  const until = Date.now() + (opts.budgetMs ?? 240_000);
   const requeued = await requeueStale(db, new Date(now.getTime() - STALE_SENDING_MS));
   const ids = await sendingEmailIds(db);
   let sent = 0;
   let failed = 0;
   for (const id of ids) {
-    const r = await drain(db, id, opts);
+    if (Date.now() >= until) break;
+    const r = await drain(db, id, { pauseMs: opts.pauseMs, until });
     sent += r.sent;
     failed += r.failed;
   }

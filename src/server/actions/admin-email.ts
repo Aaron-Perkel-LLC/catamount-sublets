@@ -108,7 +108,7 @@ export async function adminEmailRetry(emailId: number): Promise<Result<{ queued:
   return r;
 }
 
-/** A sent email's words as a new draft, to nobody yet if it went to one person, or to the same group. */
+/** A sent email's words as a new draft, addressed as it was: to the same person, or to the same group as it stands when that draft is sent. */
 export async function adminEmailCopy(emailId: number): Promise<Result<{ id: number }>> {
   const me = await requireAdmin();
   const db = await getDb();

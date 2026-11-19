@@ -7,7 +7,7 @@ import { getSessionUser } from "@/server/auth";
 import { listPendingAccessRequests } from "@/server/data/access-requests";
 
 export const metadata: Metadata = { title: `Admin · ${SITE.name}` };
-/** The broadcast, the one-off mail and the "still available?" email run as Server Actions here and pace themselves under a second per person; this covers several hundred. */
+/** The admin's email (sent after its Server Action answers) and the "still available?" email run under this page tree and pace themselves under a second per person; this covers several hundred. */
 export const maxDuration = 800;
 
 /**

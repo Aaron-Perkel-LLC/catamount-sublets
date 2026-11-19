@@ -47,7 +47,7 @@ only after a clean week of reports for both senders. Confirm with
 
 ## 5. Resend (paid plan for the launch month)
 
-- Domain `catamountsublets.com` (root), verified 8 October. Sender `Catamount Sublets <login@catamountsublets.com>` for codes, `notices@` for admin notices and access requests, `Aaron at Catamount Sublets <aaron@catamountsublets.com>` for broadcasts and the welcome, `Reply-To: aaron@catamountsublets.com` on every message (`SITE.mailFrom` / `SITE.mailFromNotices` / `SITE.mailFromPersonal` / `SITE.mailReplyTo`).
+- Domain `catamountsublets.com` (root), verified 8 October. Sender `Catamount Sublets <login@catamountsublets.com>` for codes, `notices@` for admin notices and access requests, `Aaron at Catamount Sublets <aaron@catamountsublets.com>` for the welcome and an email the admin writes to one person (one to a group goes from `updates.`, see 5a and 6), `Reply-To: aaron@catamountsublets.com` on every message (`SITE.mailFrom` / `SITE.mailFromNotices` / `SITE.mailFromPersonal` / `SITE.mailReplyTo`).
 - API key with "sending access" only, scoped to the domain; set as `RESEND_API_KEY` for Production and Preview (done 8 October). `.env.local` only if you want real mail locally; otherwise codes print to the console.
 - Webhooks → `https://catamountsublets.com/api/resend/webhook` for `email.bounced` and `email.complained` (create the endpoint once the handler exists).
 - Upgrade before cutover (removes the 100/day cap).

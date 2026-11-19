@@ -274,7 +274,7 @@ export interface Person {
   role: string;
   banned: boolean;
   banReason: string | null;
-  /** They asked to stop getting mail; no broadcast reaches them. */
+  /** Stop email: they are left out of every group email. */
   noEmail: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;

@@ -19,7 +19,7 @@ export const SITE = {
   mailFrom: "Catamount Sublets <login@catamountsublets.com>",
   /** Sender for the admin's own mail (listing notices, access requests), so it filters apart from codes. */
   mailFromNotices: "Catamount Sublets <notices@catamountsublets.com>",
-  /** Sender for the notes signed by the author (broadcasts, the welcome): they are not about signing in. */
+  /** Sender for the notes signed by the author (the welcome, an email the admin writes to one person): they are not about signing in. */
   mailFromPersonal: "Aaron at Catamount Sublets <aaron@catamountsublets.com>",
   mailReplyTo: "aaron@catamountsublets.com",
   /**
@@ -46,7 +46,7 @@ export const SITE = {
   /** Shown in the footer and on the share page. Keep it. */
   disclaimer:
     "An independent student project, not affiliated with or endorsed by the University of Vermont.",
-  /** Author credit (page metadata, the broadcast sign-off); no university wording. */
+  /** Author credit (page metadata, the sign-off on the admin's email); no university wording. */
   author: "Aaron Perkel",
   authorUrl: "https://aaronperkel.com",
   /** The legal entity that runs the site: the copyright line and the privacy page. */

@@ -129,6 +129,9 @@ describe("the check", () => {
     const noSecret = await email.checkEmail(db, id);
     expect(noSecret.ok && noSecret.data.blockers[0]).toContain("SURVEY_SECRET");
     vi.unstubAllEnvs();
+    vi.stubEnv("MAILING_ADDRESS", "PO Box 1");
+    const noLink = await email.checkEmail(db, await draft({ kind: "survey" }));
+    expect(noLink.ok && noLink.data.blockers).toEqual([expect.stringContaining("Add {survey}")]);
     const stranger = await email.checkEmail(db, await draft({ kind: "address", email: "dana@example.org" }, { body: "{survey}" }));
     expect(stranger.ok && stranger.data.blockers).toEqual([expect.stringContaining("only works for someone with an account")]);
     expect(sentInTests).toHaveLength(0);
@@ -246,6 +249,62 @@ describe("sending to a group", () => {
     }
   });
 
+  it("a second try at one recipient is byte for byte the first, and a key the provider already has means it went", async () => {
+    const id = await draft({ kind: "people", userIds: [p.priya] }, { body: "Hi {name},\n\nHow did it go? {survey}" });
+    await send(id, { typed: 1 });
+    const sendModule = await import("@/server/email/send");
+    const seen: { text: string; unsubscribe: string }[] = [];
+    const spy = vi.spyOn(sendModule, "sendMail").mockImplementation(async (args) => {
+      seen.push({ text: args.text ?? "", unsubscribe: args.oneClickUnsubscribeUrl ?? "" });
+      // No answer the first time (the SDK's words for a failed fetch); then the provider says it has this key already.
+      return seen.length === 1 ? { ok: false, error: "Unable to fetch data. The request could not be resolved.", code: "application_error" } : { ok: false, error: "This idempotency key has been used with a different payload.", code: "invalid_idempotent_request" };
+    });
+    try {
+      expect(await go(id)).toEqual({ sent: 0, failed: 0, finished: false });
+      expect((await listDeliveries(db, id))[0]).toMatchObject({ status: "queued", attempts: 1 });
+      // Links are signed from the moment it was sent, not from the clock, so a later try can't differ.
+      await new Promise((r) => setTimeout(r, 1100));
+      await db.update(s.emailDeliveries).set({ lastAttemptAt: new Date(Date.now() - RETRY_AFTER_MS - 1000) }).where(eq(s.emailDeliveries.emailId, id));
+      expect(await go(id)).toEqual({ sent: 1, failed: 0, finished: true });
+      expect(seen).toHaveLength(2);
+      expect(seen[1]).toEqual(seen[0]);
+      expect(seen[0].text).toMatch(/\/survey\?t=/);
+      expect((await listDeliveries(db, id))[0]).toMatchObject({ status: "sent" });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("three tries with no clear answer end as unconfirmed, which Retry leaves alone once the provider has forgotten the key; a thrown error never stops the rest", async () => {
+    const id = await draft({ kind: "people", userIds: [p.priya, p.sam] });
+    await send(id, { typed: 2 });
+    const sendModule = await import("@/server/email/send");
+    const real = sendModule.sendMail;
+    const spy = vi.spyOn(sendModule, "sendMail").mockImplementation(async (args) => {
+      if (args.to === "priya@uvm.edu") throw new Error("render exploded");
+      return real(args);
+    });
+    try {
+      expect(await go(id)).toEqual({ sent: 1, failed: 0, finished: false }); // Sam still got his
+      for (let i = 0; i < 2; i++) {
+        await db.update(s.emailDeliveries).set({ lastAttemptAt: new Date(Date.now() - 60 * 60_000) }).where(and(eq(s.emailDeliveries.emailId, id), eq(s.emailDeliveries.status, "queued")));
+        await go(id);
+      }
+      const [priya] = await listDeliveries(db, id);
+      expect(priya).toMatchObject({ status: "failed", attempts: 3 });
+      expect(priya.reason).toMatch(/^Couldn't confirm it went/);
+      expect((await getEmail(db, id))?.status).toBe("sent");
+      // Within the day a retry is safe (same key); after it, it isn't offered.
+      await db.update(s.emailDeliveries).set({ lastAttemptAt: new Date(Date.now() - 25 * 3_600_000) }).where(eq(s.emailDeliveries.id, priya.id));
+      expect(await email.retryFailed(db, id)).toMatchObject({ ok: false });
+      await db.update(s.emailDeliveries).set({ lastAttemptAt: new Date(Date.now() - 2 * 3_600_000) }).where(eq(s.emailDeliveries.id, priya.id));
+      expect(await email.retryFailed(db, id)).toEqual({ ok: true, data: { queued: 1 } });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await go(id)).toEqual({ sent: 1, failed: 0, finished: true });
+  });
+
   it("a recipient cut off mid-send goes back to the queue and is sent once", async () => {
     const id = await draft({ kind: "people", userIds: [p.priya] });
     await send(id, { typed: 1 });
@@ -276,6 +335,18 @@ describe("sending to one person", () => {
     const { isEmailApproved } = await import("@/server/data/access-requests");
     expect(await isEmailApproved(db, "dana@example.org")).toBe(true);
     expect((await repliesForRequests(db, [req.id])).get(req.id)).toMatchObject([{ id, status: "sent" }]);
+  });
+
+  it("settles the request whichever run finishes the email, going by what was sent and not by who sent it", async () => {
+    const [req] = await db.insert(s.accessRequests).values({ kind: "access", name: "Eli", email: "eli@example.org", message: "Please" }).returning({ id: s.accessRequests.id });
+    const id = await draft({ kind: "address", email: "eli@example.org" }, { accessRequestId: req.id, resolve: "approve" });
+    await send(id);
+    // As if one run sent it and died before marking the email finished.
+    await db.update(s.emailDeliveries).set({ status: "sent", attempts: 1, sentAt: new Date() }).where(eq(s.emailDeliveries.emailId, id));
+    expect(await email.resumeSending(db, { pauseMs: 0 })).toMatchObject({ sent: 0 });
+    expect((await getEmail(db, id))?.status).toBe("sent");
+    const { isEmailApproved } = await import("@/server/data/access-requests");
+    expect(await isEmailApproved(db, "eli@example.org")).toBe(true);
   });
 
   it("never goes to a banned account, and to someone on Stop email only with Send anyway, which is recorded", async () => {
@@ -348,10 +419,12 @@ describe("unsubscribing and deleting an account", () => {
     const group = await draft({ kind: "people", userIds: [u.id, p.priya] });
     await send(group, { typed: 2 });
     await go(group);
+    const unsent = await draft({ kind: "address", email: "leaver@uvm.edu" });
     const dry = await deletePerson(db, u.id, null, true);
-    expect(dry.ok && dry.data.messages).toBe(1);
+    expect(dry.ok && dry.data.messages).toBe(2); // the one sent and the draft
     expect((await deletePerson(db, u.id, null)).ok).toBe(true);
     expect(await getEmail(db, direct)).toBeNull();
+    expect(await getEmail(db, unsent)).toBeNull();
     expect((await listDeliveries(db, group)).map((d) => [d.address, d.userId === null, d.greetedAs, d.status])).toEqual([
       ["priya@uvm.edu", false, "Priya", "sent"],
       [null, true, null, "sent"],
