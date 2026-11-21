@@ -74,17 +74,9 @@ export const listings = pgTable(
     /**
      * Only signed-in students see it: off the signed-out board, map and
      * sitemap, and a signed-out direct URL is a 404. Its share link still
-     * works. New listings default public; migration 0010 set every listing
-     * that existed before it to true.
+     * works. Only the admin sets it; every listing defaults public.
      */
     signedInOnly: boolean().notNull().default(false),
-    /**
-     * When the poster last set signedInOnly themselves (My post); null if they
-     * never have, so a listing 0010 made signed-in only that is still null is
-     * one `npm run go-public` makes public (src/lib/visibility-rollout.ts). An
-     * admin's change does not set it. Migration 0011.
-     */
-    visibilityChosenAt: nullableTimestamp(),
     /**
      * The approximate area's center, a fixed offset of the true point
      * (src/server/geo-fuzz.ts), stored because the signed-out distance

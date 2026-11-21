@@ -38,7 +38,7 @@ beforeAll(async () => {
   poster = p.id;
   const [l] = await db
     .insert(s.listings)
-    .values({ userId: poster, price: 700, address: "1 Main St, Burlington", lat: 44.48, lon: -73.2, postedAt: new Date("2026-11-13T15:00:00Z"), signedInOnly: true, visibilityChosenAt: new Date("2026-11-14T00:00:00Z") })
+    .values({ userId: poster, price: 700, address: "1 Main St, Burlington", lat: 44.48, lon: -73.2, postedAt: new Date("2026-11-13T15:00:00Z"), signedInOnly: true })
     .returning({ id: s.listings.id });
   open = l.id;
   await db.insert(s.listingSemesters).values({ listingId: open, semesterCode: "spring27", position: 0 });
@@ -128,7 +128,7 @@ describe("accounts, comms and system", () => {
     const a = await accountMetrics(db, r7);
     expect(a.weekly.find((d) => d.day === "2026-11-13")).toEqual({ day: "2026-11-13", posters: 1, seekers: 0 });
     expect(a.active.total).toBe(3);
-    expect(a.visibility).toEqual({ listings: 1, studentsOnly: 1, chose: 1, choseStudentsOnly: 1 });
+    expect(a.visibility).toEqual({ listings: 1, studentsOnly: 1 });
   });
 
   it("notices, digest weeks and table counts", async () => {

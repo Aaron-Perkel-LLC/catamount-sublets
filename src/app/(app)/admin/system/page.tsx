@@ -18,7 +18,6 @@ const CRON_WHAT: Record<(typeof CRON_NAMES)[number], { when: string; what: strin
   sweep: { when: "Daily at 09:20 UTC (4:20 am Eastern in winter, 5:20 in summer)", what: "Clears stale uploads, codes and limits; fails stuck sends; fills missing areas." },
   digest: { when: "Hourly; acts Monday mornings", what: "The weekly saved-search email, while its switch is on." },
   email: { when: "Hourly, at half past; acts only while an email is still sending", what: "Finishes an email of yours that was cut off or is waiting to retry a recipient." },
-  "go-public": { when: "00:05 Eastern, 21 Nov", what: "One-off: makes public every listing whose poster never chose." },
 };
 /** The neon free plan's storage (docs/vercel-setup.md). */
 const DB_CAP = 512 * 1024 * 1024;

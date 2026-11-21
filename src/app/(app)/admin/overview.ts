@@ -145,7 +145,7 @@ export async function overviewView(db: DbOrTx, r: ResolvedRange): Promise<Overvi
         stats: [
           stat("On the board", o.board.open, { tip: "Open, visible, with a photo, right now." }),
           stat("Public", o.board.public, { tip: "Also on the signed-out board (needs its approximate area)." }),
-          stat("Students only", o.board.studentsOnly, { tip: "Kept to signed-in students by the poster." }),
+          stat("Students only", o.board.studentsOnly, { tip: "Kept to signed-in students by the admin." }),
         ],
       },
       {

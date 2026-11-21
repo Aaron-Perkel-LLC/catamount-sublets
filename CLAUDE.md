@@ -4,7 +4,7 @@ Guidance for Claude Code working in this repository.
 
 ## What this is
 
-Catamount Sublets (catamountsublets.com): students post one sublet listing each and browse the others by price, semester, distance from campus and amenities, on a grid or a map. Anyone can browse without signing in, seeing an approximate area and no address, poster or contact (unless the poster keeps the listing to signed-in students); signing in shows the rest. Listings can also be shared through a public preview link. It replaces "UVM Sublets", a PHP app on UVM hosting whose code is linked read-only at `sublets-legacy/` for reference. **`PLAN.md` is the migration plan and the status board**; keep its Status table current when a phase changes state.
+Catamount Sublets (catamountsublets.com): students post one sublet listing each and browse the others by price, semester, distance from campus and amenities, on a grid or a map. Anyone can browse without signing in, seeing an approximate area and no address, poster or contact (unless the admin keeps a listing to signed-in students; posters have no switch); signing in shows the rest. Listings can also be shared through a public preview link. It replaces "UVM Sublets", a PHP app on UVM hosting whose code is linked read-only at `sublets-legacy/` for reference. **`PLAN.md` is the migration plan and the status board**; keep its Status table current when a phase changes state.
 
 Stack: Next.js 16 App Router, React 19, TypeScript strict, Tailwind v4, npm, `src/`. Neon Postgres through Drizzle (`casing: "snake_case"`, migrations in `drizzle/`). better-auth with the email-OTP and admin plugins. Resend for mail. Two Vercel Blob stores (private `uploads`, public `media`). MapLibre GL. vitest + PGlite for tests.
 

@@ -1,0 +1,1 @@
+ALTER TABLE "listings" DROP COLUMN "visibility_chosen_at";

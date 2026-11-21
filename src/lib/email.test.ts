@@ -24,7 +24,7 @@ describe("the email schemas", () => {
   });
   it("knows a group from one address, and refuses an audience it doesn't know", () => {
     expect(isGroup({ kind: "address", email: "a@b.com" })).toBe(false);
-    for (const a of [{ kind: "board" }, { kind: "everyone" }, { kind: "survey" }, { kind: "stale" }, { kind: "semester", code: "fall26" }, { kind: "people", userIds: ["00000000-0000-4000-8000-000000000001"] }] as const) {
+    for (const a of [{ kind: "board" }, { kind: "everyone" }, { kind: "survey" }, { kind: "semester", code: "fall26" }, { kind: "people", userIds: ["00000000-0000-4000-8000-000000000001"] }] as const) {
       expect(isGroup(emailAudience.parse(a))).toBe(true);
     }
     expect(emailAudience.safeParse({ kind: "all" }).success).toBe(false);
@@ -36,7 +36,6 @@ describe("the email schemas", () => {
     expect(audienceLabel({ kind: "semester", code: "gone" })).toBe("gone posters");
     expect(audienceLabel({ kind: "people", userIds: ["a", "b"] })).toBe("2 hand-picked people");
     expect(audienceLabel({ kind: "address", email: "sam@example.org" })).toBe("sam@example.org");
-    expect(audienceLabel({ kind: "stale" })).toBe("Posters who haven't signed in since the move");
   });
 });
 

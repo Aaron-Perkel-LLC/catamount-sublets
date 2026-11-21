@@ -55,8 +55,6 @@ const listingColumns = (l: PlanListing, userId: string) => ({
   statusChangedAt: l.statusChangedAt,
   legacyShareToken: l.legacyShareToken,
   legacyImport: true,
-  // Posted under the old rules (signed-in students only); the poster can open it up from My post.
-  signedInOnly: true,
   postedAt: l.postedAt,
   updatedAt: l.postedAt,
 });

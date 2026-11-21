@@ -108,13 +108,18 @@ export async function adminEmailRetry(emailId: number): Promise<Result<{ queued:
   return r;
 }
 
-/** A sent email's words as a new draft, addressed as it was: to the same person, or to the same group as it stands when that draft is sent. */
+/**
+ * A sent email's words as a new draft, addressed as it was: to the same
+ * person, or to the same group as it stands when that draft is sent. A group
+ * that no longer exists (an old row's retired kind) starts as "One person…".
+ */
 export async function adminEmailCopy(emailId: number): Promise<Result<{ id: number }>> {
   const me = await requireAdmin();
   const db = await getDb();
   const e = await getEmail(db, id.parse(emailId));
   if (!e) return { ok: false, error: "That email is gone." };
-  return { ok: true, data: { id: await createDraft(db, me.id, { audience: e.audience, subject: e.subject, body: e.body }) } };
+  const audience = emailAudience.safeParse(e.audience);
+  return { ok: true, data: { id: await createDraft(db, me.id, { audience: audience.success ? audience.data : { kind: "address", email: "" }, subject: e.subject, body: e.body }) } };
 }
 
 /** One recipient's copy of an email that has gone. */

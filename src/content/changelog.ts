@@ -17,8 +17,9 @@ export interface ChangelogEntry {
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-11-21",
-    title: "Listings are public by default",
-    body: "As we emailed on Nov 17, listings are now visible to signed-out visitors. They see price, semester, size, photos and the rough neighborhood, never your name, contact, address, title or description. Listings kept to signed-in students before today stay that way.",
+    title: "Every listing is public",
+    body: "As we emailed on Nov 17, listings are now visible to signed-out visitors. They see price, semester, size, photos and the rough neighborhood, never your name, contact, address, title or description. My post no longer has a switch for this; if you need yours kept to signed-in students, email us.",
+    link: { href: "/privacy", label: "Who sees what" },
   },
   {
     date: "2026-11-17",

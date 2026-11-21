@@ -5,7 +5,6 @@ import { type Stat, StatList } from "@/components/admin/StatList";
 import { TrendChart } from "@/components/admin/TrendChart";
 import { CARD, num } from "@/components/admin/ui";
 import { getDb } from "@/db";
-import { rate } from "@/lib/admin-delta";
 import { type AdminSearchParams, param } from "@/lib/admin-page";
 import { resolveRange } from "@/lib/admin-range";
 import { trendRange, trendSeries } from "@/lib/admin-trend";
@@ -43,7 +42,6 @@ export default async function AdminPeople({ searchParams }: { searchParams: Admi
     { key: "d7", label: "Seen in 7 days", value: num(acc.active.d7), of: `/ ${num(acc.active.total)}`, tip: `Signed in, or used a session, in the last 7 days (sessions refresh at most daily, so to within a day). Of ${num(acc.active.total)} accounts, not counting the admin.` },
     { key: "d30", label: "Seen in 30 days", value: num(acc.active.d30), of: `/ ${num(acc.active.total)}`, tip: `Signed in, or used a session, in the last 30 days. Of ${num(acc.active.total)} accounts, not counting the admin.` },
     { key: "students", label: "Students-only listings", value: num(v.studentsOnly), of: `/ ${num(v.listings)}`, tip: `Listings kept to signed-in students, of all ${num(v.listings)} listings.` },
-    { key: "chose", label: "Posters who chose", value: num(v.chose), of: `/ ${num(v.listings)}`, tip: `Posters who set who sees their listing themselves (My post), of all ${num(v.listings)} listings. ${rate(v.choseStudentsOnly, v.chose)} of them chose students only.` },
   ];
 
   const stat = (label: string, n: number, tip?: string): Stat => ({ label, value: num(n), zero: n === 0, tip });

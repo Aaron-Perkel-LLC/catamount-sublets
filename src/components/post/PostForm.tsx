@@ -7,7 +7,7 @@ import { preconnect } from "react-dom";
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { LIMITS } from "@/config/site";
 import { amenityField, formToListingInput, utilityField, validateListingInput } from "@/lib/listing-input";
-import { posterMayChooseVisibility, SIGNED_OUT_SEE } from "@/lib/visibility-rollout";
+import { SIGNED_OUT_SEE } from "@/lib/visibility";
 import {
   AMENITY_KEYS,
   amenityFormLabel,
@@ -280,8 +280,8 @@ export function PostForm({
         </div>
       </fieldset>
 
-      {/* Who sees it: a new listing, or one posted since the cutoff, is public with no switch; older ones switch on My post. */}
-      {(!r || (!posterMayChooseVisibility(new Date(r.postedAt)) && !r.signedInOnly)) && (
+      {/* Who sees it: every listing is public, unless the admin has kept it to signed-in students (My post says so). */}
+      {(!r || !r.signedInOnly) && (
         <p className="text-sm text-ink-2">Anyone can find your listing without signing in. They see the {SIGNED_OUT_SEE}; signed-in students see everything.</p>
       )}
 

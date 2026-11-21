@@ -334,7 +334,7 @@ export interface AccountMetrics {
   weekly: { day: string; posters: number; seekers: number }[];
   /** Everyone but the admin, and how many were seen (signed in or used a session) in the last 7 and 30 days. */
   active: { total: number; d7: number; d30: number };
-  visibility: { listings: number; studentsOnly: number; chose: number; choseStudentsOnly: number };
+  visibility: { listings: number; studentsOnly: number };
 }
 
 export async function accountMetrics(db: DbOrTx, r: ResolvedRange): Promise<AccountMetrics> {
@@ -361,12 +361,7 @@ export async function accountMetrics(db: DbOrTx, r: ResolvedRange): Promise<Acco
             count(*) filter (where at >= now() - interval '30 days')::int as d30
           from seen`,
     ),
-    one<{ n: number; so: number; chose: number; chose_so: number }>(
-      db,
-      sql`select count(*)::int as n, count(*) filter (where ${listings.signedInOnly})::int as so,
-            count(*) filter (where ${listings.visibilityChosenAt} is not null)::int as chose,
-            count(*) filter (where ${listings.visibilityChosenAt} is not null and ${listings.signedInOnly})::int as chose_so
-          from ${listings}`,
+    one<{ n: number; so: number }>(db, sql`select count(*)::int as n, count(*) filter (where ${listings.signedInOnly})::int as so from ${listings}`,
     ),
   ]);
   const map = new Map(bucketKeys(r.chartFrom, r.to, r.bucket).map((day) => [day, { day, posters: 0, seekers: 0 }]));
@@ -380,7 +375,7 @@ export async function accountMetrics(db: DbOrTx, r: ResolvedRange): Promise<Acco
   return {
     weekly: [...map.values()],
     active: { total: Number(active.total), d7: Number(active.d7), d30: Number(active.d30) },
-    visibility: { listings: Number(vis.n), studentsOnly: Number(vis.so), chose: Number(vis.chose), choseStudentsOnly: Number(vis.chose_so) },
+    visibility: { listings: Number(vis.n), studentsOnly: Number(vis.so) },
   };
 }
 

@@ -19,7 +19,7 @@ import { log } from "@/server/log";
  * paces itself, so a code is never queued behind a bulk send.
  */
 
-export type MailKind = "login_code" | "admin_notice" | "access_request" | "welcome" | "survey_invite" | "email_direct" | "email_group" | "outcome_ask" | "stale_notice" | "digest";
+export type MailKind = "login_code" | "admin_notice" | "access_request" | "welcome" | "survey_invite" | "email_direct" | "email_group" | "outcome_ask" | "digest";
 
 /**
  * Print instead of send only on a developer's machine. On Vercel (preview or
@@ -60,7 +60,7 @@ export const sentInTests: { to: string; subject: string; kind: MailKind; text: s
 export function senderFor(kind: MailKind): string {
   if (kind === "digest") return SITE.mailFromDigest;
   if (kind === "email_group") return SITE.mailFromGroup;
-  if (kind === "welcome" || kind === "survey_invite" || kind === "email_direct" || kind === "outcome_ask" || kind === "stale_notice") return SITE.mailFromPersonal;
+  if (kind === "welcome" || kind === "survey_invite" || kind === "email_direct" || kind === "outcome_ask") return SITE.mailFromPersonal;
   if (kind === "admin_notice" || kind === "access_request") return SITE.mailFromNotices;
   return SITE.mailFrom;
 }
@@ -112,7 +112,7 @@ export function unsubscribeHeaders(kind: MailKind, oneClickUrl?: string): Record
   const mailto = `<mailto:${SITE.supportEmail}?subject=unsubscribe>`;
   if (oneClickUrl) return { "List-Unsubscribe": `<${oneClickUrl}>, ${mailto}`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" };
   // Relationship mail still says how to stop it; a code does not need the header.
-  if (kind === "welcome" || kind === "survey_invite" || kind === "outcome_ask" || kind === "stale_notice") return { "List-Unsubscribe": mailto };
+  if (kind === "welcome" || kind === "survey_invite" || kind === "outcome_ask") return { "List-Unsubscribe": mailto };
   return {};
 }
 

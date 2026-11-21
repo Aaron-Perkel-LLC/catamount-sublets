@@ -18,7 +18,7 @@ export const runtime = "nodejs";
  * are marked failed, and weekly-digest sends left pending a day (past the
  * catch-up runs and Resend's 24-hour idempotency window), also failed.
  * And the approximate area for any listing without one (fillMissingAreas:
- * it needs APP_SECRET, so it runs here, not in `npm run go-public`).
+ * it needs APP_SECRET, so it runs here).
  * Nothing user-visible is touched.
  */
 export async function GET(request: Request) {

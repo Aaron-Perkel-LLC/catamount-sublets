@@ -122,7 +122,7 @@ describe("the public projection", () => {
   });
 });
 
-describe("Only show to signed-in students", () => {
+describe("kept to signed-in students (the admin's Seen by)", () => {
   it("takes the listing off the signed-out board, sitemap and direct URL, and leaves its share link working", async () => {
     await setListingVisibility(db, secretId, admin, true);
     try {
@@ -150,7 +150,7 @@ describe("Only show to signed-in students", () => {
   });
 
   it("is checked against the owner: someone else's listing does not change", async () => {
-    expect(await setListingVisibility(db, secretId, { userId: viewerId, isAdmin: false }, true)).toBe("not-found");
+    expect(await setListingVisibility(db, secretId, { userId: viewerId, isAdmin: false }, true)).toBe(false);
     expect(await publicListingById(db, secretId)).not.toBeNull();
   });
 });

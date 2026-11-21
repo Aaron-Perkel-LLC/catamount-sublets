@@ -14,8 +14,7 @@ const LABEL_ROW = `${FIELD_LABEL} md:flex-row md:items-center md:gap-2`;
 /**
  * The admin's strip at the top of a listing view: its status, who can see
  * it, its photos in the Photos section, and delete. What was the Posts tab's
- * row. The admin may change any listing's audience; that is not recorded as
- * the poster's choice (src/lib/visibility-rollout.ts).
+ * row. Only the admin can change a listing's audience; posters have no switch.
  */
 export function AdminPostActions({ listing, close }: { listing: ListingDto; close: () => void }) {
   const router = useRouter();

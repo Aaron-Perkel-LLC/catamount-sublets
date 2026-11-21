@@ -1,11 +1,10 @@
-import { and, asc, eq, inArray, isNull, lt, max, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, max, ne, sql } from "drizzle-orm";
 import { LIMITS } from "@/config/site";
 import type { DbOrTx } from "@/db";
 import { listingPhotos, listings, listingSemesters, semesters, user } from "@/db/schema";
 import type { ListingInput } from "@/lib/listing-input";
 import type { ListingStatus } from "@/lib/options";
 import { sortSemesters } from "@/lib/semesters";
-import { posterMayChooseVisibility, PUBLIC_BY_DEFAULT_SINCE } from "@/lib/visibility-rollout";
 import type { ProcessedPhoto } from "@/server/images/process";
 import { fuzzedArea } from "@/server/geo-fuzz";
 import { posterColumns, shownName } from "./names";
@@ -135,38 +134,26 @@ export async function updateListing(
 }
 
 /**
- * Show the listing to signed-out visitors too, or keep it to signed-in
- * students, and work out its area if it has none yet (a listing from before
- * signed-out browsing). A poster may do this only for a listing posted
- * before PUBLIC_BY_DEFAULT_SINCE ("locked" otherwise, checked in the UPDATE
- * itself too), and their call is recorded as visibility_chosen_at, even when
- * it keeps the setting as it was ("Only show to signed-in students" on the pending notice). An admin may do it
- * for any listing, and records no choice. "not-found" when it is not the actor's.
+ * The admin's "Seen by": show the listing to signed-out visitors too, or keep
+ * it to signed-in students, and work out its area if it has none yet. Posters
+ * have no switch. False when there is no such listing.
  */
-export async function setListingVisibility(
-  db: DbOrTx,
-  listingId: number,
-  actor: Actor,
-  signedInOnly: boolean,
-  now: Date = new Date(),
-): Promise<"ok" | "not-found" | "locked"> {
-  const [row] = await db.select({ lat: listings.lat, lon: listings.lon, postedAt: listings.postedAt }).from(listings).where(owned(listingId, actor));
-  if (!row) return "not-found";
-  if (!actor.isAdmin && !posterMayChooseVisibility(row.postedAt)) return "locked";
+export async function setListingVisibility(db: DbOrTx, listingId: number, actor: Actor, signedInOnly: boolean, now: Date = new Date()): Promise<boolean> {
+  const [row] = await db.select({ lat: listings.lat, lon: listings.lon }).from(listings).where(owned(listingId, actor));
+  if (!row) return false;
   const rows = await db
     .update(listings)
-    .set({ signedInOnly, ...areaColumns(row.lat, row.lon), updatedAt: now, ...(actor.isAdmin ? {} : { visibilityChosenAt: now }) })
-    .where(actor.isAdmin ? owned(listingId, actor) : and(owned(listingId, actor), lt(listings.postedAt, PUBLIC_BY_DEFAULT_SINCE)))
+    .set({ signedInOnly, ...areaColumns(row.lat, row.lon), updatedAt: now })
+    .where(owned(listingId, actor))
     .returning({ id: listings.id });
-  return rows.length > 0 ? "ok" : "not-found";
+  return rows.length > 0;
 }
 
 /**
- * Work out the approximate area for listings that have none: every listing
- * 0010 made signed-in only, and anything written by code from before it. The
- * area needs APP_SECRET, which only the deployment has, so the daily sweep
- * runs this; it is what lets `npm run go-public` (run locally) put a listing
- * on the signed-out board. A missing area keeps a listing off it (fails closed).
+ * Work out the approximate area for any listing that has none (every write
+ * sets it, so this is a backstop). The area needs APP_SECRET, which only the
+ * deployment has, so the daily sweep runs this. A missing area keeps a
+ * listing off the signed-out board (fails closed).
  */
 export async function fillMissingAreas(db: DbOrTx, limit = 500): Promise<number> {
   const rows = await db.select({ id: listings.id, lat: listings.lat, lon: listings.lon }).from(listings).where(isNull(listings.areaLat)).limit(limit);

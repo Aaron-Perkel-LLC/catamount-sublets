@@ -12,7 +12,6 @@ import {
   photoOpFor,
   saveListingFor,
   setStatusFor,
-  setVisibilityFor,
   type AttachResult,
   type PhotosResult,
   type SaveState,
@@ -35,14 +34,6 @@ export async function saveListing(_prev: SaveState, formData: FormData): Promise
 export async function setMyListingStatus(status: ListingStatus): Promise<{ ok: boolean; error?: string }> {
   const user = await requireUserOrThrow();
   const result = await setStatusFor(await getDb(), user, status);
-  if (result.ok) revalidate();
-  return result;
-}
-
-/** "Only show to signed-in students" from My post (the form saves it too). */
-export async function setMyListingVisibility(signedInOnly: boolean): Promise<{ ok: boolean; error?: string }> {
-  const user = await requireUserOrThrow();
-  const result = await setVisibilityFor(await getDb(), user, signedInOnly);
   if (result.ok) revalidate();
   return result;
 }

@@ -30,7 +30,6 @@ export interface AdminPost {
   /** On the board right now (publicListingWhere: visible, open, has a photo, poster not banned). */
   onBoard: boolean;
   signedInOnly: boolean;
-  visibilityChosen: boolean;
   photos: number;
   postedAt: Date;
   confirmedAvailableAt: Date | null;
@@ -55,7 +54,6 @@ export async function adminPosts(db: DbOrTx): Promise<AdminPost[]> {
       hidden: sql<boolean>`not (${visibleSemesterWhere()})`,
       onBoard: sql<boolean>`(${publicListingWhere()})`,
       signedInOnly: listings.signedInOnly,
-      visibilityChosenAt: listings.visibilityChosenAt,
       photos: sql<number>`(select count(*) from ${listingPhotos} p where p.listing_id = ${listings.id})::int`,
       postedAt: listings.postedAt,
       confirmedAvailableAt: listings.confirmedAvailableAt,
@@ -65,13 +63,12 @@ export async function adminPosts(db: DbOrTx): Promise<AdminPost[]> {
     .innerJoin(user, eq(user.id, listings.userId))
     .orderBy(desc(listings.id));
   const sems = await listingSemestersByListing(db, rows.map((p) => p.id));
-  return rows.map(({ poster, displayName, address, visibilityChosenAt, ...p }) => {
+  return rows.map(({ poster, displayName, address, ...p }) => {
     const list = sems.get(p.id) ?? [];
     return {
       ...p,
       hidden: Boolean(p.hidden),
       onBoard: Boolean(p.onBoard),
-      visibilityChosen: visibilityChosenAt !== null,
       ownerName: shownName({ displayName }, poster, p.ownerEmail),
       shortAddress: formatAddress(address),
       semesterLabel: labelFor(list, false).label,

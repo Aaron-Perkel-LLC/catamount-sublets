@@ -243,14 +243,9 @@ export async function adminSetStatus(db: Db, listingId: number, status: ListingS
   return ok(undefined);
 }
 
-/**
- * Any listing's audience, whenever it was posted. Records no choice for the
- * poster (visibility_chosen_at is theirs), so a listing 0010 made signed-in
- * only that an admin keeps that way is still one `npm run go-public` makes public.
- */
+/** Any listing's audience: public, or kept to signed-in students (on a poster's request; they have no switch). */
 export async function adminSetVisibility(db: Db, listingId: number, signedInOnly: boolean): Promise<Result> {
-  const result = await setListingVisibility(db, listingId, { userId: "", isAdmin: true }, signedInOnly);
-  if (result !== "ok") return fail("No such listing.");
+  if (!(await setListingVisibility(db, listingId, { userId: "", isAdmin: true }, signedInOnly))) return fail("No such listing.");
   log.info("listing.visibility", { listingId, signedInOnly, by: "admin" });
   return ok(undefined);
 }

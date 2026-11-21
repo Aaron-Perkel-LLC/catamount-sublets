@@ -39,8 +39,6 @@ export const emailAudience = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("semester"), code: z.string().trim().min(1).max(40) }),
   z.object({ kind: z.literal("everyone") }),
   z.object({ kind: z.literal("survey") }),
-  /** Posters brought over from the old site who have never signed in here and still have a listing: who the stale-listing cleanup removes (src/server/data/stale.ts). */
-  z.object({ kind: z.literal("stale") }),
   z.object({ kind: z.literal("people"), userIds: z.array(z.string().uuid()).max(EMAIL_LIMITS.people) }),
 ]);
 export type EmailAudience = z.infer<typeof emailAudience>;
@@ -90,8 +88,6 @@ export function audienceLabel(a: EmailAudience, semesterNames: ReadonlyMap<strin
       return "Everyone with an account";
     case "survey":
       return "Haven't answered the survey";
-    case "stale":
-      return "Posters who haven't signed in since the move";
     case "people":
       return a.userIds.length === 1 ? "1 hand-picked person" : `${a.userIds.length} hand-picked people`;
   }

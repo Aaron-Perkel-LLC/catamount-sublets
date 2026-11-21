@@ -137,7 +137,7 @@ export function EmailComposer({ id, initial, initialCheck, semesters, people, re
     if (v === "one") edit({ audience: { kind: "address", email: "" } });
     else if (v === "picked") edit({ audience: { kind: "people", userIds: [] } });
     else if (v.startsWith("sem:")) edit({ audience: { kind: "semester", code: v.slice(4) } });
-    else edit({ audience: { kind: v as "board" | "everyone" | "survey" | "stale" } });
+    else edit({ audience: { kind: v as "board" | "everyone" | "survey" } });
   };
   const pickStarter = (s: ReplyStarter) => {
     if (!request) return;
@@ -229,7 +229,6 @@ export function EmailComposer({ id, initial, initialCheck, semesters, people, re
                 ))}
                 <option value="everyone">Everyone with an account</option>
                 <option value="survey">Haven&apos;t answered the survey</option>
-                <option value="stale">Posters who haven&apos;t signed in since the move</option>
                 <option value="picked">Hand-picked…</option>
               </select>
             )}

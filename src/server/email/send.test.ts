@@ -34,7 +34,7 @@ describe("apiKeyFor", () => {
       expect(apiKeyFor("digest", undefined)).toEqual({ key: undefined, name: "RESEND_DIGEST_API_KEY" });
       expect(senderFor("email_group")).toContain(`@${SITE.mailDigestDomain}>`);
       expect(apiKeyFor("email_group", "re_updates")).toEqual({ key: "re_updates", name: "RESEND_DIGEST_API_KEY" });
-      for (const kind of ["login_code", "admin_notice", "access_request", "welcome", "survey_invite", "email_direct", "outcome_ask", "stale_notice"] as const)
+      for (const kind of ["login_code", "admin_notice", "access_request", "welcome", "survey_invite", "email_direct", "outcome_ask"] as const)
         expect(apiKeyFor(kind, "re_updates"), kind).toEqual({ key: "re_root", name: "RESEND_API_KEY" });
     } finally {
       vi.unstubAllEnvs();

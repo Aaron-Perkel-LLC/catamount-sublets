@@ -17,8 +17,8 @@ import {
  * the limits it only enforced in the browser.
  *
  * Who can see the listing is not here: the form never sets it (a stray
- * signedInOnly field is dropped). A new listing is public; a poster whose
- * listing predates that switches it on My post (setVisibilityFor).
+ * signedInOnly field is dropped). Every listing is public unless the admin
+ * keeps it to signed-in students (adminSetVisibility).
  */
 
 /**

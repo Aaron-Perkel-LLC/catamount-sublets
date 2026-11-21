@@ -7,7 +7,7 @@ import { SITE_TIME_ZONE } from "@/lib/dates";
 export const metadata: Metadata = { title: `Privacy · ${SITE.name}`, alternates: { canonical: "/privacy" } };
 
 /** Bump whenever this page changes what it says. */
-const LAST_UPDATED = "2026-11-19";
+const LAST_UPDATED = "2026-11-21";
 
 /** What the site keeps, who sees it, and how to get rid of it. Plain words, no legalese. */
 export default async function PrivacyPage({ searchParams }: { searchParams: Promise<{ from?: string | string[] }> }) {
@@ -106,14 +106,12 @@ export default async function PrivacyPage({ searchParams }: { searchParams: Prom
           search engine&apos;s own copy can take longer to go.
         </p>
         <p>
-          A listing posted since November 17, 2026 is public in this way, and its poster has no switch to change that: only the
-          site&apos;s admin can keep one to signed-in students, so email{" "}
+          Every listing is public in this way, and its poster has no switch to change that: only the site&apos;s admin can keep one to
+          signed-in students, so email{" "}
           <a href={`mailto:${SITE.supportEmail}`} className="link">
             {SITE.supportEmail}
           </a>{" "}
-          to ask. A listing posted before then has a switch on its post page, &quot;Only show to signed-in students&quot;, which its poster
-          can turn on or off at any time. From November 21, 2026 those older listings are public too unless that switch is on; their
-          posters were emailed about it on November 17.
+          to ask.
         </p>
         <p>
           A share link and its preview show the listing&apos;s first photo, the price and whether it is negotiable, the semester, size and

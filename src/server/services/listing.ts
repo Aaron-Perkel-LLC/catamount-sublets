@@ -15,7 +15,6 @@ import {
   photoOwner,
   setCoverPhoto,
   setListingStatus,
-  setListingVisibility,
   updateListing,
   type PhotoRow,
 } from "@/server/data/my-listing";
@@ -106,34 +105,6 @@ export async function setStatusFor(db: Db, user: ServiceUser, status: ListingSta
       const snap = await listingSnapshot(db, mine.row.id);
       if (snap) await noticeStatus(snap, status, "poster");
     }
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, error: friendlyError(error) };
-  }
-}
-
-export const VISIBILITY_LOCKED_ERROR = "Listings posted since signed-out browsing opened are visible to everyone, without your name, contact, address, pin, title or description.";
-
-/**
- * The My post switch: show the listing to signed-out visitors (without its
- * address) or keep it to signed-in students, recording that the poster chose.
- * Refused for a listing posted from PUBLIC_BY_DEFAULT_SINCE on, whatever the
- * page showed (src/lib/visibility-rollout.ts); acts as the poster even for an
- * admin's own listing (the admin strip is the admin's switch).
- */
-export async function setVisibilityFor(db: Db, user: ServiceUser, signedInOnly: unknown): Promise<{ ok: boolean; error?: string }> {
-  try {
-    await assertWritable(db);
-    const flag = z.boolean().parse(signedInOnly);
-    const mine = await myListing(db, user.id);
-    if (!mine) return { ok: false, error: "You don't have a listing yet." };
-    const result = await setListingVisibility(db, mine.row.id, { userId: user.id, isAdmin: false }, flag);
-    if (result === "locked") {
-      log.warn("listing.visibility_refused", { listingId: mine.row.id });
-      return { ok: false, error: VISIBILITY_LOCKED_ERROR };
-    }
-    if (result === "not-found") return { ok: false, error: "You don't have a listing yet." };
-    log.info("listing.visibility", { listingId: mine.row.id, signedInOnly: flag, by: "poster" });
     return { ok: true };
   } catch (error) {
     return { ok: false, error: friendlyError(error) };
