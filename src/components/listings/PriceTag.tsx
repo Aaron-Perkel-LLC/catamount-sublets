@@ -2,8 +2,9 @@ import { priceLines, type PriceFacts } from "@/lib/price";
 
 /**
  * A listing's price in the listing view (signed in and out): the figure the
- * poster typed and its unit ("$850/mo", "$3,200 total"), the other figure
- * under it for several rooms ("$800/room", "4 rooms"), and "or best offer".
+ * poster typed and its unit ("$850/mo", "$800/room", "$3,200 total"), the
+ * per-room figure under a total ("$800/room"), and "or best offer". The
+ * room count is the size chip's job, so it isn't repeated here.
  * No hooks, so it renders on the server and in the dialog alike.
  */
 export function PriceTag({ listing }: { listing: PriceFacts & { priceNegotiable: boolean } }) {
@@ -16,7 +17,8 @@ export function PriceTag({ listing }: { listing: PriceFacts & { priceNegotiable:
       {listing.priceNegotiable && <small className="ml-2 text-sm font-normal text-maple-ink">or best offer</small>}
     </span>
   );
-  if (!p.sub) return price;
+  // "4 rooms" under a per-room price says what the size chip beside it already says; a total keeps its "$800/room".
+  if (!p.sub || p.unit === "/room") return price;
   return (
     <span className="flex flex-col">
       {price}

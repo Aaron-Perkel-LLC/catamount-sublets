@@ -59,7 +59,8 @@ export function ListingCard({ listing, source }: { listing: BoardListing; source
             {p.main}
             <span className="text-xs font-normal">{p.unit === "total" ? " total" : p.unit}</span>
           </span>
-          {p.sub && <span className="text-xs font-normal">{p.sub}</span>}
+          {/* Under a total only: "4 rooms" is already the chip below. */}
+          {p.sub && p.unit !== "/room" && <span className="text-xs font-normal">{p.sub}</span>}
           {listing.priceNegotiable && <span className="text-xs font-normal">or best offer</span>}
         </span>
         <span className="absolute right-2 top-2 rounded-full bg-ink/70 px-2 py-0.5 text-xs font-bold text-paper">{listing.semesterLabel}</span>
