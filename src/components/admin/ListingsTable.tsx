@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ATTENTION, ATTENTION_SHORT, type AttentionFlag } from "@/lib/admin-attention";
 import { shortAge, shortDate } from "@/lib/dates";
+import { formatMoney } from "@/lib/format";
 import { useAdmin } from "./AdminShell";
 import { CsvButton } from "./CsvButton";
 import { type Column, DataTable, Flags, Num } from "./DataTable";
@@ -13,7 +14,7 @@ import type { ListingRowDto } from "./types";
 import { LINK, MUTED, SELECT_SM } from "./ui";
 import { useSort } from "./useSort";
 
-type Key = "listing" | "status" | "price" | "rooms" | "age" | "views" | "contacts" | "rate" | "shares" | "confirmed";
+type Key = "listing" | "status" | "price" | "age" | "views" | "contacts" | "rate" | "shares" | "confirmed";
 /** Contacts over views in the range, as a whole percent, at most 100 (the two are counted apart, so a contact can follow a view from before the range); null with no views to divide by. */
 const rateOf = (r: ListingRowDto) => (r.views > 0 ? Math.min(100, Math.round((r.contacts / r.views) * 100)) : null);
 const value = (r: ListingRowDto, k: Key) => (k === "listing" ? r.label : k === "status" ? statusText(r) : k === "price" ? r.pricePerRoom : k === "age" ? r.ageDays : k === "rate" ? rateOf(r) : k === "confirmed" ? r.confirmedAvailableAt : r[k]);
@@ -149,8 +150,21 @@ export function ListingsTable({ rows, initialAttention = false }: { rows: Listin
         );
       },
     },
-    { key: "price", header: "Price", numeric: true, sort: "price", cell: (r) => (r.priceText ? <span title={r.pricePerRoom !== null ? `${r.priceText} (sorted per room)` : undefined}>{r.priceText}</span> : null) },
-    { key: "rooms", header: "Rooms", wide: true, sort: "rooms", cell: (r) => (r.deleted ? null : (r.roomsLabel ?? "1")) },
+    // One short column, so the Listing column keeps its room: the per-room price (what the board sorts by) and,
+    // for several rooms, how many; the full price line and size chip on hover and in the CSV.
+    {
+      key: "price",
+      header: "Per room",
+      numeric: true,
+      sort: "price",
+      cell: (r) =>
+        r.pricePerRoom === null ? null : (
+          <span className="whitespace-nowrap" title={[r.priceText, r.roomsLabel].filter(Boolean).join(" · ")}>
+            {formatMoney(r.pricePerRoom)}
+            {r.rooms !== null && r.rooms > 1 && <span className="text-ink-3"> · {r.rooms} rm</span>}
+          </span>
+        ),
+    },
     { key: "semesters", header: "For", wide: true, cell: (r) => (r.semesterShort ? <span title={r.semesterLabel}>{r.semesterShort}</span> : null) },
     { key: "age", header: "Age", numeric: true, sort: "age", cell: (r) => (r.ageDays === null ? null : <span title={r.postedAt ? `Posted ${shortDate(new Date(r.postedAt))}` : undefined}>{shortAge(r.ageDays)}</span>) },
     { key: "views", header: "Views", numeric: true, sort: "views", cell: (r) => <Num n={r.views} /> },

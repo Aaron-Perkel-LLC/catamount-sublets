@@ -181,7 +181,8 @@ export function FilterBar({ mode, query, bounds, semesters, emptySemesters, coun
           </button>
         </div>
 
-        <div className={`grid gap-4 md:grid-cols-3 ${signedOut ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
+        {/* The two sliders side by side, so their tracks line up; the choices in a row under them. */}
+        <div className="grid gap-4 md:grid-cols-2 md:gap-x-8">
           <DualRange
             label="Rent per room"
             min={bounds.minPrice}
@@ -194,6 +195,20 @@ export function FilterBar({ mode, query, bounds, semesters, emptySemesters, coun
             onChange={setPrice}
             onCommit={commit}
           />
+          <SingleRange
+            label="Distance from campus"
+            min={0.25}
+            max={bounds.maxDistance}
+            step={0.25}
+            value={distance}
+            format={(n) => `Within ${n} mi`}
+            anyLabel="Any distance"
+            onChange={setDistance}
+            onCommit={commit}
+          />
+        </div>
+
+        <div className={`mt-4 grid gap-4 md:mt-0 ${signedOut ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-bold">Semester</span>
             <select className="field" value={local.semester ?? ""} onChange={(e) => apply({ ...local, semester: e.target.value || undefined }, true)}>
@@ -232,7 +247,7 @@ export function FilterBar({ mode, query, bounds, semesters, emptySemesters, coun
             <span id="rooms-filter" className="font-bold">
               Rooms
             </span>
-            <div className="flex rounded-lg border border-line bg-paper p-0.5 font-bold">
+            <div className="flex min-h-11 flex-1 rounded-lg border border-line bg-paper p-0.5 font-bold">
               {([undefined, ...MIN_ROOMS_FILTERS] as const).map((n) => {
                 const on = local.minRooms === n;
                 return (
@@ -250,17 +265,6 @@ export function FilterBar({ mode, query, bounds, semesters, emptySemesters, coun
               })}
             </div>
           </div>
-          <SingleRange
-            label="Distance from campus"
-            min={0.25}
-            max={bounds.maxDistance}
-            step={0.25}
-            value={distance}
-            format={(n) => `Within ${n} mi`}
-            anyLabel="Any distance"
-            onChange={setDistance}
-            onCommit={commit}
-          />
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2 md:mt-0" role="group" aria-label="Must have">
