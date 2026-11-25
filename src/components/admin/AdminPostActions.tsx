@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { LISTING_STATUSES, LISTING_STATUS_VALUES, type ListingStatus } from "@/lib/options";
 import { adminDeleteListing, adminSetListingStatus, adminSetListingVisibility } from "@/server/actions/admin";
 import type { ListingDto } from "@/server/data/listings";
+import { AdminRoomsEditor } from "./AdminRoomsEditor";
 import { goAdmin } from "./go";
 import { BTN_DANGER, FIELD_LABEL, GROUP, LINK, MUTED, SELECT } from "./ui";
 
@@ -13,8 +14,8 @@ const LABEL_ROW = `${FIELD_LABEL} md:flex-row md:items-center md:gap-2`;
 
 /**
  * The admin's strip at the top of a listing view: its status, who can see
- * it, its photos in the Photos section, and delete. What was the Posts tab's
- * row. Only the admin can change a listing's audience; posters have no switch.
+ * it, its photos in the Photos section, delete, and its rooms and price
+ * basis (AdminRoomsEditor). What was the Posts tab's row. Only the admin can change a listing's audience; posters have no switch.
  */
 export function AdminPostActions({ listing, close }: { listing: ListingDto; close: () => void }) {
   const router = useRouter();
@@ -110,6 +111,7 @@ export function AdminPostActions({ listing, close }: { listing: ListingDto; clos
           {note}
         </span>
       )}
+      <AdminRoomsEditor key={listing.id} listing={listing} />
     </div>
   );
 }

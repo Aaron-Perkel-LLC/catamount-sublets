@@ -8,6 +8,7 @@ import { postedAgo, shortDate } from "@/lib/dates";
 import { formatAddress, listingMapLinks } from "@/lib/format";
 import { filterCount, type ListingQuery } from "@/lib/listing-filters";
 import {
+  type PriceBasis,
   AMENITY_FILTERS,
   type AmenityKey,
   type ListingSort,
@@ -34,7 +35,12 @@ import { type Audience, campusDistanceMiles, publicListingWhere, signedOutAudien
 export interface ListingDto {
   audience?: never;
   id: number;
+  /** What the poster typed: per room, or for the whole place (priceBasis). */
   price: number;
+  /** The database's price per room (price_per_room): what filters and sorts compare. */
+  pricePerRoom: number;
+  priceBasis: PriceBasis;
+  roomsAvailable: number;
   priceNegotiable: boolean;
   address: string;
   shortAddress: string;
@@ -91,13 +97,16 @@ const AMENITY_COLUMNS: Record<AmenityKey, PgColumn> = {
  * The WHERE for Browse and Map: visibility plus every filter in use. Signed
  * out, only listings their posters show publicly, `distance` must be the
  * area's (campusDistanceMiles("signed-out")), and "Open to" is ignored: it
- * would reveal roommate preferences, which are signed-in only.
+ * would reveal roommate preferences, which are signed-in only. Price always
+ * compares the per-room price (price_per_room), so a $3,200 house of four
+ * rooms is an $800 listing here; rooms and roommates are public, so their
+ * filters apply signed out too.
  */
 export function listingFilterWhere(q: ListingQuery, distance: SQL<number>, audience: Audience = "signed-in"): SQL {
   const parts: (SQL | undefined)[] = [publicListingWhere()];
   if (audience === "signed-out") parts.push(signedOutAudienceWhere());
   if (q.minPrice !== undefined && q.maxPrice !== undefined) {
-    parts.push(gte(listings.price, q.minPrice), lte(listings.price, q.maxPrice));
+    parts.push(gte(listings.pricePerRoom, q.minPrice), lte(listings.pricePerRoom, q.maxPrice));
   }
   if (q.semester) {
     parts.push(
@@ -112,6 +121,9 @@ export function listingFilterWhere(q: ListingQuery, distance: SQL<number>, audie
     parts.push(or(...flags.map((f) => eq(AMENITY_COLUMNS[f], true))));
   }
   if (q.negotiable) parts.push(eq(listings.priceNegotiable, true));
+  if (q.minRooms !== undefined) parts.push(gte(listings.roomsAvailable, q.minRooms));
+  // Blank roommates never match: "no roommates" means the poster said 0.
+  if (q.noRoommates) parts.push(eq(listings.roommates, 0));
   if (q.openTo && audience === "signed-in") {
     const prefs = OPEN_TO_FILTERS[q.openTo].prefs;
     parts.push(or(eq(listings.roommatePreference, ""), inArray(listings.roommatePreference, [...prefs])));
@@ -124,9 +136,9 @@ export function orderFor(sort: ListingSort, distance: SQL<number>): SQL[] {
     case "oldest":
       return [asc(listings.id)];
     case "price_asc":
-      return [asc(listings.price), desc(listings.id)];
+      return [asc(listings.pricePerRoom), desc(listings.id)];
     case "price_desc":
-      return [desc(listings.price), desc(listings.id)];
+      return [desc(listings.pricePerRoom), desc(listings.id)];
     case "closest":
       return [asc(distance), desc(listings.id)];
     default:
@@ -226,10 +238,13 @@ async function toDtos(db: DbOrTx, rows: Row[], viewerId: string | null): Promise
     const gender = l.roommateGender as RoommateGender;
     const pref = l.roommatePreference as RoommatePreference;
     return {
-      row: { amenities, roommatePreference: pref },
+      row: { amenities, roommatePreference: pref, roomsAvailable: l.roomsAvailable, bedrooms: l.bedrooms, roommates: l.roommates },
       dto: {
         id: l.id,
         price: l.price,
+        pricePerRoom: l.pricePerRoom,
+        priceBasis: l.priceBasis as PriceBasis,
+        roomsAvailable: l.roomsAvailable,
         priceNegotiable: l.priceNegotiable,
         address: l.address,
         shortAddress: formatAddress(l.address),
@@ -304,15 +319,16 @@ export interface FilterBounds {
 
 /**
  * Slider bounds from the listings people can actually see, so a hidden or
- * paused listing cannot stretch a slider. Prices to the nearest $50, distance
- * to the nearest half mile; defaults when the board is empty.
+ * paused listing cannot stretch a slider. Per-room prices (what the slider
+ * filters) to the nearest $50, distance to the nearest half mile; defaults
+ * when the board is empty.
  */
 export async function filterBounds(db: DbOrTx, audience: Audience = "signed-in"): Promise<FilterBounds> {
   const distance = campusDistanceMiles(audience);
   const [row] = await db
     .select({
-      min: sql<number | null>`min(${listings.price})::float`,
-      max: sql<number | null>`max(${listings.price})::float`,
+      min: sql<number | null>`min(${listings.pricePerRoom})::float`,
+      max: sql<number | null>`max(${listings.pricePerRoom})::float`,
       dist: sql<number | null>`max(${distance})::float`,
     })
     .from(listings)

@@ -6,6 +6,8 @@ import type { ListingRowDto } from "@/components/admin/types";
 import { attentionFlags } from "@/lib/admin-attention";
 import { daysBetweenDates, easternDate } from "@/lib/dates";
 import { formatAddress } from "@/lib/format";
+import type { PriceBasis } from "@/lib/options";
+import { priceLines, roomsChip } from "@/lib/price";
 import { semesterSpan } from "@/lib/semesters";
 import type { ListingNumbers } from "./admin-metrics";
 import { labelFor, listingSemestersByListing } from "./semesters";
@@ -23,7 +25,13 @@ export interface AdminPost {
   ownerEmail: string;
   ownerName: string | null;
   shortAddress: string;
-  price: number;
+  /** The per-room price (price_per_room): what the board sorts and filters by. */
+  pricePerRoom: number;
+  /** "$850/mo", "$3,200 total · $800/room" (priceLines). */
+  priceText: string;
+  roomsAvailable: number;
+  /** "Whole place · 4 BR", "3 rooms", or null for one room (roomsChip). */
+  roomsLabel: string | null;
   status: string;
   /** Not on a visible semester. */
   hidden: boolean;
@@ -50,6 +58,11 @@ export async function adminPosts(db: DbOrTx): Promise<AdminPost[]> {
       displayName: listings.displayName,
       address: listings.address,
       price: listings.price,
+      pricePerRoom: listings.pricePerRoom,
+      priceBasis: listings.priceBasis,
+      roomsAvailable: listings.roomsAvailable,
+      bedrooms: listings.bedrooms,
+      roommates: listings.roommates,
       status: listings.status,
       hidden: sql<boolean>`not (${visibleSemesterWhere()})`,
       onBoard: sql<boolean>`(${publicListingWhere()})`,
@@ -63,10 +76,12 @@ export async function adminPosts(db: DbOrTx): Promise<AdminPost[]> {
     .innerJoin(user, eq(user.id, listings.userId))
     .orderBy(desc(listings.id));
   const sems = await listingSemestersByListing(db, rows.map((p) => p.id));
-  return rows.map(({ poster, displayName, address, ...p }) => {
+  return rows.map(({ poster, displayName, address, price, priceBasis, bedrooms, roommates, ...p }) => {
     const list = sems.get(p.id) ?? [];
     return {
       ...p,
+      priceText: priceLines({ price, pricePerRoom: p.pricePerRoom, priceBasis: priceBasis as PriceBasis, roomsAvailable: p.roomsAvailable }).text,
+      roomsLabel: roomsChip({ roomsAvailable: p.roomsAvailable, bedrooms, roommates }),
       hidden: Boolean(p.hidden),
       onBoard: Boolean(p.onBoard),
       ownerName: shownName({ displayName }, poster, p.ownerEmail),
@@ -91,6 +106,10 @@ export function listingRows(posts: AdminPost[], numbers: Map<number, ListingNumb
       id: p.id,
       label: p.shortAddress,
       deleted: false,
+      pricePerRoom: p.pricePerRoom,
+      priceText: p.priceText,
+      rooms: p.roomsAvailable,
+      roomsLabel: p.roomsLabel,
       ownerId: p.ownerId,
       ownerName: p.ownerName,
       ownerEmail: p.ownerEmail,
@@ -116,7 +135,7 @@ export function listingRows(posts: AdminPost[], numbers: Map<number, ListingNumb
   });
   for (const [id, n] of numbers) {
     if (live.has(id) || (n.views === 0 && n.contacts === 0 && n.shares === 0 && n.arrivals === 0)) continue;
-    rows.push({ id, label: `Deleted #${id}`, deleted: true, ownerId: null, ownerName: null, ownerEmail: null, status: "deleted", onBoard: false, hidden: false, studentsOnly: false, semesterLabel: "", semesterShort: "", firstSemester: null, postedAt: null, ageDays: null, confirmedAvailableAt: null, photos: 0, ...n, flags: [] });
+    rows.push({ id, label: `Deleted #${id}`, deleted: true, pricePerRoom: null, priceText: null, rooms: null, roomsLabel: null, ownerId: null, ownerName: null, ownerEmail: null, status: "deleted", onBoard: false, hidden: false, studentsOnly: false, semesterLabel: "", semesterShort: "", firstSemester: null, postedAt: null, ageDays: null, confirmedAvailableAt: null, photos: 0, ...n, flags: [] });
   }
   return rows;
 }

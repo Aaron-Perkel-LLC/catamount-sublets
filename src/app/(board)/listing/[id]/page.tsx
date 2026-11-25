@@ -7,7 +7,7 @@ import { ViewBeacon } from "@/components/listings/ViewBeacon";
 import { SITE } from "@/config/site";
 import { getDb } from "@/db";
 import { formatMiles } from "@/lib/distance-format";
-import { formatMoney } from "@/lib/format";
+import { priceLines, roomsChip } from "@/lib/price";
 import { getSessionUser } from "@/server/auth";
 import { publicListingById, type PublicListing } from "@/server/data/public-listings";
 
@@ -27,8 +27,11 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   if (await getSessionUser()) return {};
   const l = await publicListing((await params).id);
   if (!l) return { title: `Listing not found · ${SITE.name}`, robots: { index: false, follow: false } };
-  const title = `${l.title} · ${formatMoney(l.price)}/mo · ${l.semesterLabel}`;
-  const description = [`${l.sizeSummary || "Sublet"} in ${l.neighborhood}`, formatMiles(l.distanceMi), `${formatMoney(l.price)} a month${l.priceNegotiable ? ", negotiable" : ""}`, l.semesterLabel]
+  const price = priceLines(l);
+  const chip = roomsChip(l);
+  const title = `${l.title} · ${price.text} · ${l.semesterLabel}`;
+  const size = [chip, l.sizeSummary].filter(Boolean).join(" · ") || "Sublet";
+  const description = [`${size} in ${l.neighborhood}`, formatMiles(l.distanceMi), `${price.sub ? price.text : `${price.main} a month`}${l.priceNegotiable ? ", negotiable" : ""}`, l.semesterLabel]
     .filter(Boolean)
     .join(" · ");
   const image = l.photos[0]?.display;

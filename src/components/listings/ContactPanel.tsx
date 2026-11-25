@@ -4,7 +4,7 @@ import { ArrowLeft, Copy, Mail, MessageSquare, Phone } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SITE } from "@/config/site";
 import { copyToClipboard } from "@/lib/clipboard";
-import { formatMoney } from "@/lib/format";
+import { priceLines } from "@/lib/price";
 import type { EventSource, EventType } from "@/lib/options";
 import { track } from "@/lib/track";
 import { fetchContactDetails } from "@/server/actions/listings";
@@ -164,7 +164,7 @@ export function emailDraft(listing: ListingDto, details: ContactDetails, viewer:
   const semester = listing.semesterLabel ? `, ${listing.semesterLabel}` : "";
   return (
     `${greeting}\n\n` +
-    `I found your sublet at ${listing.shortAddress} on ${SITE.name} (${formatMoney(listing.price)}/mo${semester}) and I’m interested. ` +
+    `I found your sublet at ${listing.shortAddress} on ${SITE.name} (${priceLines(listing).text}${semester}) and I’m interested. ` +
     `Is it still available? I’d love to hear a bit more about it, and to see it if that works for you.\n\n` +
     `Thanks!${viewer.signature ? `\n${viewer.signature}` : ""}`
   );

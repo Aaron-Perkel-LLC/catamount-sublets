@@ -4,7 +4,6 @@ import { Mail, MoreHorizontal, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import { shortDate } from "@/lib/dates";
-import { formatMoney } from "@/lib/format";
 import { LISTING_STATUSES, type ListingStatus } from "@/lib/options";
 import { highlightParts, PEOPLE_QUERY_MAX } from "@/lib/people-search";
 import { adminDeletePerson, adminSearchPeople, adminSetBanned, adminSetNoEmail } from "@/server/actions/admin";
@@ -144,7 +143,7 @@ export function PeopleTab({
         p.post ? (
           <span className="flex flex-wrap items-center gap-1.5 max-md:justify-end">
             <button type="button" onClick={() => onOpenPost(p.post!.id)} className={`${LINK} tabular-nums whitespace-nowrap`} title={`${p.post.shortAddress} · ${p.post.semesterLabel}`}>
-              #{p.post.id} · {formatMoney(p.post.price)}
+              #{p.post.id} · {p.post.priceText}
             </button>
             {p.post.status !== "open" && <Pill tone={p.post.status === "taken" ? "info" : "muted"}>{LISTING_STATUSES[p.post.status as ListingStatus] ?? p.post.status}</Pill>}
             {p.post.hidden && <Pill tone="warn">Hidden</Pill>}

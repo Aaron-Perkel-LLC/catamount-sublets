@@ -23,6 +23,9 @@ interface SeedListing {
   displayName: string;
   price: number;
   negotiable?: boolean;
+  /** Rooms sublet (default 1) and whether `price` is per room or for all of them. */
+  roomsAvailable?: number;
+  priceBasis?: "room" | "total";
   address: string;
   lat: number;
   lon: number;
@@ -151,6 +154,40 @@ const LISTINGS: SeedListing[] = [
     amenities: { amenityDishwasher: true, amenityLaundryFree: true },
     photos: 2,
   },
+  {
+    email: `seed7@${ALLOWED_EMAIL_DOMAINS[0]}`,
+    displayName: "Morgan",
+    price: 3200,
+    roomsAvailable: 4,
+    priceBasis: "total",
+    address: "88 Buell St, Burlington",
+    lat: 44.4791,
+    lon: -73.2034,
+    semesters: ["spring27"],
+    bedrooms: 4,
+    bathrooms: 2,
+    roommates: 0,
+    description: "All four of us are going abroad, so the whole house is up for spring. Great for a group of friends.",
+    amenities: { amenityLaundryFree: true, amenityFurnished: true, amenityFreeParking: true },
+    photos: 3,
+  },
+  {
+    email: `seed8@${ALLOWED_EMAIL_DOMAINS[0]}`,
+    displayName: "Riley",
+    price: 725,
+    roomsAvailable: 3,
+    address: "21 Brookes Ave, Burlington",
+    lat: 44.4802,
+    lon: -73.1998,
+    semesters: ["spring27", "summer27"],
+    bedrooms: 5,
+    bathrooms: 2,
+    roommates: 2,
+    roommateGender: "mixed",
+    description: "Three of the five rooms are free; two of us are staying. Each room is the same size.",
+    amenities: { amenityDishwasher: true },
+    photos: 2,
+  },
 ];
 
 async function main() {
@@ -190,6 +227,8 @@ async function main() {
           userId,
           price: l.price,
           priceNegotiable: l.negotiable ?? false,
+          roomsAvailable: l.roomsAvailable ?? 1,
+          priceBasis: l.priceBasis ?? "room",
           address: l.address,
           lat: l.lat,
           lon: l.lon,

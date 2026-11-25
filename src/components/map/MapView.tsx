@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { CAMPUS } from "@/config/site";
 import { pinGroupKey } from "@/lib/distance";
 import { formatMoney } from "@/lib/format";
+import { isMultiRoom, priceLines, roomsChip } from "@/lib/price";
 import { circleRing } from "@/lib/geo-fuzz";
 import { track } from "@/lib/track";
 import { type BoardListing, headingOf, isPublicListing, pointOf } from "../listings/board-listing";
@@ -131,14 +132,16 @@ export default function MapView({ listings }: { listings: BoardListing[] }) {
     bounds.extend([CAMPUS.lon, CAMPUS.lat]);
 
     for (const group of groups.values()) {
-      group.sort((a, b) => a.price - b.price);
+      // Cheapest per room first, as the price sort and filter compare them.
+      group.sort((a, b) => a.pricePerRoom - b.pricePerRoom);
       const first = group[0];
       const at = pointOf(first);
       const area = isPublicListing(first);
+      const firstPrice = priceLines(first);
       const label =
         group.length > 1
-          ? `${group.length} listings from ${formatMoney(first.price)} a month`
-          : `${formatMoney(first.price)} a month, ${headingOf(first)}`;
+          ? `${group.length} listings from ${formatMoney(first.pricePerRoom)} a ${isMultiRoom(first) ? "room" : "month"}`
+          : `${firstPrice.sub ? firstPrice.text : `${firstPrice.main} a month`}, ${headingOf(first)}`;
 
       const el = document.createElement("div");
       el.className = area ? "price-pin is-area" : "price-pin";
@@ -148,7 +151,7 @@ export default function MapView({ listings }: { listings: BoardListing[] }) {
       const tag = document.createElement("span");
       tag.className = "price-pin-tag";
       const price = document.createElement("span");
-      price.textContent = formatMoney(first.price);
+      price.textContent = firstPrice.pin;
       tag.appendChild(price);
       if (group.length > 1) {
         const count = document.createElement("span");
@@ -284,16 +287,17 @@ function popupContent(group: BoardListing[], onOpen: (l: BoardListing) => void):
     }
     const price = document.createElement("div");
     price.className = "popup-price";
-    price.textContent = `${formatMoney(l.price)}/mo${l.priceNegotiable ? " · or best offer" : ""}`;
+    price.textContent = `${priceLines(l).text}${l.priceNegotiable ? " · or best offer" : ""}`;
     entry.appendChild(price);
     const addr = document.createElement("div");
     addr.className = "popup-address";
     addr.textContent = headingOf(l);
     entry.appendChild(addr);
-    if (l.sizeSummary) {
+    const sizeText = [roomsChip(l), l.sizeSummary].filter(Boolean).join(" · ");
+    if (sizeText) {
       const size = document.createElement("div");
       size.className = "popup-size";
-      size.textContent = l.sizeSummary;
+      size.textContent = sizeText;
       entry.appendChild(size);
     }
     const sem = document.createElement("div");

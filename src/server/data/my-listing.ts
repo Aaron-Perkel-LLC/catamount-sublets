@@ -138,6 +138,34 @@ export async function updateListing(
  * it to signed-in students, and work out its area if it has none yet. Posters
  * have no switch. False when there is no such listing.
  */
+/**
+ * The size of a listing and how its price reads, for the admin's Rooms
+ * editor: rooms, bedrooms, roommates and basis, already checked and
+ * normalised (normalizeRooms: one room is "room", and no roommates clears
+ * the roommate gender and preference, as the form does). Never the price.
+ */
+export async function setListingRooms(
+  db: DbOrTx,
+  listingId: number,
+  actor: Actor,
+  v: { roomsAvailable: number; bedrooms: number | null; roommates: number | null; priceBasis: "room" | "total"; roommateGender?: ""; roommatePreference?: "" },
+  now: Date = new Date(),
+): Promise<boolean> {
+  const rows = await db
+    .update(listings)
+    .set({
+      roomsAvailable: v.roomsAvailable,
+      bedrooms: v.bedrooms,
+      roommates: v.roommates,
+      priceBasis: v.priceBasis,
+      ...(v.roommates === 0 ? { roommateGender: "", roommatePreference: "" } : {}),
+      updatedAt: now,
+    })
+    .where(owned(listingId, actor))
+    .returning({ id: listings.id });
+  return rows.length > 0;
+}
+
 export async function setListingVisibility(db: DbOrTx, listingId: number, actor: Actor, signedInOnly: boolean, now: Date = new Date()): Promise<boolean> {
   const [row] = await db.select({ lat: listings.lat, lon: listings.lon }).from(listings).where(owned(listingId, actor));
   if (!row) return false;

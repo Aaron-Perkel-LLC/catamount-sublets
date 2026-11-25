@@ -13,10 +13,10 @@ import type { ListingRowDto } from "./types";
 import { LINK, MUTED, SELECT_SM } from "./ui";
 import { useSort } from "./useSort";
 
-type Key = "listing" | "status" | "age" | "views" | "contacts" | "rate" | "shares" | "confirmed";
+type Key = "listing" | "status" | "price" | "rooms" | "age" | "views" | "contacts" | "rate" | "shares" | "confirmed";
 /** Contacts over views in the range, as a whole percent, at most 100 (the two are counted apart, so a contact can follow a view from before the range); null with no views to divide by. */
 const rateOf = (r: ListingRowDto) => (r.views > 0 ? Math.min(100, Math.round((r.contacts / r.views) * 100)) : null);
-const value = (r: ListingRowDto, k: Key) => (k === "listing" ? r.label : k === "status" ? statusText(r) : k === "age" ? r.ageDays : k === "rate" ? rateOf(r) : k === "confirmed" ? r.confirmedAvailableAt : r[k]);
+const value = (r: ListingRowDto, k: Key) => (k === "listing" ? r.label : k === "status" ? statusText(r) : k === "price" ? r.pricePerRoom : k === "age" ? r.ageDays : k === "rate" ? rateOf(r) : k === "confirmed" ? r.confirmedAvailableAt : r[k]);
 
 function statusText(r: ListingRowDto): string {
   if (r.deleted) return "deleted";
@@ -73,6 +73,10 @@ export function ListingsTable({ rows, initialAttention = false }: { rows: Listin
     email: r.ownerEmail ?? "",
     status: statusText(r),
     seen_by: r.deleted ? "" : r.studentsOnly ? "students" : "public",
+    price: r.priceText ?? "",
+    price_per_room: r.pricePerRoom ?? "",
+    rooms: r.rooms ?? "",
+    rooms_label: r.roomsLabel ?? "",
     semesters: r.semesterLabel,
     posted: r.postedAt?.slice(0, 10) ?? "",
     age_days: r.ageDays,
@@ -145,6 +149,8 @@ export function ListingsTable({ rows, initialAttention = false }: { rows: Listin
         );
       },
     },
+    { key: "price", header: "Price", numeric: true, sort: "price", cell: (r) => (r.priceText ? <span title={r.pricePerRoom !== null ? `${r.priceText} (sorted per room)` : undefined}>{r.priceText}</span> : null) },
+    { key: "rooms", header: "Rooms", wide: true, sort: "rooms", cell: (r) => (r.deleted ? null : (r.roomsLabel ?? "1")) },
     { key: "semesters", header: "For", wide: true, cell: (r) => (r.semesterShort ? <span title={r.semesterLabel}>{r.semesterShort}</span> : null) },
     { key: "age", header: "Age", numeric: true, sort: "age", cell: (r) => (r.ageDays === null ? null : <span title={r.postedAt ? `Posted ${shortDate(new Date(r.postedAt))}` : undefined}>{shortAge(r.ageDays)}</span>) },
     { key: "views", header: "Views", numeric: true, sort: "views", cell: (r) => <Num n={r.views} /> },

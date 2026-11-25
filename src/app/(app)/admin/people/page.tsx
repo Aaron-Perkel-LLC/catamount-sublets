@@ -110,7 +110,7 @@ export default async function AdminPeople({ searchParams }: { searchParams: Admi
               ...p,
               lastLoginAt: p.lastLoginAt?.toISOString() ?? null,
               createdAt: p.createdAt.toISOString(),
-              post: post ? { id: post.id, shortAddress: post.shortAddress, price: post.price, status: post.status, hidden: post.hidden, photos: post.photos, semesterLabel: post.semesterLabel } : null,
+              post: post ? { id: post.id, shortAddress: post.shortAddress, priceText: post.priceText, status: post.status, hidden: post.hidden, photos: post.photos, semesterLabel: post.semesterLabel } : null,
             };
           })}
         />

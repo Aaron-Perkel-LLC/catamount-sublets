@@ -1,6 +1,17 @@
 import { z } from "zod";
 import { formatMoney } from "./format";
-import { AMENITY_FILTER_VALUES, AMENITY_FILTERS, type AmenityFilter, LISTING_SORT_VALUES, type ListingSort, OPEN_TO_FILTERS, OPEN_TO_VALUES, type OpenToFilter } from "./options";
+import {
+  AMENITY_FILTER_VALUES,
+  AMENITY_FILTERS,
+  type AmenityFilter,
+  LISTING_SORT_VALUES,
+  type ListingSort,
+  MIN_ROOMS_FILTERS,
+  type MinRoomsFilter,
+  OPEN_TO_FILTERS,
+  OPEN_TO_VALUES,
+  type OpenToFilter,
+} from "./options";
 
 /**
  * The Browse and Map query string, parsed leniently: an unusable value is
@@ -8,6 +19,7 @@ import { AMENITY_FILTER_VALUES, AMENITY_FILTERS, type AmenityFilter, LISTING_SOR
  * An untouched slider leaves its parameter empty, so it is not a filter.
  */
 export interface ListingQuery {
+  /** Per-room price bounds (price_per_room), both or neither. */
   minPrice?: number;
   maxPrice?: number;
   semester?: string;
@@ -15,6 +27,10 @@ export interface ListingQuery {
   amenities: AmenityFilter[];
   negotiable: boolean;
   openTo?: OpenToFilter;
+  /** At least this many rooms available (`rooms=2|3|4`). */
+  minRooms?: MinRoomsFilter;
+  /** Only listings whose poster said nobody stays (`no_roommates=1`). */
+  noRoommates: boolean;
   sort: ListingSort;
   /** A deep link: open this listing, ignoring every filter. */
   id?: number;
@@ -36,6 +52,11 @@ const sort = z.enum(LISTING_SORT_VALUES).catch("newest");
 const openTo = z.enum(OPEN_TO_VALUES).optional().catch(undefined);
 const amenity = z.enum(AMENITY_FILTER_VALUES);
 const id = z.coerce.number().int().positive().optional().catch(undefined);
+const minRooms = z.coerce
+  .number()
+  .refine((n): n is MinRoomsFilter => (MIN_ROOMS_FILTERS as readonly number[]).includes(n))
+  .optional()
+  .catch(undefined);
 
 export function parseListingQuery(params: SearchParams): ListingQuery {
   let minPrice = money.parse(one(params.min_price));
@@ -53,6 +74,8 @@ export function parseListingQuery(params: SearchParams): ListingQuery {
     amenities: [...new Set(many(params.amenities).filter((a) => amenity.safeParse(a).success))] as AmenityFilter[],
     negotiable: one(params.negotiable) === "1",
     openTo: openTo.parse(one(params.open_to)),
+    minRooms: minRooms.parse(one(params.rooms)) as MinRoomsFilter | undefined,
+    noRoommates: one(params.no_roommates) === "1",
     sort: sort.parse(one(params.sort)),
     id: id.parse(one(params.id)),
     via: one(params.via),
@@ -68,10 +91,17 @@ export function filterCount(q: ListingQuery): number {
   n += q.amenities.length;
   if (q.negotiable) n++;
   if (q.openTo) n++;
+  if (q.minRooms !== undefined) n++;
+  if (q.noRoommates) n++;
   return n;
 }
 
-/** The filter half of the query string (no sort, no empties), to carry across Browse ↔ Map. */
+/**
+ * The filter half of the query string (no sort, no empties), to carry across
+ * Browse ↔ Map. Keys go out in a fixed order with defaults left out, and
+ * newer filters are appended after the older ones, so a saved search stored
+ * before them re-canonicalises to exactly its stored string.
+ */
 export function filterSearchParams(q: ListingQuery): URLSearchParams {
   const p = new URLSearchParams();
   if (q.minPrice !== undefined && q.maxPrice !== undefined) {
@@ -83,6 +113,8 @@ export function filterSearchParams(q: ListingQuery): URLSearchParams {
   for (const a of q.amenities) p.append("amenities", a);
   if (q.negotiable) p.set("negotiable", "1");
   if (q.openTo) p.set("open_to", q.openTo);
+  if (q.minRooms !== undefined) p.set("rooms", String(q.minRooms));
+  if (q.noRoommates) p.set("no_roommates", "1");
   return p;
 }
 
@@ -126,6 +158,8 @@ export function describeFilters(q: ListingQuery, semesterName?: string): string 
   if (q.amenities.length) bits.push(q.amenities.map((a) => AMENITY_FILTERS[a].label).join(", "));
   if (q.negotiable) bits.push("Negotiable");
   if (q.openTo) bits.push(OPEN_TO_FILTERS[q.openTo].label);
+  if (q.minRooms !== undefined) bits.push(`${q.minRooms}+ rooms`);
+  if (q.noRoommates) bits.push("No roommates");
   return bits.join(" · ") || "Every new listing";
 }
 

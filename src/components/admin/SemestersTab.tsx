@@ -161,7 +161,7 @@ export function SemestersTab({ semesters, archives }: { semesters: SemesterRowDt
       </div>
 
       {archives.length > 0 && (
-        <Card flush title="Archived" tip="The totals kept when a semester was archived; its listings and their photos were removed for good. Median is the median price.">
+        <Card flush title="Archived" tip="The totals kept when a semester was archived; its listings and their photos were removed for good. Median is the median price per room (a whole place counts as its total divided by its rooms; before Nov 2026 every listing was one room).">
           <DataTable
             label="Archived semesters"
             rows={archives}

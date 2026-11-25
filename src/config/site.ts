@@ -111,6 +111,8 @@ export const LIMITS = {
   addressMaxChars: 255,
   displayNameMaxChars: 60,
   priceMax: 20000,
+  /** Rooms one listing may cover; the same ceiling as bedrooms. */
+  roomsMax: 20,
 } as const;
 
 /**

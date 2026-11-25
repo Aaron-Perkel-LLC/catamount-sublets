@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { formatMoney } from "@/lib/format";
 import { filterSearchParams, type ListingQuery, withQuery } from "@/lib/listing-filters";
-import { AMENITY_FILTERS, AMENITY_FILTER_VALUES, OPEN_TO_FILTERS, OPEN_TO_VALUES, type AmenityFilter } from "@/lib/options";
+import { AMENITY_FILTERS, AMENITY_FILTER_VALUES, MIN_ROOMS_FILTERS, OPEN_TO_FILTERS, OPEN_TO_VALUES, type AmenityFilter } from "@/lib/options";
 import type { FilterBounds } from "@/server/data/listings";
 import { DualRange, SingleRange } from "./RangeSlider";
 
@@ -181,9 +181,9 @@ export function FilterBar({ mode, query, bounds, semesters, emptySemesters, coun
           </button>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className={`grid gap-4 md:grid-cols-3 ${signedOut ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
           <DualRange
-            label="Price per month"
+            label="Rent per room"
             min={bounds.minPrice}
             max={bounds.maxPrice}
             step={50}
@@ -227,6 +227,29 @@ export function FilterBar({ mode, query, bounds, semesters, emptySemesters, coun
             </select>
           </label>
           )}
+          {/* Several rooms or the whole place: for groups looking together. */}
+          <div className="flex flex-col gap-1.5 text-sm" role="group" aria-labelledby="rooms-filter">
+            <span id="rooms-filter" className="font-bold">
+              Rooms
+            </span>
+            <div className="flex rounded-lg border border-line bg-paper p-0.5 font-bold">
+              {([undefined, ...MIN_ROOMS_FILTERS] as const).map((n) => {
+                const on = local.minRooms === n;
+                return (
+                  <button
+                    key={n ?? "any"}
+                    type="button"
+                    aria-pressed={on}
+                    aria-label={n === undefined ? "Any number of rooms" : `${n} or more rooms`}
+                    onClick={() => apply({ ...local, minRooms: n }, true)}
+                    className={`flex-1 rounded-md px-2 py-1.5 ${on ? "bg-lake text-paper" : "text-ink-2 hover:text-lake"}`}
+                  >
+                    {n === undefined ? "Any" : `${n}+`}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <SingleRange
             label="Distance from campus"
             min={0.25}
@@ -263,6 +286,14 @@ export function FilterBar({ mode, query, bounds, semesters, emptySemesters, coun
             className={`rounded-full border px-3 py-1 text-sm ${local.negotiable ? "border-lake bg-lake text-paper" : "border-line bg-paper text-ink-2 hover:border-lake"}`}
           >
             Price negotiable
+          </button>
+          <button
+            type="button"
+            aria-pressed={local.noRoommates}
+            onClick={() => apply({ ...local, noRoommates: !local.noRoommates }, true)}
+            className={`rounded-full border px-3 py-1 text-sm ${local.noRoommates ? "border-lake bg-lake text-paper" : "border-line bg-paper text-ink-2 hover:border-lake"}`}
+          >
+            No roommates
           </button>
           {active && (
             <Link href={pathname} className="link text-sm" onClick={() => setOpen(false)}>

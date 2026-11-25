@@ -33,13 +33,27 @@ describe("share tokens", () => {
   });
 });
 
+const ONE_ROOM = { priceBasis: "room" as const, roomsAvailable: 1 };
+
 describe("shareCardLines", () => {
   it("publishes price, semester, size and distance and nothing else", () => {
-    const lines = shareCardLines({ price: 950, priceNegotiable: true, semesterLabel: "Spring 2027", bedrooms: 2, bathrooms: 1.5, roommates: 1, distanceMi: 0.43 });
+    const lines = shareCardLines({ ...ONE_ROOM, price: 950, pricePerRoom: 950, priceNegotiable: true, semesterLabel: "Spring 2027", bedrooms: 2, bathrooms: 1.5, roommates: 1, distanceMi: 0.43 });
     expect(lines.price).toBe("$950/mo");
     expect(lines.facts).toBe("2 bd · 1.5 ba · 1 roommate · 0.4 mi from campus");
     expect(lines.title).toBe("$950/mo · Spring 2027 · Catamount Sublets");
     expect(lines.description).toMatch(/^2 bd .* Sign in with your student email/);
     expect(Object.keys(lines).sort()).toEqual(["description", "facts", "negotiable", "price", "semester", "title"]);
+  });
+
+  it("leads a multi-room listing with its per-room price, then the size chip and any total, under the same six keys", () => {
+    const base = { priceNegotiable: false, semesterLabel: "Fall 2027", bathrooms: 2, distanceMi: 1.2 };
+    const whole = shareCardLines({ ...base, price: 3200, pricePerRoom: 800, priceBasis: "total", roomsAvailable: 4, bedrooms: 4, roommates: 0 });
+    expect(whole.price).toBe("$800/room");
+    expect(whole.facts).toBe("Whole place · 4 BR · $3,200 total · 4 bd · 2 ba · No roommates · 1.2 mi from campus");
+    expect(whole.title).toBe("$800/room · Fall 2027 · Catamount Sublets");
+    const some = shareCardLines({ ...base, price: 700, pricePerRoom: 700, priceBasis: "room", roomsAvailable: 3, bedrooms: 5, roommates: 2 });
+    expect(some.price).toBe("$700/room");
+    expect(some.facts).toBe("3 rooms · 5 bd · 2 ba · 2 roommates · 1.2 mi from campus");
+    expect(Object.keys(whole).sort()).toEqual(["description", "facts", "negotiable", "price", "semester", "title"]);
   });
 });

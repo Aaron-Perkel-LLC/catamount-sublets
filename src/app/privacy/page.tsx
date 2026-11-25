@@ -7,7 +7,7 @@ import { SITE_TIME_ZONE } from "@/lib/dates";
 export const metadata: Metadata = { title: `Privacy · ${SITE.name}`, alternates: { canonical: "/privacy" } };
 
 /** Bump whenever this page changes what it says. */
-const LAST_UPDATED = "2026-11-21";
+const LAST_UPDATED = "2026-11-24";
 
 /** What the site keeps, who sees it, and how to get rid of it. Plain words, no legalese. */
 export default async function PrivacyPage({ searchParams }: { searchParams: Promise<{ from?: string | string[] }> }) {
@@ -95,7 +95,8 @@ export default async function PrivacyPage({ searchParams }: { searchParams: Prom
         <p>Signed-in students see listings in full.</p>
         <p>
           Anyone can see a listing without signing in, unless it is kept to signed-in students. They see its photos, the rent and whether
-          it is negotiable, the semesters, its size (bedrooms, bathrooms and how many roommates), who pays for which utilities and the
+          it is negotiable (for a listing of several rooms, whether the rent is per room or for the whole place, and the rent per room),
+          the semesters, its size (how many rooms are sublet, bedrooms, bathrooms and how many roommates), who pays for which utilities and the
           estimated monthly cost if the poster gave one, its amenities, how long ago it was posted, and a circle of about 150 m that
           contains the place, with the neighborhood the circle falls in and its distance from campus. Never the address, the exact spot,
           the description, the poster&apos;s name or how to reach them: those are shown only to signed-in students.
@@ -114,7 +115,8 @@ export default async function PrivacyPage({ searchParams }: { searchParams: Prom
           to ask.
         </p>
         <p>
-          A share link and its preview show the listing&apos;s first photo, the price and whether it is negotiable, the semester, size and
+          A share link and its preview show the listing&apos;s first photo, the price (per room, with
+          the whole-place total when that is what the poster gave) and whether it is negotiable, the semester, size (rooms included) and
           distance from campus, nothing else. That is true of any listing that is up, including one kept to signed-in students.
         </p>
         <p>The site&apos;s admin can see every listing and the email addresses of people who signed in, to run the site. Nothing is sold or shared with anyone.</p>

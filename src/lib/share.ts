@@ -2,8 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { SITE } from "@/config/site";
 import { appUrl, isProductionEnv } from "@/env";
 import { formatMiles } from "./distance-format";
-import { formatMoney } from "./format";
-import { sizeSummary } from "./options";
+import { type PriceBasis, sizeSummary } from "./options";
+import { isMultiRoom, priceLines, roomsChip } from "./price";
 
 /**
  * Public share links: /s/<id>-<token>. The token is derived, not stored:
@@ -70,8 +70,11 @@ export function verifyShareToken(id: number, token: string, legacyToken: string 
 
 /**
  * The share card's lines: on the share page's meta tags and painted into
- * the card. Price, semester, size and distance from campus (measured from
- * the approximate area) — and nothing else. A subset of PublicListing
+ * the card. Price, semester, size (rooms sublet included) and distance from
+ * campus (measured from the approximate area) — and nothing else. A
+ * multi-room listing leads with its per-room price ("$800/room") and its
+ * facts with the size chip, and the total when that is what the poster typed
+ * ("Whole place · 4 BR · $3,200 total · …"); one room reads as it always has. A subset of PublicListing
  * (src/server/data/public-listings.ts), the whole public surface; it goes
  * out for signed-in-only listings too, so it must never grow towards it.
  * Adding a field here publishes it.
@@ -80,7 +83,7 @@ export interface ShareCardLines {
   price: string;
   negotiable: boolean;
   semester: string;
-  /** "2 bd · 1.5 ba · 1 roommate · 0.4 mi from campus" */
+  /** "2 bd · 1.5 ba · 1 roommate · 0.4 mi from campus"; a multi-room listing's size chip (and total) first. */
   facts: string;
   title: string;
   description: string;
@@ -88,6 +91,9 @@ export interface ShareCardLines {
 
 export function shareCardLines(l: {
   price: number;
+  pricePerRoom: number;
+  priceBasis: PriceBasis;
+  roomsAvailable: number;
   priceNegotiable: boolean;
   semesterLabel: string;
   bedrooms: number | null;
@@ -95,8 +101,10 @@ export function shareCardLines(l: {
   roommates: number | null;
   distanceMi: number;
 }): ShareCardLines {
-  const price = `${formatMoney(l.price)}/mo`;
-  const facts = [sizeSummary(l), formatMiles(l.distanceMi)].filter(Boolean).join(" · ");
+  const p = priceLines(l);
+  const price = isMultiRoom(l) ? p.short : p.text;
+  const total = isMultiRoom(l) && l.priceBasis === "total" ? `${p.main} total` : null;
+  const facts = [roomsChip(l), total, sizeSummary(l), formatMiles(l.distanceMi)].filter(Boolean).join(" · ");
   return {
     price,
     negotiable: l.priceNegotiable,

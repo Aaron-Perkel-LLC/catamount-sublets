@@ -27,7 +27,8 @@ export interface ArchiveRowDto {
 export interface PostSummaryDto {
   id: number;
   shortAddress: string;
-  price: number;
+  /** "$850/mo", "$3,200 total · $800/room". */
+  priceText: string;
   status: string;
   hidden: boolean;
   photos: number;
@@ -53,6 +54,13 @@ export interface ListingRowDto {
   id: number;
   label: string;
   deleted: boolean;
+  /** Per-room price, what the board sorts by; null for a deleted listing. */
+  pricePerRoom: number | null;
+  /** "$850/mo", "$3,200 total · $800/room". */
+  priceText: string | null;
+  rooms: number | null;
+  /** "Whole place · 4 BR", "3 rooms"; null for one room or a deleted listing. */
+  roomsLabel: string | null;
   ownerId: string | null;
   ownerName: string | null;
   ownerEmail: string | null;

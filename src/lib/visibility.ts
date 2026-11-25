@@ -6,4 +6,4 @@
 
 /** What signed-out visitors see of a public listing (toPublicListing, CLAUDE.md rule 9). */
 export const SIGNED_OUT_SEE =
-  "price, semester, size, utilities, amenities, photos and the rough neighborhood — never your name, contact, address, pin, title or description";
+  "price, semester, rooms and size, utilities, amenities, photos and the rough neighborhood — never your name, contact, address, pin, title or description";

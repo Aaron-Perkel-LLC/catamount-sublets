@@ -1,0 +1,7 @@
+ALTER TABLE "listings" ADD COLUMN "rooms_available" smallint DEFAULT 1 NOT NULL;--> statement-breakpoint
+ALTER TABLE "listings" ADD COLUMN "price_basis" text DEFAULT 'room' NOT NULL;--> statement-breakpoint
+ALTER TABLE "listings" ADD COLUMN "price_per_room" numeric(10, 2) GENERATED ALWAYS AS (case when "listings"."price_basis" = 'total' then round("listings"."price" / "listings"."rooms_available") else "listings"."price" end) STORED NOT NULL;--> statement-breakpoint
+ALTER TABLE "listings" ADD CONSTRAINT "listings_rooms_available_check" CHECK ("listings"."rooms_available" between 1 and 20);--> statement-breakpoint
+ALTER TABLE "listings" ADD CONSTRAINT "listings_price_basis_check" CHECK ("listings"."price_basis" in ('room', 'total') and ("listings"."price_basis" = 'room' or "listings"."rooms_available" > 1));--> statement-breakpoint
+ALTER TABLE "listings" ADD CONSTRAINT "listings_rooms_bedrooms_check" CHECK ("listings"."rooms_available" = 1 or ("listings"."bedrooms" is not null and "listings"."rooms_available" <= "listings"."bedrooms"));--> statement-breakpoint
+ALTER TABLE "listings" ADD CONSTRAINT "listings_rooms_roommates_check" CHECK ("listings"."rooms_available" = 1 or "listings"."roommates" is not null);

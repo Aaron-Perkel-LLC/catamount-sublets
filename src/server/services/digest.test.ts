@@ -129,6 +129,10 @@ describe("matching uses Browse's query", () => {
     ids.banned = await listing(banned, { postedAt: days(1) });
     ids.mine = await listing(me, { price: 600, postedAt: days(1) });
     ids.old = await listing(await person("i"), { price: 600, postedAt: days(30) });
+    // Several rooms: a whole house typed as its $3,200 total ($800 a room), three of five rooms per room, and a studio.
+    ids.house = await listing(await person("j"), { price: 3200, priceBasis: "total", roomsAvailable: 4, bedrooms: 4, roommates: 0, postedAt: days(2) });
+    ids.rooms3 = await listing(await person("k"), { price: 750, roomsAvailable: 3, bedrooms: 5, roommates: 1, postedAt: days(5) });
+    ids.studio = await listing(await person("l"), { price: 1000, bedrooms: 0, roommates: 0, postedAt: days(3) });
   });
 
   const QUERIES = [
@@ -147,6 +151,13 @@ describe("matching uses Browse's query", () => {
     "open_to=men",
     "semester=spring27&min_price=0&max_price=1000&amenities=pets&open_to=women",
     "semester=nope",
+    "min_price=0&max_price=850",
+    "min_price=3000&max_price=4000",
+    "rooms=2",
+    "rooms=3",
+    "rooms=4",
+    "no_roommates=1",
+    "min_price=0&max_price=900&rooms=2&no_roommates=1",
   ];
 
   it.each(QUERIES)("finds exactly Browse's listings for %j, inside the window, less the recipient's own", async (query) => {
@@ -158,6 +169,12 @@ describe("matching uses Browse's query", () => {
       .map((l) => l.id);
     const found = (await newBoardListings(db, q, { recipientId: me, since, until: NOW })).map((l) => l.id);
     expect(found).toEqual(expected);
+  });
+
+  it("matches a whole house by its per-room price, never its total", async () => {
+    const window = { recipientId: me, since: days(7), until: NOW };
+    expect((await newBoardListings(db, parseSavedQuery("min_price=0&max_price=850"), window)).map((l) => l.id)).toContain(ids.house);
+    expect((await newBoardListings(db, parseSavedQuery("min_price=3000&max_price=4000"), window)).map((l) => l.id)).not.toContain(ids.house);
   });
 
   it("never includes the recipient's own listing, though Browse shows it to them", async () => {
@@ -304,6 +321,17 @@ describe("runDigest", () => {
     expect(r.summary).toMatchObject({ acted: false, reason: "not_production" });
     expect(r.warned).toContain('"event":"digest.not_production"');
     expect(await db.select().from(s.digestSends)).toHaveLength(0);
+  });
+
+  it("shows a whole house by its per-room price, with the size chip and the total", async () => {
+    const house = await listing(poster, { price: 3200, priceBasis: "total", roomsAvailable: 4, bedrooms: 4, roommates: 0, postedAt: hours(4) });
+    const r = await run();
+    expect(r).toMatchObject({ sent: 1 });
+    const [m] = mailTo("me@uvm.edu");
+    expect(m.text).toContain(`/s/${house}-`);
+    expect(m.text).toContain("$800/room · Spring 2027");
+    expect(m.text).toContain("Whole place · 4 BR · $3,200 total · 4 bd · No roommates");
+    expect(m.text).toContain("Matches: Spring under $900");
   });
 
   it("sends one email merging every search, newest first, with only share-card lines", async () => {

@@ -2,14 +2,16 @@ import { and, asc, count, desc, eq, inArray, ne, or, sql, type SQL } from "drizz
 import { z } from "zod";
 import type { Db } from "@/db";
 import { listingEvents, listingPhotos, listings, listingSemesters, semesterArchives, semesters, session, user } from "@/db/schema";
-import { CONTACT_EVENT_TYPES, LISTING_STATUS_VALUES, type ListingStatus } from "@/lib/options";
+import { validateAdminRooms } from "@/lib/listing-input";
+import { CONTACT_EVENT_TYPES, LISTING_STATUS_VALUES, type ListingStatus, type PriceBasis } from "@/lib/options";
+import { priceLines } from "@/lib/price";
 import { easternDate, easternDayStart } from "@/lib/dates";
 import { formatAddress } from "@/lib/format";
 import { escapeLike } from "@/lib/people-search";
 import { orderSemesterCodes, sortSemesters } from "@/lib/semesters";
 import { countEmailsTo, forgetRecipient } from "@/server/data/emails";
 import { listingActivity } from "@/server/data/events";
-import { deleteListing, listingFileUrls, photoFileUrls, setListingStatus, setListingVisibility } from "@/server/data/my-listing";
+import { deleteListing, listingFileUrls, photoFileUrls, setListingRooms, setListingStatus, setListingVisibility } from "@/server/data/my-listing";
 import { posterColumns, shownName } from "@/server/data/names";
 import { listingCountForSemester, setListingSemesters } from "@/server/data/semesters";
 import { listingSnapshot, noticeDeleted, noticeStatus } from "@/server/email/notices";
@@ -83,7 +85,8 @@ export async function archivePlan(db: Db, code: string): Promise<ArchivePlan> {
 
   const rows = (
     await db
-      .select({ id: listings.id, status: listings.status, price: listings.price, address: listings.address, displayName: listings.displayName, ownerEmail: user.email, poster: posterColumns })
+      // The per-room price, so a whole house is one room's worth in the median, as on the board.
+      .select({ id: listings.id, status: listings.status, price: listings.pricePerRoom, address: listings.address, displayName: listings.displayName, ownerEmail: user.email, poster: posterColumns })
       .from(listingSemesters)
       .innerJoin(listings, eq(listings.id, listingSemesters.listingId))
       .innerJoin(user, eq(user.id, listings.userId))
@@ -248,6 +251,25 @@ export async function adminSetVisibility(db: Db, listingId: number, signedInOnly
   if (!(await setListingVisibility(db, listingId, { userId: "", isAdmin: true }, signedInOnly))) return fail("No such listing.");
   log.info("listing.visibility", { listingId, signedInOnly, by: "admin" });
   return ok(undefined);
+}
+
+/**
+ * The admin's Rooms editor: a listing's rooms, bedrooms, roommates and price
+ * basis, under the post form's own rules. The price itself is never touched;
+ * the database recomputes the per-room price. No notice goes to the admin
+ * (they made the change); logged with ids only.
+ */
+export async function adminSetRooms(db: Db, raw: unknown): Promise<Result<{ priceText: string }>> {
+  const v = validateAdminRooms(raw);
+  if (!v.ok) return fail(v.error);
+  const { listingId, ...size } = v.data;
+  if (!(await setListingRooms(db, listingId, { userId: "", isAdmin: true }, size))) return fail("No such listing.");
+  const [row] = await db
+    .select({ price: listings.price, pricePerRoom: listings.pricePerRoom, priceBasis: listings.priceBasis, roomsAvailable: listings.roomsAvailable })
+    .from(listings)
+    .where(eq(listings.id, listingId));
+  log.info("listing.rooms", { listingId, roomsAvailable: size.roomsAvailable, priceBasis: size.priceBasis, by: "admin" });
+  return ok({ priceText: priceLines({ ...row, priceBasis: row.priceBasis as PriceBasis }).text });
 }
 
 export async function adminDeleteListing(db: Db, listingId: number): Promise<Result> {

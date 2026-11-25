@@ -106,6 +106,14 @@ export async function adminSetListingVisibility(listingId: number, signedInOnly:
   return r;
 }
 
+/** A listing's rooms, bedrooms, roommates and price basis, under the post form's rules; never its price. */
+export async function adminSetListingRooms(input: unknown): Promise<admin.Result<{ priceText: string }>> {
+  await requireAdmin();
+  const r = await admin.adminSetRooms(await getDb(), input);
+  if (r.ok) revalidate();
+  return r;
+}
+
 /** Any listing, whatever its status or semesters, for the admin's listing view. */
 export async function adminLoadListing(listingId: number): Promise<ListingDto | null> {
   const me = await requireAdmin();

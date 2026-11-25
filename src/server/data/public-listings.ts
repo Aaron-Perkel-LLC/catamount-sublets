@@ -8,7 +8,7 @@ import { milesFromCampus } from "@/lib/distance";
 import type { Area } from "@/lib/geo-fuzz";
 import { filterCount, type ListingQuery } from "@/lib/listing-filters";
 import { neighborhoodAt } from "@/lib/neighborhood";
-import { sizeSummary, UTILITY_KINDS, type UtilityKind, type UtilityPayer } from "@/lib/options";
+import { type PriceBasis, sizeSummary, UTILITY_KINDS, type UtilityKind, type UtilityPayer } from "@/lib/options";
 import { publicTitle } from "@/lib/public-title";
 import { BROWSE_LIMIT, listingFilterWhere, orderFor, photosByListing } from "./listings";
 import { labelFor, listingSemestersByListing } from "./semesters";
@@ -28,7 +28,13 @@ export interface PublicListing {
   id: number;
   /** "2BR · Old North End": size and neighborhood, never the address. */
   title: string;
+  /** What the poster typed: per room, or for the whole place (priceBasis). */
   price: number;
+  /** The per-room price every filter and sort compares. */
+  pricePerRoom: number;
+  priceBasis: PriceBasis;
+  /** How many rooms the listing sublets (1 for a room). */
+  roomsAvailable: number;
   priceNegotiable: boolean;
   semesterLabel: string;
   semesterCodes: string[];
@@ -47,7 +53,7 @@ export interface PublicListing {
   utilityCost: number | null;
   postedAgo: string;
   photos: { display: string; thumb: string | null }[];
-  /** Amenity tags only (no roommate preference). */
+  /** The multi-room size chip and amenity tags (no roommate preference). */
   tags: CardTag[];
   moreTags: number;
 }
@@ -56,6 +62,9 @@ export interface PublicListing {
 const PUBLIC_COLUMNS = {
   id: listings.id,
   price: listings.price,
+  pricePerRoom: listings.pricePerRoom,
+  priceBasis: listings.priceBasis,
+  roomsAvailable: listings.roomsAvailable,
   priceNegotiable: listings.priceNegotiable,
   bedrooms: listings.bedrooms,
   bathrooms: listings.bathrooms,
@@ -113,6 +122,9 @@ export function toPublicListing(
     id: r.id,
     title: publicTitle(r.bedrooms, neighborhood),
     price: r.price,
+    pricePerRoom: r.pricePerRoom,
+    priceBasis: r.priceBasis as PriceBasis,
+    roomsAvailable: r.roomsAvailable,
     priceNegotiable: r.priceNegotiable,
     semesterLabel: extra.semesterLabel,
     semesterCodes: extra.semesterCodes,
@@ -143,7 +155,7 @@ async function project(db: DbOrTx, rows: PublicRow[]): Promise<PublicListing[]> 
   });
   const counts = amenityCounts(out);
   return out.map((l) => {
-    const { tags, more } = listingCardTags({ amenities: l.amenities, roommatePreference: "" }, counts);
+    const { tags, more } = listingCardTags({ amenities: l.amenities, roommatePreference: "", roomsAvailable: l.roomsAvailable, bedrooms: l.bedrooms, roommates: l.roommates }, counts);
     return { ...l, tags, moreTags: more };
   });
 }

@@ -5,10 +5,11 @@ import {
   ROOMMATE_PREFERENCE_OPTIONS,
   type RoommatePreference,
 } from "./options";
+import { roomsChip } from "./price";
 
 export interface CardTag {
   label: string;
-  kind: "included" | "plain" | "preference";
+  kind: "included" | "plain" | "preference" | "rooms";
 }
 
 export type AmenityFlags = Record<AmenityKey, boolean>;
@@ -24,15 +25,18 @@ export function amenityCounts(rows: readonly { amenities: AmenityFlags }[]): Rec
 
 /**
  * The few tags worth putting on one card, and how many were left off. A
- * roommate preference always comes first; then the amenities rarest among
+ * multi-room listing's size chip ("Whole place · 4 BR", "3 rooms") always
+ * comes first, then a roommate preference; then the amenities rarest among
  * the listings on screen, up to `max`. The full list stays in the listing view.
  */
 export function listingCardTags(
-  row: { amenities: AmenityFlags; roommatePreference: RoommatePreference },
+  row: { amenities: AmenityFlags; roommatePreference: RoommatePreference; roomsAvailable: number; bedrooms: number | null; roommates: number | null },
   counts: Record<AmenityKey, number>,
   max = 3,
 ): { tags: CardTag[]; more: number } {
   const tags: CardTag[] = [];
+  const rooms = roomsChip(row);
+  if (rooms) tags.push({ label: rooms, kind: "rooms" });
   if (row.roommatePreference) {
     const label = ROOMMATE_PREFERENCE_OPTIONS[row.roommatePreference];
     // "Prefers women & nonbinary folks", not "Prefers Women & …".

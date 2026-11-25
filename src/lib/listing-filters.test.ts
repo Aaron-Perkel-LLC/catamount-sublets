@@ -22,6 +22,8 @@ it("parses a shared URL leniently", () => {
     amenities: ["pets", "ac"],
     negotiable: true,
     openTo: "women",
+    minRooms: undefined,
+    noRoommates: false,
     sort: "closest",
     id: 187,
     via: "share",
@@ -70,5 +72,39 @@ describe("saved searches use Browse's query string", () => {
     const name = defaultSearchName(long, "Spring 2027", 60);
     expect(name.length).toBeLessThanOrEqual(60);
     expect(name.endsWith("…")).toBe(true);
+  });
+});
+
+describe("rooms and roommates filters", () => {
+  it("reads 2+, 3+ and 4+ rooms and No roommates, and drops anything else", () => {
+    const q = parseListingQuery({ rooms: "3", no_roommates: "1" });
+    expect([q.minRooms, q.noRoommates]).toEqual([3, true]);
+    expect(filterCount(q)).toBe(2);
+    expect(filterSearchParams(q).toString()).toBe("rooms=3&no_roommates=1");
+    for (const bad of ["1", "5", "2.5", "two", ""]) expect(parseListingQuery({ rooms: bad }).minRooms).toBeUndefined();
+    expect(parseListingQuery({ no_roommates: "yes" }).noRoommates).toBe(false);
+  });
+
+  it("goes after every older filter, so it never reorders them", () => {
+    expect(canonicalFilterQuery("no_roommates=1&rooms=2&open_to=men&min_price=0&max_price=900")).toBe("min_price=0&max_price=900&open_to=men&rooms=2&no_roommates=1");
+  });
+
+  it("leaves every saved search stored before it byte for byte the same", () => {
+    // The shapes saved searches were stored in before rooms existed: each re-canonicalises to itself.
+    for (const stored of [
+      "",
+      "min_price=0&max_price=900",
+      "min_price=500&max_price=1200&semester=spring27&max_distance=1.5&amenities=ac&amenities=pets&negotiable=1&open_to=women",
+      "semester=fall27&amenities=furnished",
+      "max_distance=2&open_to=nonbinary",
+      "negotiable=1",
+    ]) {
+      expect(canonicalFilterQuery(stored)).toBe(stored);
+      expect(parseSavedQuery(stored)).toMatchObject({ minRooms: undefined, noRoommates: false });
+    }
+  });
+
+  it("says them in words", () => {
+    expect(describeFilters(parseListingQuery({ min_price: "0", max_price: "900", rooms: "3", no_roommates: "1" }))).toBe("Up to $900 · 3+ rooms · No roommates");
   });
 });

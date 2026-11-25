@@ -4,6 +4,8 @@ import { milesFromCampus } from "./distance";
 import {
   AMENITY_KEYS,
   type AmenityKey,
+  PRICE_BASIS_VALUES,
+  type PriceBasis,
   ROOMMATE_GENDER_VALUES,
   ROOMMATE_PREFERENCE_VALUES,
   UTILITY_KINDS,
@@ -51,6 +53,59 @@ export function amenityField(k: AmenityKey): `amenity${Capitalize<AmenityKey>}` 
   return `amenity${k[0].toUpperCase()}${k.slice(1)}` as `amenity${Capitalize<AmenityKey>}`;
 }
 
+/**
+ * The size of what is sublet, shared by the post form and the admin's Rooms
+ * editor. Cross-field rules (bedrooms and roommates required with several
+ * rooms, rooms within the bedrooms, a price basis chosen) are roomsErrors(),
+ * beside the schema for the same reason as locationError().
+ */
+export const roomsShape = {
+  roomsAvailable: z
+    .number("Enter how many rooms you're subletting.")
+    .int("Whole numbers only.")
+    .min(1, "At least 1 room.")
+    .max(LIMITS.roomsMax, `At most ${LIMITS.roomsMax} rooms.`),
+  bedrooms: optionalCount(20),
+  roommates: optionalCount(20),
+  /** Null until the poster chooses; always "room" with one room (normalizeRooms). */
+  priceBasis: z.enum(PRICE_BASIS_VALUES).nullable(),
+};
+
+/**
+ * What a valid size implies, for the form and the admin alike: one room is
+ * always priced per room, and with nobody staying there is no roommate
+ * gender or preference to keep.
+ */
+export function normalizeRooms<
+  T extends { roomsAvailable: number; priceBasis: PriceBasis | null; roommates: number | null; roommateGender?: string; roommatePreference?: string },
+>(v: T): Omit<T, "priceBasis"> & { priceBasis: PriceBasis } {
+  const priceBasis: PriceBasis = v.roomsAvailable === 1 ? "room" : (v.priceBasis ?? "room");
+  const out = { ...v, priceBasis };
+  // Nobody to describe or prefer if the subletter would have the place to themselves.
+  if (v.roommates === 0) return { ...out, roommateGender: "" as const, roommatePreference: "" as const };
+  return out;
+}
+
+const asCount = (v: unknown): number | null => (typeof v === "number" && Number.isInteger(v) ? v : null);
+
+/**
+ * The size rules that span fields, one message per field: with more than one
+ * room the place needs at least that many bedrooms, a roommate count (0 is an
+ * answer) and a price basis. Lowering bedrooms below the rooms never changes
+ * the rooms: it is refused here, on Bedrooms.
+ */
+export function roomsErrors(raw: { roomsAvailable?: unknown; bedrooms?: unknown; roommates?: unknown; priceBasis?: unknown }): Record<string, string> {
+  const rooms = asCount(raw.roomsAvailable);
+  if (rooms === null || rooms <= 1) return {};
+  const errors: Record<string, string> = {};
+  const bedrooms = asCount(raw.bedrooms);
+  if (raw.bedrooms === null || raw.bedrooms === undefined) errors.bedrooms = `You're subletting ${rooms} rooms, so enter how many bedrooms the place has.`;
+  else if (bedrooms !== null && bedrooms < rooms) errors.bedrooms = `You're subletting ${rooms} rooms, so the place has at least ${rooms} bedrooms.`;
+  if (raw.roommates === null || raw.roommates === undefined) errors.roommates = "How many roommates are staying? Enter 0 if nobody is.";
+  if (!PRICE_BASIS_VALUES.includes(raw.priceBasis as PriceBasis)) errors.priceBasis = "Say whether the price is per room or for the whole place.";
+  return errors;
+}
+
 export const listingInput = z
   .object({
     price: z
@@ -76,21 +131,38 @@ export const listingInput = z
     ...utilityShape,
     utilityCost: z.number("Enter a number of dollars.").int("Whole dollars only, no cents.").min(0, "Utilities can't be negative.").max(100_000, "That looks too high.").nullable(),
     ...amenityShape,
-    bedrooms: optionalCount(20),
+    roomsAvailable: roomsShape.roomsAvailable,
+    priceBasis: roomsShape.priceBasis,
+    bedrooms: roomsShape.bedrooms,
     bathrooms: z
       .number()
       .min(0.5)
       .max(9.5)
       .transform((n) => Math.round(n * 2) / 2)
       .nullable(),
-    roommates: optionalCount(20),
+    roommates: roomsShape.roommates,
     roommateGender: z.enum(ROOMMATE_GENDER_VALUES),
     roommatePreference: z.enum(ROOMMATE_PREFERENCE_VALUES),
   })
-  // Nobody to describe or prefer if the subletter would have the place to themselves.
-  .transform((v) => (v.roommates === 0 ? { ...v, roommateGender: "" as const, roommatePreference: "" as const } : v));
+  .transform(normalizeRooms);
 
 export type ListingInput = z.infer<typeof listingInput>;
+
+/**
+ * The admin's Rooms editor (adminSetListingRooms): the size fields only, the
+ * same rules as the post form (roomsErrors, normalizeRooms), never the price.
+ */
+export const adminRoomsInput = z.object({ listingId: z.number().int().positive(), ...roomsShape }).strict();
+export type AdminRoomsInput = z.infer<typeof adminRoomsInput>;
+
+/** The admin's Rooms values checked as the form checks them, with one message for the whole edit. */
+export function validateAdminRooms(raw: unknown): { ok: true; data: ReturnType<typeof normalizeRooms<AdminRoomsInput>> } | { ok: false; error: string } {
+  const parsed = adminRoomsInput.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the values." };
+  const errors = Object.values(roomsErrors(parsed.data));
+  if (errors.length) return { ok: false, error: errors.join(" ") };
+  return { ok: true, data: normalizeRooms(parsed.data) };
+}
 
 /**
  * The map pin, checked beside the schema rather than in a superRefine: zod
@@ -111,13 +183,15 @@ export function locationError(lat: unknown, lon: unknown): string | null {
 
 export type ValidatedListing = { ok: true; data: ListingInput } | { ok: false; fieldErrors: Record<string, string> };
 
-/** The whole check: schema plus the pin, with one message per field. */
+/** The whole check: schema, the pin and the size rules, with one message per field. */
 export function validateListingInput(raw: Record<string, unknown>): ValidatedListing {
   const parsed = listingInput.safeParse(raw);
-  const errors = parsed.success ? {} : fieldErrors(parsed.error);
+  const errors: Record<string, string> = parsed.success ? {} : fieldErrors(parsed.error);
   const pin = locationError(raw.lat, raw.lon);
   if (pin && !errors.address) errors.address = pin;
-  if (!parsed.success || pin) return { ok: false, fieldErrors: errors };
+  const size = roomsErrors(raw);
+  for (const [k, m] of Object.entries(size)) if (!errors[k]) errors[k] = m;
+  if (!parsed.success || pin || Object.keys(size).length > 0) return { ok: false, fieldErrors: errors };
   return { ok: true, data: parsed.data };
 }
 
@@ -148,6 +222,8 @@ export function formToListingInput(fd: FormData): Record<string, unknown> {
     ...utilities,
     utilityCost: num(fd, "utilityCost"),
     ...amenities,
+    roomsAvailable: num(fd, "roomsAvailable") ?? 1,
+    priceBasis: text(fd, "priceBasis") || null,
     bedrooms: num(fd, "bedrooms"),
     bathrooms: num(fd, "bathrooms"),
     roommates: num(fd, "roommates"),

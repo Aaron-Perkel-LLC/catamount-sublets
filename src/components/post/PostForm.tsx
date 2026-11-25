@@ -8,9 +8,12 @@ import { startTransition, useActionState, useEffect, useRef, useState } from "re
 import { LIMITS } from "@/config/site";
 import { amenityField, formToListingInput, utilityField, validateListingInput } from "@/lib/listing-input";
 import { SIGNED_OUT_SEE } from "@/lib/visibility";
+import { previewPerRoom, priceLines } from "@/lib/price";
 import {
   AMENITY_KEYS,
   amenityFormLabel,
+  PRICE_BASIS_VALUES,
+  type PriceBasis,
   ROOMMATE_GENDER_OPTIONS,
   ROOMMATE_GENDER_VALUES,
   ROOMMATE_PREFERENCE_OPTIONS,
@@ -27,6 +30,8 @@ import { AddressCombobox, type AddressState } from "./AddressCombobox";
 import { SemesterPicker, type SemesterPill } from "./SemesterPicker";
 
 const PostMap = dynamic(() => import("./PostMap"), { ssr: false, loading: () => <div className="h-72 rounded-xl border border-line bg-line-light" /> });
+
+const ROOM_CHOICES = Array.from({ length: LIMITS.roomsMax }, (_, i) => i + 1);
 
 const UTILITY_LABEL: Record<(typeof UTILITY_KINDS)[number], string> = { electric: "Electric", gas: "Gas", water: "Water", internet: "Internet" };
 
@@ -77,6 +82,28 @@ export function PostForm({
     mode: r ? "pinned" : "none",
   });
   const [roommates, setRoommates] = useState<string>(r?.roommates?.toString() ?? "");
+  const [bedrooms, setBedrooms] = useState<string>(r?.bedrooms?.toString() ?? "");
+  const [price, setPrice] = useState<string>(r?.price?.toString() ?? "");
+  const [rooms, setRooms] = useState<string>(String(r?.roomsAvailable ?? 1));
+  // The basis starts unchosen whenever rooms go from 1 to more, on an edit too: every listing
+  // saved before rooms existed is "room", and offering that would steer a whole-house poster
+  // to per-room. Only a listing already saved with several rooms shows its stored basis.
+  const [basis, setBasis] = useState<PriceBasis | null>(r && r.roomsAvailable > 1 ? (r.priceBasis as PriceBasis) : null);
+  const roomsN = Number(rooms);
+  const multi = roomsN > 1;
+  const changeRooms = (next: string) => {
+    if (roomsN <= 1 && Number(next) > 1) setBasis(null);
+    setRooms(next);
+  };
+  const bedroomsN = bedrooms.trim() === "" ? null : Number(bedrooms);
+  // Said as soon as both numbers are in; the rooms are never lowered to fit.
+  const bedroomsShort = multi && bedroomsN !== null && Number.isInteger(bedroomsN) && bedroomsN < roomsN ? `You're subletting ${roomsN} rooms, so the place has at least ${roomsN} bedrooms.` : null;
+  const priceN = price.trim() === "" ? null : Number(price);
+  const shownAs =
+    multi && basis && priceN !== null && Number.isInteger(priceN) && priceN >= 0
+      ? priceLines({ price: priceN, pricePerRoom: previewPerRoom(priceN, basis, roomsN), priceBasis: basis, roomsAvailable: roomsN }).text
+      : null;
+  const priceLabel = !multi ? "Price per month" : basis === "room" ? "Rent per room, per month" : basis === "total" ? "Rent for the whole place, per month" : "Rent per month";
 
   // The map's chunk is the slow part; its style and first tiles can start now.
   preconnect("https://tiles.openfreemap.org");
@@ -131,37 +158,30 @@ export function PostForm({
         </p>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-bold">
-            Price per month <span className="font-normal text-ink-3">(rent only, not including utilities)</span>
-          </span>
-          <div className="relative">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3">$</span>
-            {/* step="any": Safari's own "enter a valid value" never fires; the server says "whole dollars" instead. */}
-            <input name="price" aria-invalid={err.price ? true : undefined} type="number" inputMode="numeric" min={0} max={LIMITS.priceMax} step="any" required className="field pl-7" defaultValue={r?.price ?? ""} />
-          </div>
-          {err.price && <span className="text-sm text-error-ink">{err.price}</span>}
-        </label>
-        <label className="flex items-center gap-2 self-end pb-2 text-sm">
-          <input type="checkbox" name="priceNegotiable" defaultChecked={r?.priceNegotiable ?? false} className="h-4 w-4" />
-          Price is negotiable
-        </label>
-      </div>
-
-      <AddressCombobox state={address} onChange={setAddress} error={err.address} />
-      <PostMap lat={address.lat} lon={address.lon} onPin={(lat, lon) => setAddress((a) => ({ ...a, lat, lon, mode: "pinned" }))} />
-
-      <SemesterPicker options={semesterOptions} initial={listing?.semesters.map((s) => s.code) ?? []} error={err.semesters} />
-
+      {/* The size comes first: it decides how the price is read. */}
       <fieldset className="flex flex-col gap-3">
-        <legend className="mb-0.5 text-base font-bold">The place and roommates</legend>
-        <p className="text-sm text-ink-2">Optional, but the facts people filter on.</p>
+        <legend className="mb-0.5 text-base font-bold">The place</legend>
+        <p className="text-sm text-ink-2">
+          {multi
+            ? `With ${roomsN} rooms, say how many bedrooms the place has and how many roommates are staying.`
+            : "Bedrooms, bathrooms and roommates are optional, but they're the facts people filter on."}
+        </p>
+        <label className="flex flex-col gap-1.5 text-sm sm:max-w-xs">
+          <span className="font-bold">How many rooms are you subletting?</span>
+          <select name="roomsAvailable" aria-invalid={err.roomsAvailable ? true : undefined} className="field" value={rooms} onChange={(e) => changeRooms(e.target.value)}>
+            {ROOM_CHOICES.map((n) => (
+              <option key={n} value={n}>
+                {n === 1 ? "1 room" : `${n} rooms`}
+              </option>
+            ))}
+          </select>
+          {err.roomsAvailable && <span className="text-error-ink">{err.roomsAvailable}</span>}
+        </label>
         <div className="grid gap-4 sm:grid-cols-3">
           <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-bold">Bedrooms</span>
-            <input name="bedrooms" aria-invalid={err.bedrooms ? true : undefined} type="number" min={0} max={20} step={1} placeholder="e.g. 3" className="field" defaultValue={r?.bedrooms ?? ""} />
-            {err.bedrooms && <span className="text-error-ink">{err.bedrooms}</span>}
+            <span className="font-bold">Bedrooms {multi && <span className="font-normal text-ink-3">(required)</span>}</span>
+            <input name="bedrooms" aria-invalid={err.bedrooms ? true : undefined} type="number" min={0} max={20} step={1} placeholder="e.g. 3" className="field" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} />
+            {(err.bedrooms ?? bedroomsShort) && <span className="text-error-ink">{err.bedrooms ?? bedroomsShort}</span>}
           </label>
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-bold">Bathrooms</span>
@@ -169,8 +189,8 @@ export function PostForm({
             {err.bathrooms && <span className="text-error-ink">{err.bathrooms}</span>}
           </label>
           <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-bold">Roommates staying</span>
-            <input name="roommates" aria-invalid={err.roommates ? true : undefined} type="number" min={0} max={20} step={1} placeholder="e.g. 2" className="field" value={roommates} onChange={(e) => setRoommates(e.target.value)} />
+            <span className="font-bold">Roommates staying {multi && <span className="font-normal text-ink-3">(required)</span>}</span>
+            <input name="roommates" aria-invalid={err.roommates ? true : undefined} type="number" min={0} max={20} step={1} placeholder={multi ? "0 if nobody" : "e.g. 2"} className="field" value={roommates} onChange={(e) => setRoommates(e.target.value)} />
             {err.roommates && <span className="text-error-ink">{err.roommates}</span>}
           </label>
         </div>
@@ -200,6 +220,59 @@ export function PostForm({
           </div>
         )}
       </fieldset>
+
+      <div className="flex flex-col gap-3">
+        {multi && (
+          <fieldset className="flex flex-col gap-1.5 text-sm">
+            <legend className="mb-1.5 font-bold">Is the price per room or for the whole place?</legend>
+            <div className="flex flex-wrap gap-x-6 gap-y-2">
+              {PRICE_BASIS_VALUES.map((v, i) => (
+                <label key={v} className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="priceBasis"
+                    value={v}
+                    checked={basis === v}
+                    onChange={() => setBasis(v)}
+                    aria-invalid={i === 0 && err.priceBasis ? true : undefined}
+                    className="h-4 w-4"
+                  />
+                  {v === "room" ? "Per room" : `For the whole place (all ${roomsN} rooms)`}
+                </label>
+              ))}
+            </div>
+            {err.priceBasis && <span className="text-error-ink">{err.priceBasis}</span>}
+          </fieldset>
+        )}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-bold">
+              {priceLabel} <span className="font-normal text-ink-3">(rent only, not including utilities)</span>
+            </span>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3">$</span>
+              {/* step="any": Safari's own "enter a valid value" never fires; the server says "whole dollars" instead. */}
+              <input name="price" aria-invalid={err.price ? true : undefined} type="number" inputMode="numeric" min={0} max={LIMITS.priceMax} step="any" required className="field pl-7" value={price} onChange={(e) => setPrice(e.target.value)} />
+            </div>
+            {err.price && <span className="text-sm text-error-ink">{err.price}</span>}
+          </label>
+          <label className="flex items-center gap-2 self-end pb-2 text-sm">
+            <input type="checkbox" name="priceNegotiable" defaultChecked={r?.priceNegotiable ?? false} className="h-4 w-4" />
+            Price is negotiable
+          </label>
+        </div>
+        {/* How the card will read, so a total typed as per-room (or the reverse) is caught here. */}
+        {shownAs && (
+          <p className="text-sm text-ink-2" aria-live="polite">
+            Shows as <strong className="text-ink">{shownAs}</strong>
+          </p>
+        )}
+      </div>
+
+      <AddressCombobox state={address} onChange={setAddress} error={err.address} />
+      <PostMap lat={address.lat} lon={address.lon} onPin={(lat, lon) => setAddress((a) => ({ ...a, lat, lon, mode: "pinned" }))} />
+
+      <SemesterPicker options={semesterOptions} initial={listing?.semesters.map((s) => s.code) ?? []} error={err.semesters} />
 
       <label className="flex flex-col gap-1.5">
         <span className="text-sm font-bold">Description</span>

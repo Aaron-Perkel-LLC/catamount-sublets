@@ -1,9 +1,10 @@
 import { Bed, Calendar, MapPin } from "lucide-react";
 import Link from "next/link";
 import { formatMiles } from "@/lib/distance-format";
-import { formatMoney } from "@/lib/format";
+import { roomsChip } from "@/lib/price";
 import type { PublicListing } from "@/server/data/public-listings";
 import { UtilitiesAndAmenities } from "./facts";
+import { PriceTag } from "./PriceTag";
 import { PublicCta, signInForListing } from "./PublicCta";
 
 /**
@@ -13,15 +14,12 @@ import { PublicCta, signInForListing } from "./PublicCta";
  */
 export function PublicListingDetails({ listing, headingLevel = "h2" }: { listing: PublicListing; headingLevel?: "h1" | "h2" }) {
   const Heading = headingLevel;
+  const chip = roomsChip(listing);
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <Heading className="text-lg font-bold text-ink">{listing.title}</Heading>
-        <span className="text-2xl font-bold text-ink">
-          {formatMoney(listing.price)}
-          <span className="text-base font-normal text-ink-3">/mo</span>
-          {listing.priceNegotiable && <small className="ml-2 text-sm font-normal text-maple-ink">or best offer</small>}
-        </span>
+        <PriceTag listing={listing} />
         <p className="text-sm text-ink-2">{formatMiles(listing.distanceMi)}</p>
         <p className="text-sm text-ink-3">Posted {listing.postedAgo}</p>
       </div>
@@ -39,9 +37,9 @@ export function PublicListingDetails({ listing, headingLevel = "h2" }: { listing
           <Calendar className="h-4 w-4 shrink-0" aria-hidden />
           {listing.semesterLabel}
         </p>
-        {listing.sizeSummary && (
+        {(chip || listing.sizeSummary) && (
           <p className="flex items-center gap-2 text-sm">
-            <Bed className="h-4 w-4" aria-hidden /> {listing.sizeSummary}
+            <Bed className="h-4 w-4" aria-hidden /> {[chip, listing.sizeSummary].filter(Boolean).join(" · ")}
           </p>
         )}
       </div>

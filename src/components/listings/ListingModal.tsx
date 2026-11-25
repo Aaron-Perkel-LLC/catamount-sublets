@@ -4,14 +4,14 @@ import { Bed, Calendar, Mail, MapPin, Pencil, Phone, Share2, UserRound, Users, X
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatMiles } from "@/lib/distance-format";
-import { formatMoney } from "@/lib/format";
+import { priceLines, roomsChip } from "@/lib/price";
 import type { EventSource } from "@/lib/options";
 import type { ListingDto } from "@/server/data/listings";
 import { ContactPanel } from "./ContactPanel";
 import { useShareSheet } from "@/components/share/share-sheet";
-import { formatMoney as money } from "@/lib/format";
 import { UtilitiesAndAmenities } from "./facts";
 import { Gallery } from "./Gallery";
+import { PriceTag } from "./PriceTag";
 import type { Viewer } from "./listing-view";
 
 function prefersAppleMaps(): boolean {
@@ -38,7 +38,7 @@ export function ListingModal({
 }) {
   const [panel, setPanel] = useState<"email" | "phone" | null>(null);
   const { open: openShare } = useShareSheet();
-  const share = () => openShare({ url: listing.shareUrl, price: money(listing.price), semester: listing.semesterLabel, listingId: listing.id, source });
+  const share = () => openShare({ url: listing.shareUrl, price: priceLines(listing).short, semester: listing.semesterLabel, listingId: listing.id, source });
   const dialog = useRef<HTMLDivElement>(null);
   const closeBtn = useRef<HTMLButtonElement>(null);
 
@@ -74,13 +74,8 @@ export function ListingModal({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const price = (
-    <span className="text-2xl font-bold text-ink">
-      {formatMoney(listing.price)}
-      <span className="text-base font-normal text-ink-3">/mo</span>
-      {listing.priceNegotiable && <small className="ml-2 text-sm font-normal text-maple-ink">or best offer</small>}
-    </span>
-  );
+  const price = <PriceTag listing={listing} />;
+  const chip = roomsChip(listing);
 
   // Only the distance up here: the semester and the size have their own rows below.
   const facts = formatMiles(listing.distanceMi);
@@ -181,11 +176,11 @@ export function ListingModal({
                     <Calendar className="h-4 w-4 shrink-0" aria-hidden />
                     {listing.semesterLabel}
                   </p>
-                  {(listing.sizeSummary || listing.roommateGenderLabel || listing.roommatePreferenceLabel) && (
+                  {(chip || listing.sizeSummary || listing.roommateGenderLabel || listing.roommatePreferenceLabel) && (
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                      {listing.sizeSummary && (
+                      {(chip || listing.sizeSummary) && (
                         <span className="inline-flex items-center gap-1.5">
-                          <Bed className="h-4 w-4" aria-hidden /> {listing.sizeSummary}
+                          <Bed className="h-4 w-4" aria-hidden /> {[chip, listing.sizeSummary].filter(Boolean).join(" · ")}
                         </span>
                       )}
                       {listing.roommateGenderLabel && (

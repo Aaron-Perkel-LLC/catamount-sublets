@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import {
   boolean,
   char,
@@ -17,6 +17,7 @@ import {
 import { LIMITS } from "@/config/site";
 import {
   LISTING_STATUS_VALUES,
+  PRICE_BASIS_VALUES,
   ROOMMATE_GENDER_VALUES,
   ROOMMATE_PREFERENCE_VALUES,
   UTILITY_VALUES,
@@ -49,6 +50,26 @@ export const listings = pgTable(
     roommates: smallint(),
     roommateGender: text().notNull().default(""),
     roommatePreference: text().notNull().default(""),
+    /**
+     * How many rooms this listing sublets: 1 for a room, more for several
+     * rooms or the whole place. More than 1 needs bedrooms (at least this
+     * many) and roommates set. Migration 0016; existing listings got 1.
+     */
+    roomsAvailable: smallint().notNull().default(1),
+    /** Whether `price` is per room or for all the rooms ("total"); always "room" with one room. */
+    priceBasis: text().notNull().default("room"),
+    /**
+     * The price per room, whole dollars, computed by the database from price,
+     * basis and rooms. Every comparison reads this: the price filter, both
+     * price sorts, the slider bounds, saved searches and the digest, the map
+     * pins and the archive's stats. Never written by the app.
+     */
+    pricePerRoom: numeric({ precision: 10, scale: 2, mode: "number" })
+      .notNull()
+      .generatedAlwaysAs(
+        (): SQL =>
+          sql`case when ${listings.priceBasis} = 'total' then round(${listings.price} / ${listings.roomsAvailable}) else ${listings.price} end`,
+      ),
     description: text(),
     /** The public name on the listing; blank shows the account's email local part. */
     displayName: text().notNull().default(""),
@@ -104,6 +125,11 @@ export const listings = pgTable(
     check("listings_bedrooms_check", sql`${t.bedrooms} between 0 and 20`),
     check("listings_bathrooms_check", sql`${t.bathrooms} between 0.5 and 9.5`),
     check("listings_roommates_check", sql`${t.roommates} between 0 and 20`),
+    check("listings_rooms_available_check", sql`${t.roomsAvailable} between 1 and ${num(LIMITS.roomsMax)}`),
+    check("listings_price_basis_check", sql`${inList(t.priceBasis, PRICE_BASIS_VALUES)} and (${t.priceBasis} = 'room' or ${t.roomsAvailable} > 1)`),
+    // One room needs nothing else (a studio is bedrooms = 0); more needs the bedrooms to hold them.
+    check("listings_rooms_bedrooms_check", sql`${t.roomsAvailable} = 1 or (${t.bedrooms} is not null and ${t.roomsAvailable} <= ${t.bedrooms})`),
+    check("listings_rooms_roommates_check", sql`${t.roomsAvailable} = 1 or ${t.roommates} is not null`),
     check("listings_roommate_gender_check", inList(t.roommateGender, ROOMMATE_GENDER_VALUES)),
     check("listings_roommate_preference_check", inList(t.roommatePreference, ROOMMATE_PREFERENCE_VALUES)),
     check("listings_description_check", sql`length(${t.description}) <= ${num(LIMITS.descriptionMaxChars)}`),

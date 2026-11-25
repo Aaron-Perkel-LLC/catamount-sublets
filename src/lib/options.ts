@@ -49,6 +49,23 @@ export const OPEN_TO_FILTERS = {
 export type OpenToFilter = keyof typeof OPEN_TO_FILTERS;
 export const OPEN_TO_VALUES = Object.keys(OPEN_TO_FILTERS) as OpenToFilter[];
 
+/**
+ * How to read a listing's price when it covers more than one room: what the
+ * poster typed is per room, or for the whole place (all of its rooms). A
+ * one-room listing is always "room". The per-room price every comparison
+ * uses is the database's generated price_per_room (src/db/schema/listings.ts).
+ */
+export const PRICE_BASIS_OPTIONS = {
+  room: "Per room",
+  total: "For the whole place",
+} as const;
+export type PriceBasis = keyof typeof PRICE_BASIS_OPTIONS;
+export const PRICE_BASIS_VALUES = Object.keys(PRICE_BASIS_OPTIONS) as PriceBasis[];
+
+/** The Browse/Map "Rooms" filter: listings with at least this many rooms available. */
+export const MIN_ROOMS_FILTERS = [2, 3, 4] as const;
+export type MinRoomsFilter = (typeof MIN_ROOMS_FILTERS)[number];
+
 /** Who pays each utility. */
 export const UTILITY_OPTIONS = {
   "": "Not specified",

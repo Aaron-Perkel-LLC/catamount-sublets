@@ -3,7 +3,8 @@ import type { DbOrTx } from "@/db";
 import { appUrl } from "@/env";
 import { milesBetween } from "@/lib/distance";
 import { formatMoney } from "@/lib/format";
-import { AMENITIES, AMENITY_KEYS, ROOMMATE_GENDER_OPTIONS, ROOMMATE_PREFERENCE_OPTIONS, UTILITY_OPTIONS, type ListingStatus } from "@/lib/options";
+import { priceLines } from "@/lib/price";
+import { AMENITIES, AMENITY_KEYS, type PriceBasis, ROOMMATE_GENDER_OPTIONS, ROOMMATE_PREFERENCE_OPTIONS, UTILITY_OPTIONS, type ListingStatus } from "@/lib/options";
 import { amenityField } from "@/lib/listing-input";
 import { semesterLabel } from "@/lib/semesters";
 import AdminNoticeEmail, { type NoticeRow } from "@/emails/admin-notice";
@@ -24,7 +25,8 @@ export interface Snapshot {
   fields: { key: string; label: string; value: string }[];
   lat: number;
   lon: number;
-  price: number;
+  /** "$850/mo", "$3,200 total · $800/room" (priceLines). */
+  priceText: string;
   address: string;
   status: ListingStatus;
 }
@@ -41,8 +43,10 @@ export function snapshotOf(l: MyListing): Snapshot {
   const amenities = AMENITY_KEYS.filter((k) => r[amenityField(k)])
     .map((k) => AMENITIES[k].label)
     .join(", ");
+  const priceText = priceLines({ price: r.price, pricePerRoom: r.pricePerRoom, priceBasis: r.priceBasis as PriceBasis, roomsAvailable: r.roomsAvailable }).text;
   const fields = [
-    { key: "price", label: "Price", value: `${formatMoney(r.price)}/mo${r.priceNegotiable ? " (or best offer)" : ""}` },
+    { key: "rooms", label: "Rooms sublet", value: String(r.roomsAvailable) },
+    { key: "price", label: "Price", value: `${priceText}${r.priceNegotiable ? " (or best offer)" : ""}` },
     { key: "semesters", label: "Semesters", value: semesterLabel(l.semesters.map((s) => s.name)) },
     { key: "address", label: "Address", value: r.address },
     { key: "pin", label: "Map pin", value: `${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}` },
@@ -62,11 +66,11 @@ export function snapshotOf(l: MyListing): Snapshot {
     { key: "description", label: "Description", value: yes(r.description).slice(0, 1200) },
     { key: "photos", label: "Photos", value: String(l.photos.length) },
   ];
-  return { id: r.id, ownerEmail: l.ownerEmail, ownerName: l.ownerName, fields, lat: r.lat, lon: r.lon, price: r.price, address: r.address, status: r.status as ListingStatus };
+  return { id: r.id, ownerEmail: l.ownerEmail, ownerName: l.ownerName, fields, lat: r.lat, lon: r.lon, priceText, address: r.address, status: r.status as ListingStatus };
 }
 
 function line(s: Snapshot): string {
-  return `${formatMoney(s.price)}/mo at ${s.address}`;
+  return `${s.priceText} at ${s.address}`;
 }
 
 /** The poster as the admin knows them: name first, the email after it; the email alone when there is no name. */

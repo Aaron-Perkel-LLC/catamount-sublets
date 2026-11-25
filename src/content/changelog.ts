@@ -16,6 +16,11 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-11-24",
+    title: "Whole places and several rooms",
+    body: "A listing can now cover more than one room, and say whether its price is per room or for the whole place. Browse, Map and your saved searches compare every listing by its price per room, so a $3,200 house of four rooms counts as $800. You can also filter by 2+, 3+ or 4+ rooms, or by no roommates.",
+  },
+  {
     date: "2026-11-21",
     title: "Every listing is public",
     body: "As we emailed on Nov 17, listings are now visible to signed-out visitors. They see price, semester, size, photos and the rough neighborhood, never your name, contact, address, title or description. My post no longer has a switch for this; if you need yours kept to signed-in students, email us.",

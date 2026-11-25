@@ -81,4 +81,46 @@ describe("listingInput", () => {
     if (!r.ok) expect(r.fieldErrors.address).toMatch(/50 miles/);
     expect(validateListingInput(formToListingInput(form(good))).ok).toBe(true);
   });
+
+  it("prices one room per room, whatever basis was sent, and needs nothing else for it", () => {
+    const r = validateListingInput(formToListingInput(form({ ...good, priceBasis: "total" })));
+    expect(r.ok && r.data).toMatchObject({ roomsAvailable: 1, priceBasis: "room" });
+    // A studio (0 bedrooms) and a listing with no size at all are one room.
+    expect(validateListingInput(formToListingInput(form({ ...good, bedrooms: "0" }))).ok).toBe(true);
+    expect(validateListingInput(formToListingInput(form({ ...good, bedrooms: "", roommates: "" }))).ok).toBe(true);
+  });
+
+  it("takes several rooms with the bedrooms to hold them, the roommates and a basis", () => {
+    const r = validateListingInput(formToListingInput(form({ ...good, price: "3200", roomsAvailable: "4", bedrooms: "4", roommates: "0", priceBasis: "total" })));
+    expect(r.ok && r.data).toMatchObject({ price: 3200, roomsAvailable: 4, bedrooms: 4, roommates: 0, priceBasis: "total", roommateGender: "", roommatePreference: "" });
+  });
+
+  it("explains each size problem by field on the first submit, beside the others", () => {
+    const r = validateListingInput(formToListingInput(form({ ...good, price: "", roomsAvailable: "3", bedrooms: "", roommates: "" })));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.fieldErrors.price).toMatch(/rent/i);
+    expect(r.fieldErrors.bedrooms).toBe("You're subletting 3 rooms, so enter how many bedrooms the place has.");
+    expect(r.fieldErrors.roommates).toBe("How many roommates are staying? Enter 0 if nobody is.");
+    expect(r.fieldErrors.priceBasis).toBe("Say whether the price is per room or for the whole place.");
+  });
+
+  it("refuses rooms beyond the bedrooms on Bedrooms, never changing the rooms", () => {
+    const r = validateListingInput(formToListingInput(form({ ...good, roomsAvailable: "4", bedrooms: "3", roommates: "0", priceBasis: "room" })));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.fieldErrors).toEqual({ bedrooms: "You're subletting 4 rooms, so the place has at least 4 bedrooms." });
+  });
+
+  it("accepts roommates staying in a place with rooms to spare", () => {
+    const r = validateListingInput(formToListingInput(form({ ...good, roomsAvailable: "3", bedrooms: "5", roommates: "2", priceBasis: "room" })));
+    expect(r.ok && r.data).toMatchObject({ roomsAvailable: 3, roommates: 2, roommatePreference: "women" });
+  });
+
+  it("refuses rooms out of range", () => {
+    for (const rooms of ["0", "21", "1.5"]) {
+      const r = validateListingInput(formToListingInput(form({ ...good, roomsAvailable: rooms })));
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.fieldErrors.roomsAvailable).toBeDefined();
+    }
+  });
 });

@@ -113,6 +113,13 @@
       "when": 1795268888340,
       "tag": "0015_clammy_black_panther",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795574204501,
+      "tag": "0016_complete_paper_doll",
+      "breakpoints": true
     }
   ]
 }

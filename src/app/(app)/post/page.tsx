@@ -6,10 +6,10 @@ import { PostedBanner } from "@/components/post/PostedBanner";
 import { ManagePanel } from "@/components/post/ManagePanel";
 import { StatusBar } from "@/components/post/StatusBar";
 import { VisibilityNotice } from "@/components/post/VisibilityNotice";
-import { formatMoney } from "@/lib/format";
+import { priceLines } from "@/lib/price";
 import { semesterLabel } from "@/lib/semesters";
 import { shareUrl } from "@/lib/share";
-import type { ListingStatus } from "@/lib/options";
+import type { ListingStatus, PriceBasis } from "@/lib/options";
 import { requireUser } from "@/server/auth";
 import { statsText } from "@/components/post/StatsLine";
 import { posterStats } from "@/server/data/events";
@@ -58,7 +58,7 @@ export default async function PostPage({ searchParams }: { searchParams: Promise
             stats={stats ? statsText({ ...stats, since: listing.row.postedAt.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" }) }) : ""}
             share={{
               url: shareUrl(listing.row.id),
-              price: formatMoney(listing.row.price),
+              price: priceLines({ ...listing.row, priceBasis: listing.row.priceBasis as PriceBasis }).short,
               semester: semesterLabel(listing.semesters.filter((s) => s.active).map((s) => s.name)),
             }}
           />

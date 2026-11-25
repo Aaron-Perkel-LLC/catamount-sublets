@@ -51,6 +51,7 @@ const check = (ok: boolean, what: string) => (ok ? pass(what) : fail(what));
 /** The leak fixture (public), a second listing kept to signed-in students, and a signed-in student with a session. */
 async function seed(): Promise<{
   publicId: number;
+  houseId: number;
   hiddenId: number;
   cookie: string;
 }> {
@@ -139,6 +140,22 @@ async function seed(): Promise<{
     description: "Kept for signed-in students.",
   });
   await db.update(s.listingSemesters).set({ semesterCode: "summer27" }).where(eq(s.listingSemesters.listingId, hiddenId));
+  // A whole house typed as its total: rooms, basis and per-room price are public, its address and poster are not.
+  const [group] = await db
+    .insert(s.user)
+    .values({ email: `group@${ALLOWED_EMAIL_DOMAINS[0]}`, name: "group", firstName: "Gwen", lastName: "Groupwood" })
+    .returning({ id: s.user.id });
+  const houseId = await add(group.id, {
+    price: 3200,
+    priceBasis: "total",
+    roomsAvailable: 4,
+    bedrooms: 4,
+    roommates: 0,
+    address: "9 Groupwood Lane, Burlington",
+    lat: 44.4801,
+    lon: -73.2003,
+    description: "The whole Groupwood house.",
+  });
 
   await db.insert(s.siteNotices).values({
     title: `Students: ${NOTICE_MARKER}`,
@@ -159,6 +176,7 @@ async function seed(): Promise<{
   const signature = createHmac("sha256", process.env.BETTER_AUTH_SECRET!).update(token).digest("base64");
   return {
     publicId,
+    houseId,
     hiddenId,
     cookie: `catamount.session_token=${encodeURIComponent(`${token}.${signature}`)}`,
   };
@@ -210,7 +228,7 @@ function noLeaks(what: string, body: string) {
 }
 
 async function main(): Promise<number> {
-  const { publicId, hiddenId, cookie } = await seed();
+  const { publicId, houseId, hiddenId, cookie } = await seed();
   console.log(`Seeded ${dataDir}; starting next start on :${PORT}`);
   const stop = await startServer();
   try {
@@ -230,6 +248,18 @@ async function main(): Promise<number> {
       boardRsc.body.includes('"price":875') && /"title":"2BR · [A-Za-z ]+"/.test(boardRsc.body),
       "/browse (RSC): carries the public listing (price, generated title)",
     );
+    // A whole house: its rooms, basis and per-room price are on the public board, compared per room, and its address and poster are not.
+    check(
+      boardRsc.body.includes('"pricePerRoom":800') && boardRsc.body.includes('"roomsAvailable":4') && boardRsc.body.includes('"priceBasis":"total"'),
+      "/browse (RSC): carries the whole house's rooms, basis and per-room price",
+    );
+    const houseBoard = await get("/browse?rooms=4&no_roommates=1&min_price=0&max_price=850", { rsc: true });
+    check(houseBoard.body.includes(`"id":${houseId}`) && !houseBoard.body.includes(`"id":${publicId},`), "/browse?rooms=4&no_roommates=1&max_price=850 (RSC): finds the house by its per-room price, signed out");
+    const housePage = await get(`/listing/${houseId}`);
+    check(housePage.body.includes("Whole place · 4 BR") && housePage.body.includes("$3,200") && housePage.body.includes("$800/room"), `/listing/${houseId}: shows the total, the per-room price and the chip`);
+    for (const [label, body] of [["/browse (RSC)", boardRsc.body], [`/listing/${houseId}`, housePage.body], ["/browse?rooms=4… (RSC)", houseBoard.body]] as const) {
+      check(!/Groupwood/i.test(body), `${label}: none of the house's address, poster or description`);
+    }
     const mapRsc = await get("/map", { rsc: true });
     check(/"area":\{"lat":[\d.]+,"lon":-[\d.]+,"radiusM":150\}/.test(mapRsc.body), "/map (RSC): carries its approximate area");
     const page = await get(`/listing/${publicId}`);

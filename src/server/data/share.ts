@@ -2,6 +2,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import type { DbOrTx } from "@/db";
 import { listingPhotos, listings } from "@/db/schema";
 import { milesFromCampus } from "@/lib/distance";
+import type { PriceBasis } from "@/lib/options";
 import { shareCardLines, type ShareCardLines, verifyShareToken } from "@/lib/share";
 import { fuzzedArea } from "@/server/geo-fuzz";
 import { labelFor, listingSemestersByListing } from "./semesters";
@@ -32,6 +33,9 @@ export async function resolveShare(db: DbOrTx, id: number, token: string): Promi
     .select({
       id: listings.id,
       price: listings.price,
+      pricePerRoom: listings.pricePerRoom,
+      priceBasis: listings.priceBasis,
+      roomsAvailable: listings.roomsAvailable,
       priceNegotiable: listings.priceNegotiable,
       bedrooms: listings.bedrooms,
       bathrooms: listings.bathrooms,
@@ -64,6 +68,9 @@ export async function resolveShare(db: DbOrTx, id: number, token: string): Promi
   const area = fuzzedArea(row.lat, row.lon);
   const lines = shareCardLines({
     price: row.price,
+    pricePerRoom: row.pricePerRoom,
+    priceBasis: row.priceBasis as PriceBasis,
+    roomsAvailable: row.roomsAvailable,
     priceNegotiable: row.priceNegotiable,
     bedrooms: row.bedrooms,
     bathrooms: row.bathrooms,

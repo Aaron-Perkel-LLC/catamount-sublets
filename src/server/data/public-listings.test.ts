@@ -226,6 +226,8 @@ describe("the approximate area belongs to the place, not the listing", () => {
       ...Object.fromEntries(UTILITY_KINDS.map((k) => [utilityField(k), "tenant"])),
       utilityCost: null,
       ...Object.fromEntries(AMENITY_KEYS.map((k) => [amenityField(k), false])),
+      roomsAvailable: 1,
+      priceBasis: null,
       bedrooms: 1,
       bathrooms: 1,
       roommates: 2,
