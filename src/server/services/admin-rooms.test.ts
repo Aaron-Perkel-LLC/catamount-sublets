@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Db } from "@/db";
 import * as s from "@/db/schema";
 import { createTestDb } from "@/db/test-db";
-import { adminSetRooms } from "./admin";
+import { adminSetRooms, archivePlan } from "./admin";
 
 /**
  * The admin's Rooms editor: the post form's size rules, the same
@@ -49,5 +49,14 @@ describe("adminSetRooms", () => {
   it("prices one room per room whatever basis is sent", async () => {
     expect(await adminSetRooms(db, { listingId: id, roomsAvailable: 1, bedrooms: 4, roommates: 2, priceBasis: "total" })).toEqual({ ok: true, data: { priceText: "$3,200/mo" } });
     expect(await row()).toMatchObject({ roomsAvailable: 1, priceBasis: "room", pricePerRoom: 3200, roommates: 2 });
+  });
+
+  it("archives a whole house at its per-room price, and lists it as it reads", async () => {
+    await adminSetRooms(db, { listingId: id, roomsAvailable: 4, bedrooms: 4, roommates: 0, priceBasis: "total" });
+    await db.insert(s.semesters).values({ code: "fall26", name: "Fall 2026", active: false });
+    await db.insert(s.listingSemesters).values({ listingId: id, semesterCode: "fall26", position: 0 });
+    const plan = await archivePlan(db, "fall26");
+    expect(plan.totals).toMatchObject({ listings: 1, priceMedian: 800, priceMin: 800, priceMax: 800 });
+    expect(plan.going[0]).toMatchObject({ price: 800, priceText: "$3,200 total · $800/room" });
   });
 });

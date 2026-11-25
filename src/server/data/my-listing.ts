@@ -134,11 +134,6 @@ export async function updateListing(
 }
 
 /**
- * The admin's "Seen by": show the listing to signed-out visitors too, or keep
- * it to signed-in students, and work out its area if it has none yet. Posters
- * have no switch. False when there is no such listing.
- */
-/**
  * The size of a listing and how its price reads, for the admin's Rooms
  * editor: rooms, bedrooms, roommates and basis, already checked and
  * normalised (normalizeRooms: one room is "room", and no roommates clears
@@ -166,6 +161,11 @@ export async function setListingRooms(
   return rows.length > 0;
 }
 
+/**
+ * The admin's "Seen by": show the listing to signed-out visitors too, or keep
+ * it to signed-in students, and work out its area if it has none yet. Posters
+ * have no switch. False when there is no such listing.
+ */
 export async function setListingVisibility(db: DbOrTx, listingId: number, actor: Actor, signedInOnly: boolean, now: Date = new Date()): Promise<boolean> {
   const [row] = await db.select({ lat: listings.lat, lon: listings.lon }).from(listings).where(owned(listingId, actor));
   if (!row) return false;

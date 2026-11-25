@@ -3,10 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { LIMITS } from "@/config/site";
+import { formatMoney } from "@/lib/format";
 import { PRICE_BASIS_VALUES, type PriceBasis } from "@/lib/options";
 import { previewPerRoom, priceLines } from "@/lib/price";
-import { adminSetListingRooms } from "@/server/actions/admin";
+import { adminLoadListing, adminSetListingRooms } from "@/server/actions/admin";
 import type { ListingDto } from "@/server/data/listings";
+import { useListingView } from "../listings/listing-view";
 import { BTN, CHOICE, FIELD, FIELD_LABEL, GROUP, MUTED, SELECT } from "./ui";
 
 const ROOMS = Array.from({ length: LIMITS.roomsMax }, (_, i) => i + 1);
@@ -22,6 +24,7 @@ const count = (s: string): number | null => (s.trim() === "" ? null : Number(s))
  */
 export function AdminRoomsEditor({ listing }: { listing: ListingDto }) {
   const router = useRouter();
+  const { refresh } = useListingView();
   const [pending, start] = useTransition();
   const [rooms, setRooms] = useState(listing.roomsAvailable);
   const [bedrooms, setBedrooms] = useState(listing.bedrooms?.toString() ?? "");
@@ -40,7 +43,11 @@ export function AdminRoomsEditor({ listing }: { listing: ListingDto }) {
         start(async () => {
           const r = await adminSetListingRooms({ listingId: listing.id, roomsAvailable: rooms, bedrooms: count(bedrooms), roommates: count(roommates), priceBasis: effective });
           setNote(r.ok ? `Saved: ${r.data.priceText}.` : r.error);
-          if (r.ok) router.refresh();
+          if (!r.ok) return;
+          // The open view holds the listing as it was loaded: reload it so its price, chip and size show the change.
+          const fresh = await adminLoadListing(listing.id);
+          if (fresh) refresh(fresh);
+          router.refresh();
         });
       }}
     >
@@ -76,7 +83,7 @@ export function AdminRoomsEditor({ listing }: { listing: ListingDto }) {
       </div>
       {multi && (
         <fieldset className="flex flex-wrap gap-x-4">
-          <legend className="sr-only">The price {listing.price} is</legend>
+          <legend className="sr-only">The price, {formatMoney(listing.price)}, is</legend>
           {PRICE_BASIS_VALUES.map((v) => (
             <label key={v} className={CHOICE}>
               <input type="radio" name={`basis-${listing.id}`} checked={basis === v} disabled={pending} onChange={() => setBasis(v)} />

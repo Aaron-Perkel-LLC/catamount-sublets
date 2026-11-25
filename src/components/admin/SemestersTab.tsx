@@ -294,7 +294,7 @@ function ArchiveDialog({ plan, onClose, onArchived }: { plan: ArchivePlan | null
                   <ul className="mt-1 flex flex-col gap-0.5 text-[13px] text-ink-2">
                     {plan.going.map((g) => (
                       <li key={g.id} title={g.ownerEmail}>
-                        {g.ownerName ?? g.ownerEmail} · {g.address.split(",")[0]} · {formatMoney(g.price)}
+                        {g.ownerName ?? g.ownerEmail} · {g.address.split(",")[0]} · {g.priceText}
                         {g.status !== "open" ? ` · ${g.status}` : ""}
                       </li>
                     ))}

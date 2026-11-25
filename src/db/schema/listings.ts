@@ -59,8 +59,9 @@ export const listings = pgTable(
     /** Whether `price` is per room or for all the rooms ("total"); always "room" with one room. */
     priceBasis: text().notNull().default("room"),
     /**
-     * The price per room, whole dollars, computed by the database from price,
-     * basis and rooms. Every comparison reads this: the price filter, both
+     * The price per room, computed by the database from price, basis and
+     * rooms: a whole-place total divided by the rooms, rounded to whole
+     * dollars; otherwise the price as typed (an old one may carry cents). Every comparison reads this: the price filter, both
      * price sorts, the slider bounds, saved searches and the digest, the map
      * pins and the archive's stats. Never written by the app.
      */

@@ -21,6 +21,8 @@ export interface Viewer {
 
 interface ListingViewApi {
   open: (listing: BoardListing, source: EventSource) => void;
+  /** Swap in a fresher copy of the listing that is open (after an admin edit), with no history entry or view counted. */
+  refresh: (listing: BoardListing) => void;
   close: () => void;
   current: BoardListing | null;
 }
@@ -64,6 +66,10 @@ export function ListingViewProvider({
     pushed.current = true;
   }, []);
 
+  const refresh = useCallback((listing: BoardListing) => {
+    setCurrent((c) => (c && c.id === listing.id ? listing : c));
+  }, []);
+
   const close = useCallback(() => {
     if (pushed.current && history.state?.listing) history.back();
     else hide();
@@ -84,7 +90,7 @@ export function ListingViewProvider({
     };
   }, [current]);
 
-  const api = useMemo(() => ({ open, close, current }), [open, close, current]);
+  const api = useMemo(() => ({ open, refresh, close, current }), [open, refresh, close, current]);
 
   return (
     <Ctx.Provider value={api}>

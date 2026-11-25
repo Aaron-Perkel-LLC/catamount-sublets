@@ -8,14 +8,19 @@ import { priceLines, type PriceFacts } from "@/lib/price";
  */
 export function PriceTag({ listing }: { listing: PriceFacts & { priceNegotiable: boolean } }) {
   const p = priceLines(listing);
+  // One room: exactly the markup this replaced ("$850/mo").
+  const price = (
+    <span className="text-2xl font-bold text-ink">
+      {p.main}
+      <span className="text-base font-normal text-ink-3">{p.unit === "total" ? " total" : p.unit}</span>
+      {listing.priceNegotiable && <small className="ml-2 text-sm font-normal text-maple-ink">or best offer</small>}
+    </span>
+  );
+  if (!p.sub) return price;
   return (
     <span className="flex flex-col">
-      <span className="text-2xl font-bold text-ink">
-        {p.main}
-        <span className="ml-0.5 text-base font-normal text-ink-3">{p.unit === "total" ? " total" : p.unit}</span>
-        {listing.priceNegotiable && <small className="ml-2 text-sm font-normal text-maple-ink">or best offer</small>}
-      </span>
-      {p.sub && <span className="text-sm text-ink-2">{p.sub}</span>}
+      {price}
+      <span className="text-sm text-ink-2">{p.sub}</span>
     </span>
   );
 }

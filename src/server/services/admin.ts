@@ -66,7 +66,8 @@ export interface ArchivePlan {
   code: string;
   name: string;
   blocking: string[];
-  going: { id: number; status: string; price: number; photos: number; bytes: number; ownerEmail: string; ownerName: string | null; address: string }[];
+  /** `price` is per room (what the totals use); `priceText` is how the listing reads ("$3,200 total · $800/room"). */
+  going: { id: number; status: string; price: number; priceText: string; photos: number; bytes: number; ownerEmail: string; ownerName: string | null; address: string }[];
   staying: { id: number; ownerEmail: string; ownerName: string | null; address: string; nextSemester: string }[];
   totals: { listings: number; taken: number; photos: number; bytes: number; priceMedian: number | null; priceMin: number | null; priceMax: number | null; views: number; contacts: number; shares: number; shareArrivals: number };
 }
@@ -86,13 +87,17 @@ export async function archivePlan(db: Db, code: string): Promise<ArchivePlan> {
   const rows = (
     await db
       // The per-room price, so a whole house is one room's worth in the median, as on the board.
-      .select({ id: listings.id, status: listings.status, price: listings.pricePerRoom, address: listings.address, displayName: listings.displayName, ownerEmail: user.email, poster: posterColumns })
+      .select({ id: listings.id, status: listings.status, price: listings.pricePerRoom, typed: listings.price, priceBasis: listings.priceBasis, roomsAvailable: listings.roomsAvailable, address: listings.address, displayName: listings.displayName, ownerEmail: user.email, poster: posterColumns })
       .from(listingSemesters)
       .innerJoin(listings, eq(listings.id, listingSemesters.listingId))
       .innerJoin(user, eq(user.id, listings.userId))
       .where(eq(listingSemesters.semesterCode, code))
       .orderBy(asc(listings.id))
-  ).map(({ displayName, poster, ...r }) => ({ ...r, ownerName: shownName({ displayName }, poster, r.ownerEmail) }));
+  ).map(({ displayName, poster, typed, priceBasis, roomsAvailable, ...r }) => ({
+    ...r,
+    priceText: priceLines({ price: typed, pricePerRoom: r.price, priceBasis: priceBasis as PriceBasis, roomsAvailable }).text,
+    ownerName: shownName({ displayName }, poster, r.ownerEmail),
+  }));
   const ids = rows.map((r) => r.id);
   const others = ids.length
     ? await db

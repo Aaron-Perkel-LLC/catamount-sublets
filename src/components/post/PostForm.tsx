@@ -116,6 +116,8 @@ export function PostForm({
   const form = useRef<HTMLFormElement>(null);
   const err = (refused ?? state).fieldErrors ?? {};
   const topError = refused ? refused.error : state.error;
+  // The live message wins over one left from the last submit (which may say something the poster has since fixed).
+  const bedroomsMsg = bedroomsShort ?? err.bedrooms;
 
   // Either kind of refusal takes the person to the first field that needs them (each effect fires only on a new one).
   useEffect(() => {
@@ -180,8 +182,8 @@ export function PostForm({
         <div className="grid gap-4 sm:grid-cols-3">
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-bold">Bedrooms {multi && <span className="font-normal text-ink-3">(required)</span>}</span>
-            <input name="bedrooms" aria-invalid={err.bedrooms ? true : undefined} type="number" min={0} max={20} step={1} placeholder="e.g. 3" className="field" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} />
-            {(err.bedrooms ?? bedroomsShort) && <span className="text-error-ink">{err.bedrooms ?? bedroomsShort}</span>}
+            <input name="bedrooms" aria-invalid={bedroomsMsg ? true : undefined} aria-required={multi || undefined} type="number" min={0} max={20} step={1} placeholder="e.g. 3" className="field" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} />
+            {bedroomsMsg && <span className="text-error-ink">{bedroomsMsg}</span>}
           </label>
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-bold">Bathrooms</span>
@@ -190,7 +192,7 @@ export function PostForm({
           </label>
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-bold">Roommates staying {multi && <span className="font-normal text-ink-3">(required)</span>}</span>
-            <input name="roommates" aria-invalid={err.roommates ? true : undefined} type="number" min={0} max={20} step={1} placeholder={multi ? "0 if nobody" : "e.g. 2"} className="field" value={roommates} onChange={(e) => setRoommates(e.target.value)} />
+            <input name="roommates" aria-invalid={err.roommates ? true : undefined} aria-required={multi || undefined} type="number" min={0} max={20} step={1} placeholder={multi ? "0 if nobody" : "e.g. 2"} className="field" value={roommates} onChange={(e) => setRoommates(e.target.value)} />
             {err.roommates && <span className="text-error-ink">{err.roommates}</span>}
           </label>
         </div>
